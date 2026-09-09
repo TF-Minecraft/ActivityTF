@@ -1,0 +1,17 @@
+main: tfmc.justin.activity.ActivityPlugin
+version: 1.0
+name: activity
+author: Justin
+api-version: 1.21
+softdepend: [VotingPlugin, MusicalInstruments, geiger_counter, PlaceholderAPI]
+commands:
+  activity:
+    description: Open the weekly activity bar, or run admin subcommands
+    usage: /activity [reload|reset <player>|add <player> <activity> <count>]
+permissions:
+  activity.use:
+    description: Open the weekly activity GUI
+    default: true
+  activity.admin:
+    description: Access to activity admin subcommands
+    default: op

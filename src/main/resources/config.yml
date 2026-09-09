@@ -1,0 +1,55 @@
+reset:
+  day: MONDAY      # server timezone
+  hour: 0          # 0-23
+
+# Meet 'daily-goal' actions in one day → earn 'points' once that day.
+# Points do not need to add up to 100. Bar caps at 100. Any mix works.
+activities:
+  vote:
+    display: "&aVoting"
+    material: PAPER
+    daily-goal: 1
+    points: 50
+  geiger:
+    display: "&eRadioactive Sources"
+    material: SPYGLASS
+    daily-goal: 3
+    points: 50
+  instrument:
+    display: "&dMusical Instruments"
+    material: NOTE_BLOCK
+    daily-goal: 20
+    points: 50
+
+# Console commands run once when a player reaches 100.
+# %player% = name, %uuid% = the player's UUID.
+# A command containing %player% is skipped with a warning when the name is not
+# [A-Za-z0-9_.]{1,16} (e.g. a Bedrock name with a space); commands that only
+# use %uuid% always run. If none of the commands below can run for a given
+# player (their name is unsafe and every command pastes %player%), the week is
+# still marked complete and the player is told - there is no retry, since the
+# name will never become safe. To reward Bedrock/Floodgate or other unsafe
+# names, write reward commands using only %uuid% (e.g. via a plugin that can
+# look a player up by UUID) instead of %player%.
+rewards:
+  commands:
+    - "give %player% diamond 3"
+  display:            # shown in GUI reward item
+    - "&f3x Diamond"
+
+gui:
+  title: "&8Weekly Activity"
+  reward-material: CHEST
+
+bar:
+  length: 20
+  filled-char: "█"
+  empty-char: "░"
+  filled-color: "&a"
+  empty-color: "&7"
+
+sounds:               # Bukkit Sound names, "" disables
+  goal-complete: ENTITY_EXPERIENCE_ORB_PICKUP
+  bar-complete: UI_TOAST_CHALLENGE_COMPLETE
+
+save-interval-minutes: 5
