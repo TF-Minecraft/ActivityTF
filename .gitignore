@@ -4,3 +4,5 @@ libs/*
 !libs/SHA256SUMS
 .idea/
 *.iml
+.claude/
+CLAUDE.md
