@@ -134,14 +134,17 @@ public class PlayerStore {
             }
         }
 
-        players.put(uuid, new PlayerData(
-            entry.getInt("points"),
-            entry.getString("week", ""),
-            entry.getString("day", ""),
-            entry.getBoolean("rewarded"),
-            entry.getBoolean("pending-reward"),
-            daily
-        ));
+        // ponytail: pre-milestone files stored a 0-100 bar and a boolean
+        // 'rewarded'. Points are clamped and every milestone those points
+        // reach counts as already claimed, so an upgrade never makes anything
+        // instantly claimable - the old scale was paid out under old rules.
+        int points = Math.min(entry.getInt("points"), config.barMax());
+        int claimed = entry.contains("rewarded")
+            ? points / config.rewardEvery()
+            : entry.getInt("claimed");
+
+        players.put(uuid, new PlayerData(points, entry.getString("week", ""), entry.getString("day", ""),
+            claimed, daily));
     }
 
     // ====================================
@@ -178,7 +181,9 @@ public class PlayerStore {
             return data;
         }
 
-        if (data.roll(week, day)) {
+        // Clamp after the roll: a reload that lowered bar.max must not leave a
+        // player above it
+        if (data.roll(week, day) | data.clamp(config.barMax())) {
             dirty = true;
         }
         return data;
@@ -278,8 +283,7 @@ public class PlayerStore {
             yaml.set(path + ".points", data.points());
             yaml.set(path + ".week", data.weekKey());
             yaml.set(path + ".day", data.dayKey());
-            yaml.set(path + ".rewarded", data.rewarded());
-            yaml.set(path + ".pending-reward", data.pendingReward());
+            yaml.set(path + ".claimed", data.claimed());
             yaml.set(path + ".daily", new LinkedHashMap<>(data.daily()));
         }
         return yaml;

@@ -6,8 +6,8 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import tfmc.justin.activity.managers.ActivityManager;
 
 // ====================================
-// Join is both the rollover trigger for returning players and the moment a
-// reward earned while they were offline can finally be handed over
+// Join is the rollover trigger for returning players, and a nudge that a
+// reward is waiting to be claimed
 // ====================================
 public class JoinListener implements Listener {
 

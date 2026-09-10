@@ -48,6 +48,8 @@ public class ActivityConfiguration {
     private String guiTitle;
     private Material rewardMaterial;
 
+    private volatile int barMax;
+    private volatile int rewardEvery;
     private volatile int barLength;
     private volatile String barFilledChar;
     private volatile String barEmptyChar;
@@ -80,6 +82,8 @@ public class ActivityConfiguration {
         guiTitle = config.getString("gui.title", "&8Weekly Activity");
         rewardMaterial = material(config.getString("gui.reward-material", "CHEST"), "gui.reward-material");
 
+        barMax = Math.max(1, config.getInt("bar.max", 20));
+        rewardEvery = Math.max(1, Math.min(barMax, config.getInt("bar.reward-every", 10)));
         barLength = barLength(config.getInt("bar.length", 20));
         barFilledChar = config.getString("bar.filled-char", "█");
         barEmptyChar = config.getString("bar.empty-char", "░");
@@ -108,6 +112,15 @@ public class ActivityConfiguration {
                 continue;
             }
 
+            // The old key: its meaning moved to 'every' with 'points' per award,
+            // so an unconverted entry would hand out its old 50-point award per
+            // single action. Loud and skipped rather than silently wrong.
+            if (entry.contains("daily-goal")) {
+                plugin.getLogger().warning("Activity '" + id + "' still uses 'daily-goal' - skipping it."
+                    + " Convert to every/points/daily-cap (see the default config.yml).");
+                continue;
+            }
+
             int points = wholeNumber(entry, id, "points", 0);
             if (points <= 0) {
                 plugin.getLogger().warning("Activity '" + id + "' is worth " + points
@@ -119,8 +132,9 @@ public class ActivityConfiguration {
                 id,
                 entry.getString("display", id),
                 material(entry.getString("material", "PAPER"), "activities." + id + ".material"),
-                Math.max(1, wholeNumber(entry, id, "daily-goal", 1)),
-                points
+                Math.max(1, wholeNumber(entry, id, "every", 1)),
+                points,
+                Math.max(0, wholeNumber(entry, id, "daily-cap", 0))
             ));
         }
 
@@ -154,19 +168,23 @@ public class ActivityConfiguration {
     }
 
     // ====================================
-    // A player can only meet every goal once a day, so seven days of every
-    // activity is the ceiling - if that is under 100 the bar is unreachable
+    // Seven days of every capped activity is the ceiling - if that is under
+    // the first milestone nothing can ever be claimed. An uncapped activity
+    // has no ceiling, so the check is skipped.
     // ====================================
     private void warnIfBarUnreachable() {
-        int weekly = 0;
+        long weekly = 0;
         for (ActivityDef def : activities.values()) {
-            weekly += def.points();
+            if (def.dailyCap() == 0) {
+                return;
+            }
+            weekly += def.dailyCap();
         }
         weekly *= 7;
 
-        if (weekly < 100) {
-            plugin.getLogger().warning("All activities together are worth " + weekly
-                + " points a week - nobody can reach 100. Raise 'points' or add activities.");
+        if (weekly < rewardEvery) {
+            plugin.getLogger().warning("All activities together are capped at " + weekly
+                + " points a week - nobody can reach the first reward at " + rewardEvery + ".");
         }
     }
 
@@ -247,6 +265,14 @@ public class ActivityConfiguration {
 
     public Material rewardMaterial() {
         return rewardMaterial;
+    }
+
+    public int barMax() {
+        return barMax;
+    }
+
+    public int rewardEvery() {
+        return rewardEvery;
     }
 
     public int barLength() {

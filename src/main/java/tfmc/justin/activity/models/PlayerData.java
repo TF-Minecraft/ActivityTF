@@ -10,8 +10,6 @@ import java.util.concurrent.ConcurrentHashMap;
 // ====================================
 public class PlayerData {
 
-    public static final int MAX_POINTS = 100;
-
     // ====================================
     // Written only on the main thread, but PlaceholderAPI reads a player's bar
     // off one - so the fields it touches are published safely rather than left
@@ -22,21 +20,19 @@ public class PlayerData {
     private volatile int points;
     private volatile String weekKey;
     private volatile String dayKey;
-    private boolean rewarded;
-    private boolean pendingReward;
+    // Milestones already paid out this week
+    private volatile int claimed;
 
     public PlayerData(String weekKey, String dayKey) {
         this.weekKey = weekKey;
         this.dayKey = dayKey;
     }
 
-    public PlayerData(int points, String weekKey, String dayKey, boolean rewarded, boolean pendingReward,
-                      Map<String, Integer> daily) {
+    public PlayerData(int points, String weekKey, String dayKey, int claimed, Map<String, Integer> daily) {
         this.points = points;
         this.weekKey = weekKey;
         this.dayKey = dayKey;
-        this.rewarded = rewarded;
-        this.pendingReward = pendingReward;
+        this.claimed = claimed;
         this.daily.putAll(daily);
     }
 
@@ -50,8 +46,7 @@ public class PlayerData {
 
         if (!this.weekKey.equals(weekKey)) {
             points = 0;
-            rewarded = false;
-            pendingReward = false;
+            claimed = 0;
             daily.clear();
             this.weekKey = weekKey;
             changed = true;
@@ -67,36 +62,50 @@ public class PlayerData {
     }
 
     // ====================================
-    // Points are awarded on the transition across the goal, not on a stored
-    // "awarded today" flag - one less field to keep in sync.
-    // ponytail: lowering daily-goal mid-day below a player's count skips that
-    // day's award; acceptable
+    // Points come from the change in "what today's count is worth", so no
+    // per-day awarded counter has to be kept in sync with the action count.
+    // ponytail: changing every/dailyCap mid-day can under- or over-award that
+    // day by the difference; acceptable
     // ====================================
-    public RecordResult record(String id, int amount, int goal, int points) {
-        int before = daily.getOrDefault(id, 0);
+    public RecordResult record(int amount, ActivityDef def, int max, int rewardEvery) {
+        int before = daily.getOrDefault(def.id(), 0);
         // Saturate: a bogus /activity add 2000000000 twice must not wrap the
-        // counter negative and hand out the goal award all over again
+        // counter negative and hand out awards all over again
         int after = (int) Math.min(Integer.MAX_VALUE, (long) before + amount);
-        daily.put(id, after);
+        daily.put(def.id(), after);
 
-        if (before >= goal || after < goal) {
-            return new RecordResult(false, 0, false);
+        int earned = def.worth(after) - def.worth(before);
+        if (earned <= 0) {
+            return new RecordResult(0, 0);
         }
 
-        int pointsBefore = this.points;
-        addPoints(points);
+        int pointsBefore = points;
+        addPoints(earned, max);
 
-        return new RecordResult(true, this.points - pointsBefore, pointsBefore < MAX_POINTS && this.points >= MAX_POINTS);
+        return new RecordResult(points - pointsBefore, points / rewardEvery - pointsBefore / rewardEvery);
     }
 
-    public void addPoints(int p) {
-        points = Math.max(0, Math.min(MAX_POINTS, points + p));
+    public void addPoints(int p, int max) {
+        points = Math.max(0, Math.min(max, points + p));
+    }
+
+    // Stored points can exceed the bar after bar.max is lowered or the file
+    // came from an older scale; claimable and percent both assume they do not
+    public boolean clamp(int max) {
+        if (points <= max) {
+            return false;
+        }
+        points = max;
+        return true;
+    }
+
+    public int claimable(int rewardEvery) {
+        return Math.max(0, points / rewardEvery - claimed);
     }
 
     public void reset(String weekKey, String dayKey) {
         points = 0;
-        rewarded = false;
-        pendingReward = false;
+        claimed = 0;
         daily.clear();
         this.weekKey = weekKey;
         this.dayKey = dayKey;
@@ -122,19 +131,11 @@ public class PlayerData {
         return dayKey;
     }
 
-    public boolean rewarded() {
-        return rewarded;
+    public int claimed() {
+        return claimed;
     }
 
-    public void setRewarded(boolean rewarded) {
-        this.rewarded = rewarded;
-    }
-
-    public boolean pendingReward() {
-        return pendingReward;
-    }
-
-    public void setPendingReward(boolean pendingReward) {
-        this.pendingReward = pendingReward;
+    public void setClaimed(int claimed) {
+        this.claimed = claimed;
     }
 }
