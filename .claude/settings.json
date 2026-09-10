@@ -1,6 +1,10 @@
 {
   "permissions": {
     "deny": [
+      "Bash(git -c*)",
+      "Bash(git switch --discard-changes*)",
+      "Bash(git switch -f*)",
+      "Bash(git switch --force*)",
       "Bash(git -C*)",
       "Bash(git --git-dir*)",
       "Bash(git --work-tree*)",
