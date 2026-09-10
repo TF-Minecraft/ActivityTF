@@ -57,7 +57,7 @@ bar:
   max: 20            # points to fill the bar
   reward-every: 10   # a claimable reward at every multiple
   length: 20         # glyphs
-  filled-char: "█"
+  filled-char: "░"
   empty-char: "░"
   filled-color: "&a"
   empty-color: "&7"
