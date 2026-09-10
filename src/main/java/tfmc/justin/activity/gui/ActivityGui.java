@@ -98,7 +98,7 @@ public class ActivityGui implements Listener {
     }
 
     private ItemStack activityItem(Messages messages, ActivityDef def, PlayerData data) {
-        int today = data.worth(data.count(def.id()), def);
+        int today = def.worth(data.count(def.id()));
 
         List<String> lore = new ArrayList<>();
         lore.add(messages.get("gui.activity-lore-points", "%points%", def.points(), "%every%", def.every()));

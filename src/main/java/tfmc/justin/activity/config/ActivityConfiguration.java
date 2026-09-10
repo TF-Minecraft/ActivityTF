@@ -112,6 +112,15 @@ public class ActivityConfiguration {
                 continue;
             }
 
+            // The old key: its meaning moved to 'every' with 'points' per award,
+            // so an unconverted entry would hand out its old 50-point award per
+            // single action. Loud and skipped rather than silently wrong.
+            if (entry.contains("daily-goal")) {
+                plugin.getLogger().warning("Activity '" + id + "' still uses 'daily-goal' - skipping it."
+                    + " Convert to every/points/daily-cap (see the default config.yml).");
+                continue;
+            }
+
             int points = wholeNumber(entry, id, "points", 0);
             if (points <= 0) {
                 plugin.getLogger().warning("Activity '" + id + "' is worth " + points

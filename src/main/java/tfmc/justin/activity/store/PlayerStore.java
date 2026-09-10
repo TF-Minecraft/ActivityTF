@@ -134,13 +134,16 @@ public class PlayerStore {
             }
         }
 
-        players.put(uuid, new PlayerData(
-            entry.getInt("points"),
-            entry.getString("week", ""),
-            entry.getString("day", ""),
-            entry.getInt("claimed"),
-            daily
-        ));
+        // ponytail: pre-milestone files stored a 0-100 bar and a boolean
+        // 'rewarded'. Points are clamped and a rewarded week counts as fully
+        // claimed, so an upgrade can never pay out ten rewards on one click.
+        int points = Math.min(entry.getInt("points"), config.barMax());
+        int claimed = entry.getBoolean("rewarded")
+            ? config.barMax() / config.rewardEvery()
+            : entry.getInt("claimed");
+
+        players.put(uuid, new PlayerData(points, entry.getString("week", ""), entry.getString("day", ""),
+            claimed, daily));
     }
 
     // ====================================
@@ -177,7 +180,9 @@ public class PlayerStore {
             return data;
         }
 
-        if (data.roll(week, day)) {
+        // Clamp after the roll: a reload that lowered bar.max must not leave a
+        // player above it
+        if (data.roll(week, day) | data.clamp(config.barMax())) {
             dirty = true;
         }
         return data;

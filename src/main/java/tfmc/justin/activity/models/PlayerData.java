@@ -74,7 +74,7 @@ public class PlayerData {
         int after = (int) Math.min(Integer.MAX_VALUE, (long) before + amount);
         daily.put(def.id(), after);
 
-        int earned = worth(after, def) - worth(before, def);
+        int earned = def.worth(after) - def.worth(before);
         if (earned <= 0) {
             return new RecordResult(0, 0);
         }
@@ -85,14 +85,18 @@ public class PlayerData {
         return new RecordResult(points - pointsBefore, points / rewardEvery - pointsBefore / rewardEvery);
     }
 
-    public int worth(int count, ActivityDef def) {
-        long raw = (long) (count / def.every()) * def.points();
-        long capped = def.dailyCap() > 0 ? Math.min(raw, def.dailyCap()) : raw;
-        return (int) Math.min(Integer.MAX_VALUE, capped);
-    }
-
     public void addPoints(int p, int max) {
         points = Math.max(0, Math.min(max, points + p));
+    }
+
+    // Stored points can exceed the bar after bar.max is lowered or the file
+    // came from an older scale; claimable and percent both assume they do not
+    public boolean clamp(int max) {
+        if (points <= max) {
+            return false;
+        }
+        points = max;
+        return true;
     }
 
     public int claimable(int rewardEvery) {

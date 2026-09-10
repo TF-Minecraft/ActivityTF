@@ -147,10 +147,19 @@ class PlayerDataTest {
 
     @Test
     void worthDoesNotOverflowOnHugeCounts() {
-        PlayerData data = data();
         ActivityDef rich = new ActivityDef("rich", "Rich", Material.STONE, 1, 1_000_000, 0);
 
-        assertEquals(Integer.MAX_VALUE, data.worth(Integer.MAX_VALUE, rich));
+        assertEquals(Integer.MAX_VALUE, rich.worth(Integer.MAX_VALUE));
+    }
+
+    @Test
+    void clampPullsLegacyPointsDownToTheBar() {
+        PlayerData data = new PlayerData(100, WEEK, DAY, 0, java.util.Map.of());
+
+        assertTrue(data.clamp(MAX));
+        assertEquals(MAX, data.points());
+        assertEquals(2, data.claimable(EVERY));
+        assertFalse(data.clamp(MAX));
     }
 
     @Test
