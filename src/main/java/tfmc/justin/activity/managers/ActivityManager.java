@@ -98,87 +98,73 @@ public class ActivityManager {
         }
 
         PlayerData data = store.get(uuid);
-        RecordResult result = data.record(activityId, amount, def.dailyGoal(), def.points());
+        RecordResult result = data.record(amount, def, config.barMax(), config.rewardEvery());
         store.markDirty();
 
-        // A goal met while the bar is already full awards nothing, and
-        // "+0 points" is worse than silence
-        if (result.goalJustMet() && result.pointsAwarded() > 0) {
-            Player player = Bukkit.getPlayer(uuid);
-            if (player != null) {
-                Messages messages = config.messages();
-                player.sendMessage(messages.get("goal-complete",
-                    "%activity%", Utils.colorize(def.display()),
-                    "%points%", result.pointsAwarded(),
-                    "%total%", data.points()));
-                playSound(player, config.goalCompleteSound());
-            }
-        }
-
-        if (result.hitHundred()) {
-            grantRewards(uuid, true);
-        }
-
-        return true;
-    }
-
-    // ====================================
-    // Rewards are console commands, so they need the player online to be
-    // meaningful (%player% has to resolve, and most give-commands need a
-    // target). Offline players get a flag and collect on join.
-    //
-    // 'announce' is off on the join path, where reward-pending already says
-    // what happened and a second "COMPLETE!" title would be noise.
-    //
-    // Returns true once the week is marked rewarded and the player has been
-    // notified; false only when the player is offline (pending) or the week
-    // was already rewarded.
-    // ====================================
-    public boolean grantRewards(UUID uuid, boolean announce) {
-        PlayerData data = store.get(uuid);
-        if (data.rewarded()) {
-            return false;
+        // A full bar or a met daily cap awards nothing, and "+0" is worse
+        // than silence
+        if (result.pointsAwarded() <= 0) {
+            return true;
         }
 
         Player player = Bukkit.getPlayer(uuid);
         if (player == null) {
-            data.setPendingReward(true);
-            store.markDirty();
-            return false;
+            return true;
         }
 
-        // ====================================
-        // Flagged and written before the commands run: a reward command that
-        // loops back into this plugin must find the week already marked as
-        // paid out, and a crash between the give and the next autosave tick
-        // would otherwise hand the whole lot out a second time.
-        // ====================================
-        data.setRewarded(true);
-        data.setPendingReward(false);
-        store.markDirty();
-        store.saveSoon();
+        Messages messages = config.messages();
+        player.sendMessage(messages.get("points-earned",
+            "%activity%", Utils.colorize(def.display()),
+            "%points%", result.pointsAwarded(),
+            "%total%", data.points(),
+            "%max%", config.barMax()));
+        playSound(player, config.goalCompleteSound());
 
-        // ====================================
-        // An empty rewards.commands list means there is nothing configured to
-        // hand over - not a failure, so it stays silent. Otherwise, if every
-        // command was skipped by the unsafe-name check, the name pasted into
-        // %player% will never become safe, so retrying can never succeed:
-        // warn once and leave the week marked rewarded rather than re-arming
-        // a pending-reward that would just fail again on every future join.
-        // ====================================
-        if (!config.rewardCommands().isEmpty() && !dispatchRewards(player)) {
-            plugin.getLogger().warning("No reward command could be run for '" + player.getName()
-                + "': the name cannot be safely pasted into a console command. Use %uuid%-based"
-                + " reward commands to support Bedrock/unsafe names.");
-        }
-
-        if (announce) {
-            Messages messages = config.messages();
-            player.sendMessage(messages.get("bar-complete"));
-            player.sendTitle(messages.get("bar-complete-title"), messages.get("bar-complete-subtitle"), 10, 60, 20);
+        if (result.milestonesReached() > 0) {
+            player.sendMessage(messages.get("reward-ready"));
             playSound(player, config.barCompleteSound());
         }
         return true;
+    }
+
+    // ====================================
+    // Hands over every milestone the player has reached but not yet claimed.
+    // Only ever called for an online player (a GUI click), so %player% always
+    // resolves. Returns how many milestones were paid out.
+    // ====================================
+    public int claim(Player player) {
+        PlayerData data = store.get(player.getUniqueId());
+        int due = data.claimable(config.rewardEvery());
+        if (due == 0) {
+            return 0;
+        }
+
+        // ====================================
+        // Marked and written before the commands run: a reward command that
+        // loops back into this plugin must find the milestones already paid
+        // out, and a crash between the give and the next autosave tick would
+        // otherwise hand the whole lot out a second time.
+        // ====================================
+        data.setClaimed(data.claimed() + due);
+        store.markDirty();
+        store.saveSoon();
+
+        // An empty rewards.commands list means there is nothing configured to
+        // hand over - not a failure, so it stays silent
+        if (!config.rewardCommands().isEmpty()) {
+            for (int i = 0; i < due; i++) {
+                if (!dispatchRewards(player)) {
+                    plugin.getLogger().warning("No reward command could be run for '" + player.getName()
+                        + "': the name cannot be safely pasted into a console command. Use %uuid%-based"
+                        + " reward commands to support Bedrock/unsafe names.");
+                    break;
+                }
+            }
+        }
+
+        player.sendMessage(config.messages().get("reward-claimed", "%count%", due));
+        playSound(player, config.barCompleteSound());
+        return due;
     }
 
     // ====================================
@@ -208,21 +194,8 @@ public class ActivityManager {
 
     public void onJoin(Player player) {
         PlayerData data = store.get(player.getUniqueId());
-        if (!data.pendingReward()) {
-            return;
-        }
-
-        // Cleared before granting so a player who somehow carries both flags
-        // does not get the pending message on every single join
-        data.setPendingReward(false);
-        store.markDirty();
-        if (data.rewarded()) {
-            return;
-        }
-
-        // Only announce what was actually handed over
-        if (grantRewards(player.getUniqueId(), false)) {
-            player.sendMessage(config.messages().get("reward-pending"));
+        if (data.claimable(config.rewardEvery()) > 0) {
+            player.sendMessage(config.messages().get("reward-ready"));
         }
     }
 

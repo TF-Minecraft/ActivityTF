@@ -12,7 +12,8 @@ import tfmc.justin.activity.utils.Utils;
 import java.util.Locale;
 
 // ====================================
-// %activity_points%, %activity_percent%, %activity_bar%, %activity_done_<id>%
+// %activity_points%, %activity_max%, %activity_percent%, %activity_bar%,
+// %activity_claimable%, %activity_done_<id>%
 // Only registered when PlaceholderAPI is enabled - see ActivityPlugin.
 // ====================================
 public class PlaceholderHook extends PlaceholderExpansion {
@@ -74,10 +75,15 @@ public class PlaceholderHook extends PlaceholderExpansion {
 
         switch (key) {
             case "points":
-            case "percent":
                 return String.valueOf(points);
+            case "max":
+                return String.valueOf(config.barMax());
+            case "percent":
+                return String.valueOf(points * 100 / config.barMax());
+            case "claimable":
+                return String.valueOf(currentWeek ? data.claimable(config.rewardEvery()) : 0);
             case "bar":
-                return Utils.colorize(Bar.render(points, config.barLength(), config.barFilledChar(),
+                return Utils.colorize(Bar.render(points, config.barMax(), config.barLength(), config.barFilledChar(),
                     config.barEmptyChar(), config.barFilledColor(), config.barEmptyColor()));
             default:
                 break;
@@ -89,9 +95,11 @@ public class PlaceholderHook extends PlaceholderExpansion {
             if (def == null) {
                 return "";
             }
-            boolean done = currentWeek
-                && data.dayKey().equals(config.currentDayKey())
-                && data.count(def.id()) >= def.dailyGoal();
+            // "Done" is the daily cap reached, or - for an uncapped activity -
+            // at least one award earned today
+            int today = currentWeek && data.dayKey().equals(config.currentDayKey())
+                ? data.worth(data.count(def.id()), def) : 0;
+            boolean done = def.dailyCap() > 0 ? today >= def.dailyCap() : today > 0;
             return Utils.colorize(config.messages().raw(done ? "placeholder.done" : "placeholder.not-done"));
         }
 

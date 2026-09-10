@@ -1,4 +1,4 @@
 package tfmc.justin.activity.models;
 
-public record RecordResult(boolean goalJustMet, int pointsAwarded, boolean hitHundred) {
+public record RecordResult(int pointsAwarded, int milestonesReached) {
 }

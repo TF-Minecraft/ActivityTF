@@ -2,35 +2,47 @@ reset:
   day: MONDAY      # server timezone
   hour: 0          # 0-23
 
-# Meet 'daily-goal' actions in one day → earn 'points' once that day.
-# Points do not need to add up to 100. Bar caps at 100. Any mix works.
+# Every 'every' actions → earn 'points'. 'daily-cap' = most points one
+# activity can add per day (0 = no cap). Bar caps at bar.max.
+# vote: one point per vote site. quest: fed by the quests plugin via
+#   /activity add <player> quest 1
 activities:
   vote:
     display: "&aVoting"
     material: PAPER
-    daily-goal: 1
-    points: 50
+    every: 1
+    points: 1
+    daily-cap: 5
+  quest:
+    display: "&bDaily Quests"
+    material: BOOK
+    every: 1
+    points: 1
+    daily-cap: 5
   geiger:
     display: "&eRadioactive Sources"
     material: SPYGLASS
-    daily-goal: 3
-    points: 50
+    every: 3
+    points: 1
+    daily-cap: 1
   instrument:
     display: "&dMusical Instruments"
     material: NOTE_BLOCK
-    daily-goal: 20
-    points: 50
+    every: 20
+    points: 1
+    daily-cap: 1
 
-# Console commands run once when a player reaches 100.
+# Console commands run once per milestone (every bar.reward-every points)
+# when the player clicks the reward chest in /activity.
 # %player% = name, %uuid% = the player's UUID.
 # A command containing %player% is skipped with a warning when the name is not
 # [A-Za-z0-9_.]{1,16} (e.g. a Bedrock name with a space); commands that only
 # use %uuid% always run. If none of the commands below can run for a given
-# player (their name is unsafe and every command pastes %player%), the week is
-# still marked complete and the player is told - there is no retry, since the
-# name will never become safe. To reward Bedrock/Floodgate or other unsafe
-# names, write reward commands using only %uuid% (e.g. via a plugin that can
-# look a player up by UUID) instead of %player%.
+# player (their name is unsafe and every command pastes %player%), the
+# milestone is still marked claimed - there is no retry, since the name will
+# never become safe. To reward Bedrock/Floodgate or other unsafe names, write
+# reward commands using only %uuid% (e.g. via a plugin that can look a player
+# up by UUID) instead of %player%.
 rewards:
   commands:
     - "give %player% diamond 3"
@@ -42,7 +54,9 @@ gui:
   reward-material: CHEST
 
 bar:
-  length: 20
+  max: 20            # points to fill the bar
+  reward-every: 10   # a claimable reward at every multiple
+  length: 20         # glyphs
   filled-char: "█"
   empty-char: "░"
   filled-color: "&a"

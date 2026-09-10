@@ -1,5 +1,6 @@
 package tfmc.justin.activity.models;
 
+import org.bukkit.Material;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -10,230 +11,196 @@ class PlayerDataTest {
 
     private static final String WEEK = "2026-09-07";
     private static final String DAY = "2026-09-09";
+    private static final int MAX = 20;
+    private static final int EVERY = 10;
+
+    private static final ActivityDef VOTE = new ActivityDef("vote", "Vote", Material.PAPER, 1, 1, 5);
+    private static final ActivityDef QUEST = new ActivityDef("quest", "Quest", Material.BOOK, 1, 1, 5);
+    private static final ActivityDef INSTRUMENT = new ActivityDef("instrument", "Notes", Material.NOTE_BLOCK, 20, 1, 1);
+    private static final ActivityDef UNCAPPED = new ActivityDef("free", "Free", Material.STONE, 1, 1, 0);
 
     private PlayerData data() {
         return new PlayerData(WEEK, DAY);
     }
 
-    @Test
-    void progressBelowTheGoalAwardsNothing() {
-        PlayerData data = data();
-
-        RecordResult result = data.record("instrument", 19, 20, 50);
-
-        assertFalse(result.goalJustMet());
-        assertEquals(0, result.pointsAwarded());
-        assertEquals(0, data.points());
-        assertEquals(19, data.count("instrument"));
+    private RecordResult record(PlayerData data, ActivityDef def, int amount) {
+        return data.record(amount, def, MAX, EVERY);
     }
 
     @Test
-    void crossingTheGoalAwardsPointsExactlyOnce() {
+    void eachActionIsWorthItsPoints() {
         PlayerData data = data();
 
-        data.record("instrument", 19, 20, 50);
-        RecordResult crossing = data.record("instrument", 1, 20, 50);
-        RecordResult after = data.record("instrument", 5, 20, 50);
+        RecordResult result = record(data, VOTE, 1);
 
-        assertTrue(crossing.goalJustMet());
-        assertEquals(50, crossing.pointsAwarded());
-        assertFalse(after.goalJustMet());
-        assertEquals(0, after.pointsAwarded());
-        assertEquals(50, data.points());
+        assertEquals(1, result.pointsAwarded());
+        assertEquals(1, data.points());
     }
 
     @Test
-    void pointsClampAtOneHundred() {
+    void dailyCapStopsFurtherAwardsButStillCounts() {
         PlayerData data = data();
 
-        data.record("vote", 1, 1, 50);
-        data.record("geiger", 3, 3, 50);
-        data.record("instrument", 20, 20, 50);
+        record(data, VOTE, 5);
+        RecordResult sixth = record(data, VOTE, 1);
 
-        assertEquals(100, data.points());
+        assertEquals(0, sixth.pointsAwarded());
+        assertEquals(5, data.points());
+        assertEquals(6, data.count("vote"));
     }
 
     @Test
-    void hitHundredFiresOnlyOnTheCrossing() {
+    void everyGroupsActionsIntoOneAward() {
         PlayerData data = data();
 
-        assertFalse(data.record("vote", 1, 1, 50).hitHundred());
-        assertTrue(data.record("geiger", 3, 3, 50).hitHundred());
-        assertFalse(data.record("instrument", 20, 20, 50).hitHundred());
+        assertEquals(0, record(data, INSTRUMENT, 19).pointsAwarded());
+        assertEquals(1, record(data, INSTRUMENT, 1).pointsAwarded());
+        assertEquals(0, record(data, INSTRUMENT, 20).pointsAwarded());
+        assertEquals(1, data.points());
     }
 
     @Test
-    void jumpingPastTheGoalInOneCallAwardsPointsOnce() {
+    void uncappedActivityKeepsAwarding() {
         PlayerData data = data();
 
-        RecordResult jump = data.record("geiger", 5, 3, 50);
+        record(data, UNCAPPED, 15);
 
-        assertTrue(jump.goalJustMet());
-        assertEquals(50, jump.pointsAwarded());
-        assertEquals(5, data.count("geiger"));
-
-        RecordResult further = data.record("geiger", 1, 3, 50);
-
-        assertFalse(further.goalJustMet());
-        assertEquals(0, further.pointsAwarded());
-        assertEquals(6, data.count("geiger"));
+        assertEquals(15, data.points());
     }
 
     @Test
-    void recordingAnActivityThatAlreadyMetItsGoalTodayAwardsNothingButStillCounts() {
+    void twoDaysOfVotingAndQuestsMaxTheBar() {
         PlayerData data = data();
-        data.record("vote", 1, 1, 50);
 
-        RecordResult again = data.record("vote", 1, 1, 50);
+        record(data, VOTE, 5);
+        record(data, QUEST, 5);
+        data.roll(WEEK, "2026-09-10");
+        record(data, VOTE, 5);
+        record(data, QUEST, 5);
 
-        assertFalse(again.goalJustMet());
-        assertEquals(0, again.pointsAwarded());
-        assertEquals(2, data.count("vote"));
+        assertEquals(MAX, data.points());
+        assertEquals(2, data.claimable(EVERY));
     }
 
     @Test
-    void recordingAGoalCrossingWhilePointsAreAlreadyAtOneHundredAwardsNoPoints() {
+    void milestonesFireOnlyOnTheCrossing() {
         PlayerData data = data();
-        data.record("vote", 1, 1, 50);
-        data.record("geiger", 3, 3, 50);
-        assertEquals(100, data.points());
 
-        RecordResult result = data.record("instrument", 20, 20, 50);
-
-        assertTrue(result.goalJustMet());
-        assertEquals(0, result.pointsAwarded());
-        assertFalse(result.hitHundred());
-        assertEquals(100, data.points());
+        assertEquals(0, record(data, UNCAPPED, 9).milestonesReached());
+        assertEquals(1, record(data, UNCAPPED, 1).milestonesReached());
+        assertEquals(0, record(data, UNCAPPED, 5).milestonesReached());
+        assertEquals(1, record(data, UNCAPPED, 5).milestonesReached());
     }
 
     @Test
-    void pointsAwardedReflectsTheClampedDeltaWhenAGoalPushesPastOneHundred() {
+    void oneCallCanCrossTwoMilestones() {
         PlayerData data = data();
-        data.addPoints(80);
 
-        RecordResult result = data.record("vote", 1, 1, 50);
+        assertEquals(2, record(data, UNCAPPED, 20).milestonesReached());
+        assertEquals(2, data.claimable(EVERY));
+    }
 
-        assertEquals(20, result.pointsAwarded());
-        assertEquals(100, data.points());
-        assertTrue(result.hitHundred());
+    @Test
+    void pointsClampAtMaxAndAwardedReflectsTheClampedDelta() {
+        PlayerData data = data();
+        data.addPoints(18, MAX);
+
+        RecordResult result = record(data, UNCAPPED, 5);
+
+        assertEquals(2, result.pointsAwarded());
+        assertEquals(MAX, data.points());
+        assertEquals(0, record(data, UNCAPPED, 5).pointsAwarded());
+    }
+
+    @Test
+    void claimingRemovesFromClaimable() {
+        PlayerData data = data();
+        record(data, UNCAPPED, 10);
+
+        data.setClaimed(1);
+
+        assertEquals(0, data.claimable(EVERY));
+        record(data, UNCAPPED, 10);
+        assertEquals(1, data.claimable(EVERY));
     }
 
     @Test
     void addPointsClampsNegativeValuesAtZero() {
         PlayerData data = data();
 
-        data.addPoints(-50);
+        data.addPoints(-50, MAX);
 
         assertEquals(0, data.points());
     }
 
     @Test
-    void addPointsClampsPositiveValuesAtOneHundred() {
+    void aHugeAmountSaturatesInsteadOfWrappingNegative() {
         PlayerData data = data();
 
-        data.addPoints(150);
-
-        assertEquals(100, data.points());
-    }
-
-    @Test
-    void addPointsCrossingOneHundredAcrossMultipleCallsClampsAndLeavesRewardedUntouched() {
-        PlayerData data = data();
-
-        data.addPoints(80);
-        data.addPoints(30);
-
-        assertEquals(100, data.points());
-        assertFalse(data.rewarded());
-    }
-
-    @Test
-    void ahugeAmountSaturatesInsteadOfWrappingNegative() {
-        PlayerData data = data();
-
-        data.record("vote", Integer.MAX_VALUE, 1, 50);
-        RecordResult again = data.record("vote", Integer.MAX_VALUE, 1, 50);
+        record(data, VOTE, Integer.MAX_VALUE);
+        RecordResult again = record(data, VOTE, Integer.MAX_VALUE);
 
         assertEquals(Integer.MAX_VALUE, data.count("vote"));
-        assertFalse(again.goalJustMet());
         assertEquals(0, again.pointsAwarded());
-        assertEquals(50, data.points());
+        assertEquals(5, data.points());
     }
 
     @Test
-    void saturationHoldsAcrossManyOversizedRecords() {
+    void worthDoesNotOverflowOnHugeCounts() {
         PlayerData data = data();
+        ActivityDef rich = new ActivityDef("rich", "Rich", Material.STONE, 1, 1_000_000, 0);
 
-        for (int i = 0; i < 5; i++) {
-            data.record("geiger", Integer.MAX_VALUE, 3, 50);
-        }
-
-        assertTrue(data.count("geiger") > 0);
-        assertEquals(Integer.MAX_VALUE, data.count("geiger"));
+        assertEquals(Integer.MAX_VALUE, data.worth(Integer.MAX_VALUE, rich));
     }
 
     @Test
     void newWeekWipesEverything() {
         PlayerData data = data();
-        data.record("vote", 1, 1, 50);
-        data.setRewarded(true);
+        record(data, UNCAPPED, 10);
+        data.setClaimed(1);
 
         assertTrue(data.roll("2026-09-14", "2026-09-14"));
 
         assertEquals(0, data.points());
-        assertFalse(data.rewarded());
-        assertEquals(0, data.count("vote"));
+        assertEquals(0, data.claimed());
+        assertEquals(0, data.count("free"));
     }
 
     @Test
     void newDayWipesOnlyTheDailyCounters() {
         PlayerData data = data();
-        data.record("vote", 1, 1, 50);
-        data.setRewarded(true);
+        record(data, VOTE, 5);
+        data.setClaimed(1);
 
         assertTrue(data.roll(WEEK, "2026-09-10"));
 
-        assertEquals(50, data.points());
-        assertTrue(data.rewarded());
+        assertEquals(5, data.points());
+        assertEquals(1, data.claimed());
         assertEquals(0, data.count("vote"));
     }
 
     @Test
     void sameWeekAndDayChangeNothing() {
         PlayerData data = data();
-        data.record("vote", 1, 1, 50);
+        record(data, VOTE, 1);
 
         assertFalse(data.roll(WEEK, DAY));
 
         assertEquals(1, data.count("vote"));
-        assertEquals(50, data.points());
-    }
-
-    @Test
-    void pendingRewardSurvivesADayRollAndIsClearedByAWeekRoll() {
-        PlayerData data = data();
-        data.setPendingReward(true);
-
-        data.roll(WEEK, "2026-09-10");
-        assertTrue(data.pendingReward());
-
-        data.roll("2026-09-14", "2026-09-14");
-        assertFalse(data.pendingReward());
+        assertEquals(1, data.points());
     }
 
     @Test
     void resetClearsTheWeekAndMovesTheKeys() {
         PlayerData data = data();
-        data.record("vote", 1, 1, 50);
-        data.setRewarded(true);
-        data.setPendingReward(true);
+        record(data, UNCAPPED, 10);
+        data.setClaimed(1);
 
         data.reset("2026-09-14", "2026-09-14");
 
         assertEquals(0, data.points());
-        assertFalse(data.rewarded());
-        assertFalse(data.pendingReward());
-        assertEquals(0, data.count("vote"));
+        assertEquals(0, data.claimed());
+        assertEquals(0, data.count("free"));
         assertEquals("2026-09-14", data.weekKey());
     }
 }

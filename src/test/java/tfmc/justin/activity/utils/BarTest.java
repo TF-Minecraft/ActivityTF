@@ -7,60 +7,56 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class BarTest {
 
     private static String render(int points) {
-        return Bar.render(points, 20, "#", ".", "", "");
+        return Bar.render(points, 20, 10, "#", ".", "", "");
     }
 
     @Test
     void emptyBarIsAllEmptyGlyphs() {
-        assertEquals(".".repeat(20), render(0));
+        assertEquals(".".repeat(10), render(0));
     }
 
     @Test
     void fullBarIsAllFilledGlyphs() {
-        assertEquals("#".repeat(20), render(100));
+        assertEquals("#".repeat(10), render(20));
     }
 
     @Test
     void partialBarRoundsDown() {
-        assertEquals("#".repeat(12) + ".".repeat(8), render(63));
+        assertEquals("#".repeat(6) + ".".repeat(4), render(13));
     }
 
     @Test
     void lengthIsConstantAcrossEveryValue() {
-        for (int points = -10; points <= 110; points++) {
-            assertEquals(20, render(points).length(), "points=" + points);
+        for (int points = -10; points <= 30; points++) {
+            assertEquals(10, render(points).length(), "points=" + points);
         }
     }
 
     @Test
     void colorsPrefixEachRun() {
-        assertEquals("&a" + "#".repeat(10) + "&7" + ".".repeat(10),
-            Bar.render(50, 20, "#", ".", "&a", "&7"));
-    }
-
-    @Test
-    void ninetyNinePointsFloorsInsteadOfRounding() {
-        assertEquals("#".repeat(19) + ".".repeat(1), render(99));
+        assertEquals("&a" + "#".repeat(5) + "&7" + ".".repeat(5),
+            Bar.render(10, 20, 10, "#", ".", "&a", "&7"));
     }
 
     @Test
     void lengthOfOneProducesASingleGlyph() {
-        assertEquals("#", Bar.render(100, 1, "#", ".", "", ""));
-        assertEquals(".", Bar.render(0, 1, "#", ".", "", ""));
+        assertEquals("#", Bar.render(20, 20, 1, "#", ".", "", ""));
+        assertEquals(".", Bar.render(0, 20, 1, "#", ".", "", ""));
     }
 
     @Test
     void lengthOfZeroProducesAnEmptyString() {
-        assertEquals("", Bar.render(50, 0, "#", ".", "", ""));
+        assertEquals("", Bar.render(10, 20, 0, "#", ".", "", ""));
     }
 
     @Test
-    void pointsAboveOneHundredClampToAFullBar() {
-        assertEquals("#".repeat(20), render(150));
+    void pointsOutsideRangeClamp() {
+        assertEquals("#".repeat(10), render(150));
+        assertEquals(".".repeat(10), render(-50));
     }
 
     @Test
-    void pointsBelowZeroClampToAnEmptyBar() {
-        assertEquals(".".repeat(20), render(-50));
+    void maxOfZeroRendersEmptyInsteadOfDividingByZero() {
+        assertEquals(".".repeat(10), Bar.render(5, 0, 10, "#", ".", "", ""));
     }
 }

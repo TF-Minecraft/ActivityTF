@@ -138,8 +138,7 @@ public class PlayerStore {
             entry.getInt("points"),
             entry.getString("week", ""),
             entry.getString("day", ""),
-            entry.getBoolean("rewarded"),
-            entry.getBoolean("pending-reward"),
+            entry.getInt("claimed"),
             daily
         ));
     }
@@ -278,8 +277,7 @@ public class PlayerStore {
             yaml.set(path + ".points", data.points());
             yaml.set(path + ".week", data.weekKey());
             yaml.set(path + ".day", data.dayKey());
-            yaml.set(path + ".rewarded", data.rewarded());
-            yaml.set(path + ".pending-reward", data.pendingReward());
+            yaml.set(path + ".claimed", data.claimed());
             yaml.set(path + ".daily", new LinkedHashMap<>(data.daily()));
         }
         return yaml;

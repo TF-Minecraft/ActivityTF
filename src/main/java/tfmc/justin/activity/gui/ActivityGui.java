@@ -23,9 +23,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 // ====================================
-// Read-only chest view of the week: the bar on top, one item per activity,
-// the reward list at the bottom. Also the click listener - a marker holder
-// is the cheapest way to tell our inventory apart from every other one.
+// Chest view of the week: the bar on top, one item per activity, the reward
+// chest at the bottom - clicking it claims whatever milestones are due. Also
+// the click listener - a marker holder is the cheapest way to tell our
+// inventory apart from every other one.
 // ====================================
 public class ActivityGui implements Listener {
 
@@ -88,33 +89,37 @@ public class ActivityGui implements Listener {
     }
 
     private ItemStack barItem(ActivityConfiguration config, Messages messages, PlayerData data) {
-        String bar = Bar.render(data.points(), config.barLength(), config.barFilledChar(), config.barEmptyChar(),
-            config.barFilledColor(), config.barEmptyColor());
+        String bar = Bar.render(data.points(), config.barMax(), config.barLength(), config.barFilledChar(),
+            config.barEmptyChar(), config.barFilledColor(), config.barEmptyColor());
 
         return item(Material.EXPERIENCE_BOTTLE,
-            messages.get("gui.bar-name", "%percent%", data.points()),
+            messages.get("gui.bar-name", "%points%", data.points(), "%max%", config.barMax()),
             List.of(Utils.colorize(bar)));
     }
 
     private ItemStack activityItem(Messages messages, ActivityDef def, PlayerData data) {
-        int count = data.count(def.id());
-        boolean done = count >= def.dailyGoal();
+        int today = data.worth(data.count(def.id()), def);
 
         List<String> lore = new ArrayList<>();
-        lore.add(messages.get("gui.activity-lore-progress", "%count%", count, "%goal%", def.dailyGoal()));
-        lore.add(messages.get("gui.activity-lore-points", "%points%", def.points()));
-        lore.add(messages.get(done ? "gui.activity-lore-done" : "gui.activity-lore-not-done"));
+        lore.add(messages.get("gui.activity-lore-points", "%points%", def.points(), "%every%", def.every()));
+        lore.add(def.dailyCap() > 0
+            ? messages.get("gui.activity-lore-today-capped", "%today%", today, "%cap%", def.dailyCap())
+            : messages.get("gui.activity-lore-today", "%today%", today));
 
         return item(def.icon(), Utils.colorize(def.display()), lore);
     }
 
     private ItemStack rewardItem(ActivityConfiguration config, Messages messages, PlayerData data) {
+        int due = data.claimable(config.rewardEvery());
+
         List<String> lore = new ArrayList<>();
-        lore.add(messages.get("gui.reward-lore-header"));
+        lore.add(messages.get("gui.reward-lore-header", "%every%", config.rewardEvery()));
         lore.addAll(Messages.colorize(config.rewardDisplay()));
-        if (data.rewarded()) {
-            lore.add(messages.get("gui.reward-claimed"));
-        }
+        lore.add(messages.get("gui.reward-lore-claimed", "%claimed%", data.claimed(),
+            "%total%", config.barMax() / config.rewardEvery()));
+        lore.add(due > 0
+            ? messages.get("gui.reward-click", "%count%", due)
+            : messages.get("gui.reward-nothing"));
 
         return item(config.rewardMaterial(), messages.get("gui.reward-name"), lore);
     }
@@ -133,13 +138,27 @@ public class ActivityGui implements Listener {
     // ====================================
     // Nothing in this view is takeable, so every click in it is cancelled -
     // including shift-clicks from the player's own inventory, which is why
-    // the top inventory is what gets checked rather than the clicked slot
+    // the top inventory is what gets checked rather than the clicked slot.
+    // The reward chest is the one live control: it claims and redraws itself.
     // ====================================
     @EventHandler
     public void onClick(InventoryClickEvent event) {
-        if (event.getView().getTopInventory().getHolder() instanceof Marker) {
-            event.setCancelled(true);
+        if (!(event.getView().getTopInventory().getHolder() instanceof Marker)) {
+            return;
         }
+        event.setCancelled(true);
+
+        if (event.getRawSlot() != REWARD_SLOT || !(event.getWhoClicked() instanceof Player player)) {
+            return;
+        }
+
+        ActivityConfiguration config = manager.getConfiguration();
+        if (manager.claim(player) == 0) {
+            player.sendMessage(config.messages().get("reward-nothing"));
+            return;
+        }
+        event.getView().getTopInventory().setItem(REWARD_SLOT,
+            rewardItem(config, config.messages(), manager.getStore().get(player.getUniqueId())));
     }
 
     // ====================================
