@@ -88,7 +88,7 @@ public class ActivityConfiguration {
         barMax = Math.max(1, config.getInt("bar.max", 20));
         rewardEvery = Math.max(1, Math.min(barMax, config.getInt("bar.reward-every", 10)));
         barLength = barLength(config.getInt("bar.length", 20));
-        barFilledChar = config.getString("bar.filled-char", "█");
+        barFilledChar = config.getString("bar.filled-char", "░");
         barEmptyChar = config.getString("bar.empty-char", "░");
         barFilledColor = config.getString("bar.filled-color", "&a");
         barEmptyColor = config.getString("bar.empty-color", "&7");
