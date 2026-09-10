@@ -35,6 +35,15 @@ public class ActivityConfiguration {
     private volatile Map<String, ActivityDef> activities = new LinkedHashMap<>();
 
     // ====================================
+    // MMOCore profession id (normalized, see normalizeProfessionId) ->
+    // activity id. Built once on load so the experience-gain listener, which
+    // fires on every ore broken and every crop harvested, is a single map
+    // lookup instead of a scan.
+    // Replaced wholesale alongside 'activities' for the same reason.
+    // ====================================
+    private volatile Map<String, String> professionActivities = Map.of();
+
+    // ====================================
     // volatile: read from PlaceholderAPI's own threads after /activity reload
     // rebuilds them on the main thread, so readers need a visibility guarantee.
     // ====================================
@@ -105,10 +114,12 @@ public class ActivityConfiguration {
         if (section == null) {
             plugin.getLogger().warning("config.yml has no 'activities' section - the bar can never fill.");
             activities = new LinkedHashMap<>();
+            professionActivities = Map.of();
             return;
         }
 
         Map<String, ActivityDef> loaded = new LinkedHashMap<>();
+        Map<String, String> professions = new LinkedHashMap<>();
         for (String id : section.getKeys(false)) {
             ConfigurationSection entry = section.getConfigurationSection(id);
             if (entry == null) {
@@ -122,18 +133,41 @@ public class ActivityConfiguration {
                 continue;
             }
 
+            int dailyCap = Math.max(0, wholeNumber(entry, id, "daily-cap", 0));
+
             loaded.put(id, new ActivityDef(
                 id,
                 entry.getString("display", id),
                 material(entry.getString("material", "PAPER"), "activities." + id + ".material"),
                 Math.max(1, wholeNumber(entry, id, "every", 1)),
                 points,
-                Math.max(0, wholeNumber(entry, id, "daily-cap", 0))
+                dailyCap
             ));
+
+            String profession = entry.getString("profession");
+            if (profession != null && !profession.isBlank()) {
+                String key = normalizeProfessionId(profession);
+                String previous = professions.put(key, id);
+                if (previous != null) {
+                    plugin.getLogger().warning("Activities '" + previous + "' and '" + id
+                        + "' both track profession '" + key + "' - only '" + id + "' will be fed.");
+                }
+                // ====================================
+                // Profession XP is game-influenced and can be hundreds per
+                // event, unlike the one-per-action activities, so an
+                // uncapped profession activity is an unbounded reward source.
+                // ====================================
+                if (dailyCap <= 0) {
+                    plugin.getLogger().warning("Activity '" + id + "' tracks profession '" + key
+                        + "' with no daily-cap - profession XP is unbounded, so this activity can"
+                        + " fill the bar on its own.");
+                }
+            }
         }
 
         // One assignment publishes the whole set
         activities = loaded;
+        professionActivities = professions;
     }
 
     // ====================================
@@ -222,6 +256,29 @@ public class ActivityConfiguration {
 
     public ActivityDef activity(String id) {
         return activities.get(id);
+    }
+
+    // The activity fed by an MMOCore profession, or null if none tracks it
+    public String professionActivity(String professionId) {
+        return professionActivity(professionActivities, professionId);
+    }
+
+    static String professionActivity(Map<String, String> professions, String professionId) {
+        if (professionId == null || professionId.isBlank()) {
+            return null;
+        }
+        return professions.get(normalizeProfessionId(professionId));
+    }
+
+    // ====================================
+    // MMOCore's Profession constructor stores its id as
+    // lowercase-with-underscores-and-spaces-turned-into-dashes, so a file
+    // named mining_expert.yml has the id 'mining-expert'. config.yml tells
+    // admins to use the file name, so both the map keys and the lookups run
+    // through here - anything else silently never matches.
+    // ====================================
+    static String normalizeProfessionId(String professionId) {
+        return professionId.trim().toLowerCase(Locale.ROOT).replace('_', '-').replace(' ', '-');
     }
 
     // ====================================
