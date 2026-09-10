@@ -4,6 +4,7 @@ import org.bukkit.Material;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Predicate;
@@ -13,10 +14,16 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // ====================================
-// The craft: decision. Material#isAir and #isItem both go through the item
-// registry, which does not exist headless, so the live server's answer is
-// handed in as a predicate - exactly as ActivityConfiguration hands in its
-// own. AIR and BEDROCK stand for the two things a live server rejects.
+// The two optional activity keys that load() parses out of config.yml.
+//
+// craft: Material#isAir and #isItem both go through the item registry, which
+// does not exist headless, so the live server's answer is handed in as a
+// predicate - exactly as ActivityConfiguration hands in its own. AIR and
+// BEDROCK stand for the two things a live server rejects.
+//
+// profession: the id normalization and the lookup that uses it. load() itself
+// needs a running server, so the map is built here the same way loadActivities
+// builds it - through normalizeProfessionId.
 // ====================================
 class ActivityConfigurationTest {
 
@@ -25,6 +32,14 @@ class ActivityConfigurationTest {
 
     private static String register(Map<Material, String> crafts, String name, String id) {
         return ActivityConfiguration.registerCraft(crafts, name, id, CRAFTABLE);
+    }
+
+    private static Map<String, String> professions(String... professionIds) {
+        Map<String, String> map = new LinkedHashMap<>();
+        for (String professionId : professionIds) {
+            map.put(ActivityConfiguration.normalizeProfessionId(professionId), "activity_" + professionId);
+        }
+        return map;
     }
 
     @Test
@@ -104,5 +119,58 @@ class ActivityConfigurationTest {
 
         assertTrue(problem.contains("DIAMOND?[INFO]: op Notch"), problem);
         assertEquals(-1, problem.indexOf('\n'), problem);
+    }
+
+    @Test
+    void normalizationMatchesMmoCore() {
+        // MMOCore: id = rawId.toLowerCase().replace("_", "-").replace(" ", "-")
+        assertEquals("mining-expert", ActivityConfiguration.normalizeProfessionId("mining_expert"));
+        assertEquals("mining-expert", ActivityConfiguration.normalizeProfessionId("Mining Expert"));
+        assertEquals("mining-expert", ActivityConfiguration.normalizeProfessionId("MINING-EXPERT"));
+        assertEquals("crafter", ActivityConfiguration.normalizeProfessionId("  Crafter  "));
+    }
+
+    @Test
+    void normalizationIsIdempotent() {
+        String once = ActivityConfiguration.normalizeProfessionId("Mining_Expert");
+        assertEquals(once, ActivityConfiguration.normalizeProfessionId(once));
+    }
+
+    // The whole point of MEDIUM 1: a config file written the way config.yml
+    // tells admins to write it must still find MMOCore's dashed id
+    @Test
+    void underscoredConfigIdMatchesDashedMmoCoreId() {
+        Map<String, String> professions = professions("mining_expert");
+        assertEquals("activity_mining_expert",
+            ActivityConfiguration.professionActivity(professions, "mining-expert"));
+    }
+
+    @Test
+    void lookupIsCaseAndSeparatorInsensitive() {
+        Map<String, String> professions = professions("crafter");
+        assertEquals("activity_crafter", ActivityConfiguration.professionActivity(professions, "CRAFTER"));
+        assertEquals("activity_crafter", ActivityConfiguration.professionActivity(professions, " crafter "));
+    }
+
+    @Test
+    void unknownBlankAndNullProfessionsAreNotTracked() {
+        Map<String, String> professions = professions("crafter");
+        assertNull(ActivityConfiguration.professionActivity(professions, "mining"));
+        assertNull(ActivityConfiguration.professionActivity(professions, ""));
+        assertNull(ActivityConfiguration.professionActivity(professions, "   "));
+        assertNull(ActivityConfiguration.professionActivity(professions, null));
+        assertNull(ActivityConfiguration.professionActivity(Map.of(), "crafter"));
+    }
+
+    // Documented behaviour: two activities on one profession, last one wins
+    @Test
+    void duplicateProfessionKeepsTheLastActivity() {
+        Map<String, String> professions = new LinkedHashMap<>();
+        professions.put(ActivityConfiguration.normalizeProfessionId("crafter"), "first");
+        String previous = professions.put(ActivityConfiguration.normalizeProfessionId("CRAFTER"), "second");
+
+        assertEquals("first", previous);
+        assertEquals(1, professions.size());
+        assertEquals("second", ActivityConfiguration.professionActivity(professions, "crafter"));
     }
 }

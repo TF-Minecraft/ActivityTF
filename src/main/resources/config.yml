@@ -29,6 +29,13 @@ reset:
 #   one batch per click, and one click is one craft. A stackable remainder
 #   (HONEY_BLOCK hands back glass bottles) does bulk-craft, and is counted like
 #   any other bulk craft.
+# profession: optional, MMOCore only. Ties the activity to one MMOCore
+#   profession id (as named by plugins/MMOCore/professions/<id>.yml; case,
+#   underscores and spaces do not matter) and counts XP gained in it - so
+#   'every' is XP, not actions. Fractional XP is carried over between gains
+#   rather than lost. Two activities naming the same profession is a config
+#   error and only the last one is fed. Always set a daily-cap on these:
+#   profession XP is unbounded, unlike the one-per-action activities.
 activities:
   vote:
     display: "&aVoting"
@@ -81,6 +88,29 @@ activities:
     points: 1
     daily-cap: 1
     craft: ANVIL
+  # MMOCore professions - uncomment to enable. They need MMOCore installed;
+  # without it they show in /activity but can never be filled.
+  #profession_crafter:
+  #  display: "&6Crafter XP"
+  #  material: CRAFTING_TABLE
+  #  every: 500       # 500 profession XP → 1 point
+  #  points: 1
+  #  daily-cap: 2
+  #  profession: crafter
+  #profession_forager:
+  #  display: "&2Forager XP"
+  #  material: WHEAT
+  #  every: 500
+  #  points: 1
+  #  daily-cap: 2
+  #  profession: forager
+  #profession_herborist:
+  #  display: "&aHerborist XP"
+  #  material: FERN
+  #  every: 500
+  #  points: 1
+  #  daily-cap: 2
+  #  profession: herborist
 
 # Console commands run once per milestone (every bar.reward-every points)
 # when the player clicks the reward chest in /activity.

@@ -9,6 +9,7 @@ import tfmc.justin.activity.listeners.CraftListener;
 import tfmc.justin.activity.listeners.GeigerListener;
 import tfmc.justin.activity.listeners.InstrumentListener;
 import tfmc.justin.activity.listeners.JoinListener;
+import tfmc.justin.activity.listeners.ProfessionXpListener;
 import tfmc.justin.activity.listeners.VoteListener;
 import tfmc.justin.activity.managers.ActivityManager;
 
@@ -83,6 +84,12 @@ public class ActivityPlugin extends JavaPlugin {
         if (Bukkit.getPluginManager().isPluginEnabled("geiger_counter")) {
             getServer().getPluginManager().registerEvents(new GeigerListener(ActivityManager.getInstance()), this);
             getLogger().info("Hooked into geiger_counter.");
+        }
+
+        if (Bukkit.getPluginManager().isPluginEnabled("MMOCore")) {
+            getServer().getPluginManager().registerEvents(
+                new ProfessionXpListener(ActivityManager.getInstance()), this);
+            getLogger().info("Hooked into MMOCore.");
         }
 
         if (Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI")) {

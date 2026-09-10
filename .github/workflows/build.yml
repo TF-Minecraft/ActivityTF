@@ -37,7 +37,9 @@ jobs:
           gh release download v1 --repo JustinasLa/tfmc-deps --dir libs --clobber \
             --pattern 'VotingPlugin-7.0.jar' \
             --pattern 'musicalinstruments-2.5.jar' \
-            --pattern 'geiger_counter-1.1.3.jar'
+            --pattern 'geiger_counter-1.1.3.jar' \
+            --pattern 'MMOCore-1.13.1.jar' \
+            --pattern 'MythicLib-dist-1.7.1.jar'
 
       - name: Verify private dependencies
         run: sha256sum -c libs/SHA256SUMS
