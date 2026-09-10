@@ -20,19 +20,23 @@ public class PlayerData {
     private volatile int points;
     private volatile String weekKey;
     private volatile String dayKey;
-    // Milestones already paid out this week
-    private volatile int claimed;
+    // ====================================
+    // The highest point threshold already paid out, not a milestone count:
+    // lowering bar.reward-every and reloading must not make thresholds that
+    // were already handed over claimable a second time.
+    // ====================================
+    private volatile int claimedPoints;
 
     public PlayerData(String weekKey, String dayKey) {
         this.weekKey = weekKey;
         this.dayKey = dayKey;
     }
 
-    public PlayerData(int points, String weekKey, String dayKey, int claimed, Map<String, Integer> daily) {
+    public PlayerData(int points, String weekKey, String dayKey, int claimedPoints, Map<String, Integer> daily) {
         this.points = points;
         this.weekKey = weekKey;
         this.dayKey = dayKey;
-        this.claimed = claimed;
+        this.claimedPoints = claimedPoints;
         this.daily.putAll(daily);
     }
 
@@ -46,7 +50,7 @@ public class PlayerData {
 
         if (!this.weekKey.equals(weekKey)) {
             points = 0;
-            claimed = 0;
+            claimedPoints = 0;
             daily.clear();
             this.weekKey = weekKey;
             changed = true;
@@ -100,12 +104,12 @@ public class PlayerData {
     }
 
     public int claimable(int rewardEvery) {
-        return Math.max(0, points / rewardEvery - claimed);
+        return Math.max(0, points / rewardEvery - claimedPoints / rewardEvery);
     }
 
     public void reset(String weekKey, String dayKey) {
         points = 0;
-        claimed = 0;
+        claimedPoints = 0;
         daily.clear();
         this.weekKey = weekKey;
         this.dayKey = dayKey;
@@ -131,11 +135,11 @@ public class PlayerData {
         return dayKey;
     }
 
-    public int claimed() {
-        return claimed;
+    public int claimedPoints() {
+        return claimedPoints;
     }
 
-    public void setClaimed(int claimed) {
-        this.claimed = claimed;
+    public void setClaimedPoints(int claimedPoints) {
+        this.claimedPoints = claimedPoints;
     }
 }

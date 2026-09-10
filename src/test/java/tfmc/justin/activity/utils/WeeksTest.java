@@ -3,6 +3,7 @@ package tfmc.justin.activity.utils;
 import org.junit.jupiter.api.Test;
 
 import java.time.DayOfWeek;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -57,5 +58,29 @@ class WeeksTest {
     @Test
     void dayKeyIsTheIsoDate() {
         assertEquals("2026-09-09", Weeks.dayKey(LocalDateTime.of(2026, 9, 9, 23, 59).toLocalDate()));
+    }
+
+    // One clock, two keys: on both sides of the reset boundary the day key
+    // must belong to the week key derived from the same moment, i.e.
+    // weekKey(dayKey's date) still resolves to that same week key.
+    @Test
+    void dayAndWeekKeysStayConsistentAcrossTheMidnightBoundary() {
+        LocalDateTime beforeMidnight = LocalDateTime.of(2026, 9, 6, 23, 59, 59);
+        LocalDateTime afterMidnight = LocalDateTime.of(2026, 9, 7, 0, 0, 1);
+
+        String weekBefore = Weeks.weekKey(beforeMidnight, DayOfWeek.MONDAY, 0);
+        String dayBefore = Weeks.dayKey(beforeMidnight.toLocalDate());
+        String weekAfter = Weeks.weekKey(afterMidnight, DayOfWeek.MONDAY, 0);
+        String dayAfter = Weeks.dayKey(afterMidnight.toLocalDate());
+
+        assertEquals("2026-08-31", weekBefore);
+        assertEquals("2026-09-06", dayBefore);
+        assertEquals("2026-09-07", weekAfter);
+        assertEquals("2026-09-07", dayAfter);
+
+        // The day key, re-fed as "now" at the start of that day, must resolve
+        // to the same week key that was derived alongside it.
+        assertEquals(weekBefore, Weeks.weekKey(LocalDate.parse(dayBefore).atStartOfDay(), DayOfWeek.MONDAY, 0));
+        assertEquals(weekAfter, Weeks.weekKey(LocalDate.parse(dayAfter).atStartOfDay(), DayOfWeek.MONDAY, 0));
     }
 }

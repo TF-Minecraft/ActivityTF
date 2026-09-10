@@ -38,9 +38,9 @@ activities:
 # A command containing %player% is skipped with a warning when the name is not
 # [A-Za-z0-9_.]{1,16} (e.g. a Bedrock name with a space); commands that only
 # use %uuid% always run. If none of the commands below can run for a given
-# player (their name is unsafe and every command pastes %player%), the
-# milestone is still marked claimed - there is no retry, since the name will
-# never become safe. To reward Bedrock/Floodgate or other unsafe names, write
+# player (their name is unsafe and every command pastes %player%), nothing is
+# marked claimed and the reward stays claimable, so fixing the commands below
+# still pays it out. To reward Bedrock/Floodgate or other unsafe names, write
 # reward commands using only %uuid% (e.g. via a plugin that can look a player
 # up by UUID) instead of %player%.
 rewards:

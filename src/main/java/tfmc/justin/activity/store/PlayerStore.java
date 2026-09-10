@@ -33,7 +33,8 @@ import java.util.concurrent.atomic.AtomicLong;
 // ====================================
 public class PlayerStore {
 
-    private static final String FILE = "players.yml";
+    // Public so a log line elsewhere can name the file it is talking about
+    public static final String FILE = "players.yml";
 
     private final JavaPlugin plugin;
     private final ActivityConfiguration config;
@@ -50,7 +51,7 @@ public class PlayerStore {
 
     // Nothing may be written before load() has said what is already on disk,
     // or an enable that failed early would save an empty store over a real file
-    private boolean loaded;
+    private volatile boolean loaded;
 
     // Set on the main thread by shutdown; volatile so a save path the
     // scheduler runs late still sees that the final write has been taken
@@ -77,20 +78,26 @@ public class PlayerStore {
 
     public void load() {
         players.clear();
-        if (file.exists()) {
-            read();
+        // A file that could not even be copied aside must stay untouched: with
+        // loaded left false, write() and shutdown() both refuse to save, so the
+        // original survives until somebody looks at it
+        if (file.exists() && !read()) {
+            plugin.getLogger().severe("Saving is disabled until an operator moves " + FILE
+                + " aside by hand. Nothing earned from now on will be kept.");
+            return;
         }
         // Only now may anything be written back over the file
         loaded = true;
     }
 
-    private void read() {
+    // Returns false only when the existing file could neither be used nor
+    // safely copied aside
+    private boolean read() {
         YamlConfiguration yaml = new YamlConfiguration();
         try {
             yaml.load(file);
         } catch (Exception e) {
-            quarantine("could not be parsed (" + e.getMessage() + ")");
-            return;
+            return quarantine("could not be parsed (" + e.getMessage() + ")");
         }
 
         ConfigurationSection root = yaml.getConfigurationSection("players");
@@ -102,16 +109,21 @@ public class PlayerStore {
             Set<String> stray = yaml.getKeys(false);
             stray.remove("players");
             if (!stray.isEmpty()) {
-                quarantine("has no 'players' section");
+                return quarantine("has no 'players' section");
             }
-            return;
+            return true;
         }
 
         for (String key : root.getKeys(false)) {
             readEntry(root, key);
         }
+        return true;
     }
 
+    // ====================================
+    // Section and key are resolved once, here, because this is also the side
+    // that has a logger to say why a row was skipped.
+    // ====================================
     private void readEntry(ConfigurationSection root, String key) {
         ConfigurationSection entry = root.getConfigurationSection(key);
         if (entry == null) {
@@ -126,25 +138,52 @@ public class PlayerStore {
             return;
         }
 
+        players.put(uuid, parse(entry, config.barMax()));
+    }
+
+    // ====================================
+    // Test seam over the instance path above: the same "skip this row" rules -
+    // a missing section or a key that is not a UUID - reported as null rather
+    // than as a warning, so they can be exercised without a JavaPlugin.
+    // ====================================
+    static PlayerData readEntry(ConfigurationSection root, String key, int barMax) {
+        ConfigurationSection entry = root.getConfigurationSection(key);
+        if (entry == null) {
+            return null;
+        }
+
+        try {
+            UUID.fromString(key);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+
+        return parse(entry, barMax);
+    }
+
+    // ====================================
+    // One entry's values, with the key already dealt with by the caller.
+    // ====================================
+    private static PlayerData parse(ConfigurationSection entry, int barMax) {
         Map<String, Integer> daily = new HashMap<>();
         ConfigurationSection dailySection = entry.getConfigurationSection("daily");
         if (dailySection != null) {
             for (String id : dailySection.getKeys(false)) {
-                daily.put(id, dailySection.getInt(id));
+                daily.put(id, Math.max(0, dailySection.getInt(id)));
             }
         }
 
-        // ponytail: pre-milestone files stored a 0-100 bar and a boolean
-        // 'rewarded'. Points are clamped and every milestone those points
-        // reach counts as already claimed, so an upgrade never makes anything
-        // instantly claimable - the old scale was paid out under old rules.
-        int points = Math.min(entry.getInt("points"), config.barMax());
-        int claimed = entry.contains("rewarded")
-            ? points / config.rewardEvery()
-            : entry.getInt("claimed");
+        // ====================================
+        // Nothing read off disk is trusted: a hand-edited or garbled file must
+        // not be able to produce a negative bar, or claimed-points behind the
+        // points that were supposedly paid for, which would read as free
+        // rewards nobody earned.
+        // ====================================
+        int points = Math.max(0, Math.min(entry.getInt("points"), barMax));
+        int claimedPoints = Math.max(0, Math.min(entry.getInt("claimed-points"), points));
 
-        players.put(uuid, new PlayerData(points, entry.getString("week", ""), entry.getString("day", ""),
-            claimed, daily));
+        return new PlayerData(points, entry.getString("week", ""), entry.getString("day", ""),
+            claimedPoints, daily);
     }
 
     // ====================================
@@ -152,15 +191,16 @@ public class PlayerStore {
     // our data, is copied aside and reported loudly rather than being silently
     // overwritten by the next save.
     // ====================================
-    private void quarantine(String reason) {
+    private boolean quarantine(String reason) {
         File backup = new File(file.getParentFile(), FILE + ".corrupt-" + System.currentTimeMillis());
         try {
             Files.copy(file.toPath(), backup.toPath(), StandardCopyOption.REPLACE_EXISTING);
             plugin.getLogger().severe(FILE + " " + reason + " - kept a copy as " + backup.getName()
                 + " and started from an empty store.");
+            return true;
         } catch (IOException e) {
-            plugin.getLogger().severe(FILE + " " + reason + ", and copying it aside failed: " + e.getMessage()
-                + " - started from an empty store.");
+            plugin.getLogger().severe(FILE + " " + reason + ", and copying it aside failed: " + e.getMessage());
+            return false;
         }
     }
 
@@ -170,20 +210,33 @@ public class PlayerStore {
     // entry if this is the player's first action.
     // ====================================
     public PlayerData get(UUID uuid) {
-        String week = config.currentWeekKey();
-        String day = config.currentDayKey();
-
-        PlayerData data = players.get(uuid);
-        if (data == null) {
-            data = new PlayerData(week, day);
-            players.put(uuid, data);
-            dirty = true;
+        PlayerData data = rolled(uuid);
+        if (data != null) {
             return data;
         }
 
+        ActivityConfiguration.Keys keys = config.currentKeys();
+        data = new PlayerData(keys.week(), keys.day());
+        players.put(uuid, data);
+        dirty = true;
+        return data;
+    }
+
+    // ====================================
+    // get() without the create: for callers that want current numbers for a
+    // player who may never have scored anything, and must not put them in the
+    // file just for asking. Main thread only, since it mutates what it finds.
+    // ====================================
+    public PlayerData rolled(UUID uuid) {
+        PlayerData data = players.get(uuid);
+        if (data == null) {
+            return null;
+        }
+
+        ActivityConfiguration.Keys keys = config.currentKeys();
         // Clamp after the roll: a reload that lowered bar.max must not leave a
         // player above it
-        if (data.roll(week, day) | data.clamp(config.barMax())) {
+        if (data.roll(keys.week(), keys.day()) | data.clamp(config.barMax())) {
             dirty = true;
         }
         return data;
@@ -245,11 +298,22 @@ public class PlayerStore {
     // dirty only clears on a write that actually landed - a failed write must
     // leave it set so the next autosave tick tries again instead of the
     // in-memory changes silently going unsaved.
+    //
+    // The result is returned rather than swallowed: the claim path pays out
+    // only once the thresholds it burned are known to be on disk.
     // ====================================
-    private void saveNow() {
-        if (write(snapshot(), saveSeq.incrementAndGet())) {
-            dirty = false;
+    public boolean saveNow() {
+        if (!write(snapshot(), saveSeq.incrementAndGet())) {
+            return false;
         }
+        dirty = false;
+        return true;
+    }
+
+    // Whether anything written now would actually reach disk - false means a
+    // corrupt file was never read and every save for this session is refused
+    public boolean isLoaded() {
+        return loaded;
     }
 
     public void shutdown() {
@@ -275,15 +339,29 @@ public class PlayerStore {
     }
 
     private YamlConfiguration snapshot() {
+        return snapshot(players);
+    }
+
+    // ====================================
+    // Pure over the map it is handed, so the "an empty player is no player"
+    // rule can be exercised without a store.
+    // ====================================
+    static YamlConfiguration snapshot(Map<UUID, PlayerData> players) {
         YamlConfiguration yaml = new YamlConfiguration();
         for (Map.Entry<UUID, PlayerData> entry : players.entrySet()) {
             PlayerData data = entry.getValue();
+            // A player who has nothing is the same as a player with no entry,
+            // and writing one per joiner grows the file for no reason
+            if (data.points() == 0 && data.claimedPoints() == 0 && data.daily().isEmpty()) {
+                continue;
+            }
+
             String path = "players." + entry.getKey();
 
             yaml.set(path + ".points", data.points());
             yaml.set(path + ".week", data.weekKey());
             yaml.set(path + ".day", data.dayKey());
-            yaml.set(path + ".claimed", data.claimed());
+            yaml.set(path + ".claimed-points", data.claimedPoints());
             yaml.set(path + ".daily", new LinkedHashMap<>(data.daily()));
         }
         return yaml;

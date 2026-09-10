@@ -15,4 +15,16 @@ public class Utils {
         }
         return ChatColor.translateAlternateColorCodes('&', msg);
     }
+
+    // ====================================
+    // A player-supplied name on its way into the log. A name carrying a
+    // newline or an ANSI escape can forge log lines or repaint the console,
+    // so every control character is replaced before it is written.
+    //
+    // Not \p{Cntrl}, which is ASCII only: a Bedrock name can carry U+2028 or
+    // the right-to-left override U+202E, which break a log line just as well.
+    // ====================================
+    public static String safeForLog(String name) {
+        return name == null ? "null" : name.replaceAll("[\\p{Cc}\\p{Cf}\\p{Zl}\\p{Zp}]", "?");
+    }
 }

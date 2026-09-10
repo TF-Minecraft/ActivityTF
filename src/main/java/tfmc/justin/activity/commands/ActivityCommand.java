@@ -7,6 +7,7 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
+import tfmc.justin.activity.config.ActivityConfiguration;
 import tfmc.justin.activity.config.Messages;
 import tfmc.justin.activity.gui.ActivityGui;
 import tfmc.justin.activity.managers.ActivityManager;
@@ -99,7 +100,8 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
         }
 
         PlayerData data = manager.getStore().get(target.getUniqueId());
-        data.reset(manager.getConfiguration().currentWeekKey(), manager.getConfiguration().currentDayKey());
+        ActivityConfiguration.Keys keys = manager.getConfiguration().currentKeys();
+        data.reset(keys.week(), keys.day());
         manager.getStore().markDirty();
 
         // The resolved name, not what was typed - casing and the cache decide
