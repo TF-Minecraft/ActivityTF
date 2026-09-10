@@ -2,8 +2,11 @@ package tfmc.justin.activity.managers;
 
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // Only the pure half of the manager: the rest needs a running server
@@ -131,5 +134,25 @@ class ActivityManagerTest {
                 }
             }
         }
+    }
+
+    // ====================================
+    // The idle threshold the playtime timer skips a player on. 0 and below are
+    // the admin switching the check off; a zero-length Duration would instead
+    // be met by everyone every minute and pay nobody at all.
+    // ====================================
+
+    @Test
+    void aPositiveAfkSettingIsThatManyMinutes() {
+        assertEquals(Duration.ofMinutes(5), ActivityManager.afkThreshold(5));
+        assertEquals(Duration.ofMinutes(1), ActivityManager.afkThreshold(1));
+        assertEquals(Duration.ofMinutes(120), ActivityManager.afkThreshold(120));
+    }
+
+    @Test
+    void zeroOrLessDisablesTheIdleCheck() {
+        assertNull(ActivityManager.afkThreshold(0));
+        assertNull(ActivityManager.afkThreshold(-1));
+        assertNull(ActivityManager.afkThreshold(Integer.MIN_VALUE));
     }
 }

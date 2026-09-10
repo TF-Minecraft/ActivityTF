@@ -3,6 +3,7 @@ package tfmc.justin.activity.managers;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.scheduler.BukkitTask;
 import tfmc.justin.activity.config.ActivityConfiguration;
 import tfmc.justin.activity.config.Messages;
 import tfmc.justin.activity.models.ActivityDef;
@@ -11,6 +12,7 @@ import tfmc.justin.activity.models.RecordResult;
 import tfmc.justin.activity.store.PlayerStore;
 import tfmc.justin.activity.utils.Utils;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 import java.util.regex.Pattern;
@@ -29,6 +31,8 @@ public class ActivityManager {
     // ====================================
     private static final Pattern SAFE_NAME = Pattern.compile("^[A-Za-z0-9_.]{1,16}$");
 
+    private static final long MINUTE_TICKS = 60L * 20L;
+
     // Nulled by shutdown() on the main thread while a vote can still be in
     // flight on VotingPlugin's own thread
     private static volatile ActivityManager instance;
@@ -40,6 +44,11 @@ public class ActivityManager {
     // A store that never loaded refuses every save for the rest of the
     // session, so saying so once per session is enough
     private boolean warnedStoreNotLoaded;
+
+    // One tick a minute crediting online, non-idle players. Cancelled by
+    // shutdown; reload leaves it running, since it reads the AFK threshold
+    // fresh on every tick.
+    private BukkitTask playtime;
 
     private ActivityManager(JavaPlugin plugin) {
         this.plugin = plugin;
@@ -75,9 +84,58 @@ public class ActivityManager {
         config.load();
         store.load();
         store.startAutoSave();
+        startPlaytime();
+    }
+
+    // ====================================
+    // Whole minutes only. A player who joins or leaves mid-minute loses the
+    // part-minute rather than carrying it, which costs at most a minute a
+    // session and saves keeping a per-player accumulator alive.
+    //
+    // recordAction is a no-op when 'playtime' is not a configured activity,
+    // so the tick can run unconditionally - and starts working the moment an
+    // admin adds the entry and reloads.
+    //
+    // The period is 1200 ticks, not 60 seconds: a server running behind
+    // credits slower than the wall clock. Under-crediting is the safe
+    // direction, so it is left alone.
+    // ====================================
+    private void startPlaytime() {
+        // A second initialize() would otherwise leak the first timer and pay
+        // every online player twice a minute
+        if (playtime != null) {
+            playtime.cancel();
+        }
+
+        playtime = plugin.getServer().getScheduler().runTaskTimer(plugin, () -> {
+            Duration afk = afkThreshold(config.afkMinutes());
+            for (Player player : Bukkit.getOnlinePlayers()) {
+                if (afk != null && player.getIdleDuration().compareTo(afk) >= 0) {
+                    continue;
+                }
+                recordAction(player.getUniqueId(), "playtime", 1);
+            }
+        }, MINUTE_TICKS, MINUTE_TICKS);
+    }
+
+    // ====================================
+    // null when the admin has switched the idle check off, which is the only
+    // meaning 0 or a negative can carry - a zero-length threshold would
+    // otherwise be met by every player on every tick and pay nobody.
+    //
+    // Worth knowing what this threshold is and is not: getIdleDuration()
+    // resets on any packet from the client, so it only catches a client that
+    // has stopped talking to the server at all.
+    // ====================================
+    static Duration afkThreshold(int minutes) {
+        return minutes <= 0 ? null : Duration.ofMinutes(minutes);
     }
 
     public void shutdown() {
+        if (playtime != null) {
+            playtime.cancel();
+            playtime = null;
+        }
         // Cancels the autosave and writes the final snapshot under one lock
         store.shutdown();
         // A disabled plugin must not still be reachable through the API, or a

@@ -6,16 +6,19 @@ import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 import tfmc.justin.activity.models.ActivityDef;
 
+import tfmc.justin.activity.utils.Utils;
 import tfmc.justin.activity.utils.Weeks;
 
 import java.time.DayOfWeek;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.Predicate;
 
 // ====================================
 // Typed view over config.yml. Everything is read once on load so the hot
@@ -33,6 +36,13 @@ public class ActivityConfiguration {
     // never see a half-rebuilt map.
     // ====================================
     private volatile Map<String, ActivityDef> activities = new LinkedHashMap<>();
+
+    // ====================================
+    // Crafted material -> the activity id its 'craft:' key belongs to. Built
+    // once here so CraftListener answers an event with one map lookup instead
+    // of walking every activity. Replaced wholesale on reload, same as above.
+    // ====================================
+    private volatile Map<Material, String> craftActivities = new HashMap<>();
 
     // ====================================
     // volatile: read from PlaceholderAPI's own threads after /activity reload
@@ -59,6 +69,8 @@ public class ActivityConfiguration {
     private String barCompleteSound;
 
     private int saveIntervalMinutes;
+
+    private volatile int afkMinutes;
 
     public ActivityConfiguration(JavaPlugin plugin) {
         this.plugin = plugin;
@@ -98,6 +110,17 @@ public class ActivityConfiguration {
 
         saveIntervalMinutes = Math.max(1, config.getInt("save-interval-minutes", 5));
 
+        // 0 disables the idle check, so unlike the other clamps this one has
+        // no lower bound of 1
+        afkMinutes = Math.max(0, config.getInt("playtime.afk-minutes", 5));
+
+        // The timer credits the hardcoded id 'playtime', so renaming that
+        // activity kills the feature without touching this section
+        if (config.contains("playtime.afk-minutes") && !activities.containsKey("playtime")) {
+            plugin.getLogger().warning("playtime.afk-minutes is set but there is no 'playtime' activity"
+                + " - no minute will ever be credited.");
+        }
+
         warnIfBarUnreachable();
     }
 
@@ -105,10 +128,12 @@ public class ActivityConfiguration {
         if (section == null) {
             plugin.getLogger().warning("config.yml has no 'activities' section - the bar can never fill.");
             activities = new LinkedHashMap<>();
+            craftActivities = new HashMap<>();
             return;
         }
 
         Map<String, ActivityDef> loaded = new LinkedHashMap<>();
+        Map<Material, String> crafts = new HashMap<>();
         for (String id : section.getKeys(false)) {
             ConfigurationSection entry = section.getConfigurationSection(id);
             if (entry == null) {
@@ -130,10 +155,80 @@ public class ActivityConfiguration {
                 points,
                 Math.max(0, wholeNumber(entry, id, "daily-cap", 0))
             ));
+
+            loadCraft(crafts, entry.getString("craft"), id);
         }
 
         // One assignment publishes the whole set
         activities = loaded;
+        craftActivities = crafts;
+    }
+
+    // ====================================
+    // Optional. A name that is not a material is the admin's typo, not a
+    // reason to lose the rest of config.yml - say which key is wrong and
+    // leave the activity in place, just with nothing feeding it.
+    // ====================================
+    private void loadCraft(Map<Material, String> crafts, String name, String id) {
+        String problem = registerCraft(crafts, name, id, ActivityConfiguration::craftableItem);
+        if (problem != null) {
+            plugin.getLogger().warning(problem);
+        }
+    }
+
+    // ====================================
+    // The whole craft: decision, pure so it can be tested: registers the name
+    // under this activity and returns the warning to log, or null when there
+    // is nothing to say.
+    //
+    // Not routed through material(): that one falls back to PAPER, which here
+    // would silently start tracking paper crafts instead of saying nothing
+    // feeds the activity. Only a real item can come out of a crafting grid,
+    // so a block-only or legacy name is rejected the same way a typo is - and
+    // so is AIR, which passes isItem() and is what the special recipes
+    // (firework rockets, banner copies, map extending) report as their result,
+    // so accepting it would match all of them at once.
+    //
+    // Two activities claiming one material would make the second unreachable,
+    // so the first one wins and the clash is named.
+    //
+    // craftable is handed in because Material#isAir and #isItem both go
+    // through the item registry, which only exists on a running server.
+    // ====================================
+    static String registerCraft(Map<Material, String> crafts, String name, String id,
+                                Predicate<Material> craftable) {
+        if (name == null || name.isBlank()) {
+            return null;
+        }
+
+        // The name and the section key it sits under are both admin-supplied
+        // and go straight into a log line
+        String safe = Utils.safeForLog(name);
+        String safeId = Utils.safeForLog(id);
+
+        Material crafted = Material.matchMaterial(name);
+        if (crafted == null) {
+            return "Unknown material '" + safe + "' at activities." + safeId
+                + ".craft - nothing will ever feed that activity.";
+        }
+        if (!craftable.test(crafted)) {
+            return "'" + safe + "' at activities." + safeId
+                + ".craft is not an item and cannot be crafted - nothing will ever feed"
+                + " that activity.";
+        }
+
+        String existing = crafts.putIfAbsent(crafted, id);
+        if (existing == null) {
+            return null;
+        }
+        String safeExisting = Utils.safeForLog(existing);
+        return "activities." + safeId + ".craft is " + crafted
+            + ", which activity '" + safeExisting + "' already tracks - only '" + safeExisting
+            + "' will be credited.";
+    }
+
+    private static boolean craftableItem(Material material) {
+        return !material.isAir() && material.isItem();
     }
 
     // ====================================
@@ -222,6 +317,17 @@ public class ActivityConfiguration {
 
     public ActivityDef activity(String id) {
         return activities.get(id);
+    }
+
+    // The activity fed by crafting this material, or null if none is
+    public String craftActivity(Material crafted) {
+        return craftActivities.get(crafted);
+    }
+
+    // How long a player must have been idle before a minute stops counting.
+    // 0 means the idle check is off and every online minute counts.
+    public int afkMinutes() {
+        return afkMinutes;
     }
 
     // ====================================
