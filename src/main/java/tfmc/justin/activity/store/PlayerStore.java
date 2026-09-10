@@ -135,11 +135,12 @@ public class PlayerStore {
         }
 
         // ponytail: pre-milestone files stored a 0-100 bar and a boolean
-        // 'rewarded'. Points are clamped and a rewarded week counts as fully
-        // claimed, so an upgrade can never pay out ten rewards on one click.
+        // 'rewarded'. Points are clamped and every milestone those points
+        // reach counts as already claimed, so an upgrade never makes anything
+        // instantly claimable - the old scale was paid out under old rules.
         int points = Math.min(entry.getInt("points"), config.barMax());
-        int claimed = entry.getBoolean("rewarded")
-            ? config.barMax() / config.rewardEvery()
+        int claimed = entry.contains("rewarded")
+            ? points / config.rewardEvery()
             : entry.getInt("claimed");
 
         players.put(uuid, new PlayerData(points, entry.getString("week", ""), entry.getString("day", ""),

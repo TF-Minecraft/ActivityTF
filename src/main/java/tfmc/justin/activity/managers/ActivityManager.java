@@ -150,14 +150,16 @@ public class ActivityManager {
         store.saveSoon();
 
         // An empty rewards.commands list means there is nothing configured to
-        // hand over - not a failure, so it stays silent
+        // hand over - not a failure, so it stays silent. A name no command can
+        // take is a failure the player should hear about, not just the console.
         if (!config.rewardCommands().isEmpty()) {
             for (int i = 0; i < due; i++) {
                 if (!dispatchRewards(player)) {
                     plugin.getLogger().warning("No reward command could be run for '" + player.getName()
                         + "': the name cannot be safely pasted into a console command. Use %uuid%-based"
                         + " reward commands to support Bedrock/unsafe names.");
-                    break;
+                    player.sendMessage(config.messages().get("reward-failed"));
+                    return due;
                 }
             }
         }

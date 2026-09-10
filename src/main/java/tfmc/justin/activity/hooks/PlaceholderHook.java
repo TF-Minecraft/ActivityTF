@@ -62,7 +62,9 @@ public class PlaceholderHook extends PlaceholderExpansion {
         PlayerData data = manager.getStore().peek(player.getUniqueId());
 
         boolean currentWeek = data != null && data.weekKey().equals(config.currentWeekKey());
-        int points = currentWeek ? data.points() : 0;
+        // Clamped here too: peek() never runs the clamp get() does, so a lowered
+        // bar.max would otherwise read over 100% until the next action
+        int points = currentWeek ? Math.min(data.points(), config.barMax()) : 0;
 
         // ====================================
         // Only the fixed keywords and the "done_" prefix are matched

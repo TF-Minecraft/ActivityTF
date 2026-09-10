@@ -2,6 +2,7 @@ points-earned: "&a+%points% &f%activity% &7(&a%total%&7/%max%)"
 reward-ready: "&a&lREWARD READY! &7Open &f/activity &7to claim."
 reward-claimed: "&a&lCLAIMED &7%count% reward(s) granted."
 reward-nothing: "&7Nothing to claim yet."
+reward-failed: "&cYour rewards could not be handed over - tell an admin."
 gui:
   bar-name: "&fWeekly Activity: &a%points%&7/%max%"
   reward-name: "&6Rewards"

@@ -63,7 +63,7 @@ bar:
   empty-color: "&7"
 
 sounds:               # Bukkit Sound names, "" disables
-  goal-complete: ENTITY_EXPERIENCE_ORB_PICKUP
-  bar-complete: UI_TOAST_CHALLENGE_COMPLETE
+  goal-complete: ENTITY_EXPERIENCE_ORB_PICKUP   # every time points are earned
+  bar-complete: UI_TOAST_CHALLENGE_COMPLETE     # milestone reached / claimed
 
 save-interval-minutes: 5
