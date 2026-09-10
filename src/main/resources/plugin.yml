@@ -3,7 +3,7 @@ version: 1.0
 name: activity
 author: Justin
 api-version: 1.21
-softdepend: [VotingPlugin, MusicalInstruments, geiger_counter, PlaceholderAPI]
+softdepend: [VotingPlugin, MusicalInstruments, geiger_counter, MMOCore, PlaceholderAPI]
 commands:
   activity:
     description: Open the weekly activity bar, or run admin subcommands
