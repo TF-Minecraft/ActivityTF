@@ -72,6 +72,26 @@
             <systemPath>${project.basedir}/libs/geiger_counter-1.1.3.jar</systemPath>
         </dependency>
 
+        <!-- MMOCore: jar-only release, compiled against for PlayerExperienceGainEvent -->
+        <dependency>
+            <groupId>local</groupId>
+            <artifactId>MMOCore</artifactId>
+            <version>1.13.1</version>
+            <scope>system</scope>
+            <systemPath>${project.basedir}/libs/MMOCore-1.13.1.jar</systemPath>
+        </dependency>
+
+        <!-- MythicLib: MMOCore's own hard dependency. Not used directly, but
+             MMOCore's Profession implements one of its interfaces, so javac
+             needs it on the classpath to resolve Profession at all. -->
+        <dependency>
+            <groupId>local</groupId>
+            <artifactId>MythicLib</artifactId>
+            <version>1.7.1</version>
+            <scope>system</scope>
+            <systemPath>${project.basedir}/libs/MythicLib-dist-1.7.1.jar</systemPath>
+        </dependency>
+
         <!-- Tests -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
