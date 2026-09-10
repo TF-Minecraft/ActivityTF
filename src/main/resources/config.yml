@@ -6,6 +6,29 @@ reset:
 # activity can add per day (0 = no cap). Bar caps at bar.max.
 # vote: one point per vote site. quest: fed by the quests plugin via
 #   /activity add <player> quest 1
+# playtime: 'every' counts minutes online - see the playtime section at the
+#   bottom, and read what afk-minutes does and does not do before relying on it.
+# craft: optional. The vanilla Material this activity counts crafts of; a
+#   shift-click bulk craft counts every item it made. One material feeds one
+#   activity - if two claim the same one, only the first is credited. An
+#   unknown name, or a name that is not an item, is logged and that activity
+#   is simply never fed.
+#   The count is worked out at the moment of the click, from the same limits
+#   the game itself obeys: a normal click makes exactly one batch, and a
+#   shift-click repeats until either the shortest ingredient stack or the room
+#   in your inventory (main inventory + hotbar, not armour or offhand) runs
+#   out. Nothing is looked at afterwards, so nothing you do later in the tick
+#   changes the credit. Clicks that craft nothing - a double-click on the
+#   result slot, a number-key or offhand swap onto a slot that is already
+#   holding something - count nothing. It still errs low in one place:
+#     - a shift-click whose last pass only partly fits counts as a whole batch
+#       fewer. Shift-crafting into a full inventory counts nothing, because
+#       nothing is made.
+#   A shift-click is capped by the shortest ingredient stack, so any recipe
+#   with an unstackable ingredient (CAKE needs milk buckets) can only ever make
+#   one batch per click, and one click is one craft. A stackable remainder
+#   (HONEY_BLOCK hands back glass bottles) does bulk-craft, and is counted like
+#   any other bulk craft.
 # profession: optional, MMOCore only. Ties the activity to one MMOCore
 #   profession id (as named by plugins/MMOCore/professions/<id>.yml; case,
 #   underscores and spaces do not matter) and counts XP gained in it - so
@@ -38,6 +61,33 @@ activities:
     every: 20
     points: 1
     daily-cap: 1
+  playtime:
+    display: "&6Time Played"
+    material: CLOCK
+    every: 60          # 60 counted minutes => 1 point
+    points: 1
+    daily-cap: 3
+  craft_diamond_block:
+    display: "&bCraft Diamond Blocks"
+    material: DIAMOND_BLOCK
+    every: 3
+    points: 1
+    daily-cap: 1
+    craft: DIAMOND_BLOCK
+  craft_golden_carrot:
+    display: "&6Craft Golden Carrots"
+    material: GOLDEN_CARROT
+    every: 16
+    points: 1
+    daily-cap: 1
+    craft: GOLDEN_CARROT
+  craft_anvil:
+    display: "&7Craft Anvils"
+    material: ANVIL
+    every: 1
+    points: 1
+    daily-cap: 1
+    craft: ANVIL
   # MMOCore professions - uncomment to enable. They need MMOCore installed;
   # without it they show in /activity but can never be filled.
   #profession_crafter:
@@ -97,3 +147,22 @@ sounds:               # Bukkit Sound names, "" disables
   bar-complete: UI_TOAST_CHALLENGE_COMPLETE     # milestone reached / claimed
 
 save-interval-minutes: 5
+
+# Feeds the 'playtime' activity above: one counted action per whole minute a
+# player is online whose client has not gone silent. Part-minutes at join and
+# quit are dropped.
+#
+# READ THIS BEFORE TREATING afk-minutes AS AN ANTI-AFK CONTROL. IT IS NOT ONE.
+# The idle timer it reads is reset by ANY packet from the client - moving,
+# swinging an arm, clicking in an inventory, turning the camera. So it only
+# excludes a player whose game has crashed, been backgrounded, or otherwise
+# stopped talking to the server. It does NOT stop a mouse jiggler, an
+# autoclicker, an anti-AFK mod, or a macro that swings once a minute; all of
+# those keep earning playtime exactly as if the player were at the keyboard.
+#
+# The real limit on that is daily-cap. With every: 60 and daily-cap: 3 above, a
+# player who leaves a macro running all week earns 21 points against bar.max of
+# 20 - i.e. a full bar from playtime alone. If that matters on your server,
+# lower playtime's daily-cap; changing afk-minutes will not help.
+playtime:
+  afk-minutes: 5     # client silent this long => the minute does not count; 0 disables the check

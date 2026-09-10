@@ -5,6 +5,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import tfmc.justin.activity.commands.ActivityCommand;
 import tfmc.justin.activity.gui.ActivityGui;
 import tfmc.justin.activity.hooks.PlaceholderHook;
+import tfmc.justin.activity.listeners.CraftListener;
 import tfmc.justin.activity.listeners.GeigerListener;
 import tfmc.justin.activity.listeners.InstrumentListener;
 import tfmc.justin.activity.listeners.JoinListener;
@@ -32,6 +33,8 @@ public class ActivityPlugin extends JavaPlugin {
         getCommand("activity").setTabCompleter(command);
 
         getServer().getPluginManager().registerEvents(new JoinListener(manager), this);
+        // Vanilla crafting - no soft-depend to check, unlike registerHooks below
+        getServer().getPluginManager().registerEvents(new CraftListener(manager), this);
         getServer().getPluginManager().registerEvents(gui, this);
 
         registerHooks();
