@@ -61,7 +61,10 @@ public class PlaceholderHook extends PlaceholderExpansion {
         ActivityConfiguration config = manager.getConfiguration();
         PlayerData data = manager.getStore().peek(player.getUniqueId());
 
-        boolean currentWeek = data != null && data.weekKey().equals(config.currentWeekKey());
+        // One clock reading for both keys: asked separately they can straddle
+        // a midnight tick and disagree about which day this week it is
+        ActivityConfiguration.Keys keys = config.currentKeys();
+        boolean currentWeek = data != null && data.weekKey().equals(keys.week());
         // Clamped here too: peek() never runs the clamp get() does, so a lowered
         // bar.max would otherwise read over 100% until the next action
         int points = currentWeek ? Math.min(data.points(), config.barMax()) : 0;
@@ -99,7 +102,7 @@ public class PlaceholderHook extends PlaceholderExpansion {
             }
             // "Done" is the daily cap reached, or - for an uncapped activity -
             // at least one award earned today
-            int today = currentWeek && data.dayKey().equals(config.currentDayKey())
+            int today = currentWeek && data.dayKey().equals(keys.day())
                 ? def.worth(data.count(def.id())) : 0;
             boolean done = def.dailyCap() > 0 ? today >= def.dailyCap() : today > 0;
             return Utils.colorize(config.messages().raw(done ? "placeholder.done" : "placeholder.not-done"));

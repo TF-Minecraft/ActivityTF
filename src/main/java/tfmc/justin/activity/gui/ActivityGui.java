@@ -115,7 +115,7 @@ public class ActivityGui implements Listener {
         List<String> lore = new ArrayList<>();
         lore.add(messages.get("gui.reward-lore-header", "%every%", config.rewardEvery()));
         lore.addAll(Messages.colorize(config.rewardDisplay()));
-        lore.add(messages.get("gui.reward-lore-claimed", "%claimed%", data.claimed(),
+        lore.add(messages.get("gui.reward-lore-claimed", "%claimed%", data.claimedPoints() / config.rewardEvery(),
             "%total%", config.barMax() / config.rewardEvery()));
         lore.add(due > 0
             ? messages.get("gui.reward-click", "%count%", due)
@@ -152,9 +152,40 @@ public class ActivityGui implements Listener {
             return;
         }
 
+        // The permission is checked on /activity, but an inventory can outlive
+        // the permission that opened it - a revoked player must not still be
+        // able to click a reward out of a window they left open
+        if (!player.hasPermission("activity.use")) {
+            return;
+        }
+
         ActivityConfiguration config = manager.getConfiguration();
         if (manager.claim(player) == 0) {
-            player.sendMessage(config.messages().get("reward-nothing"));
+            // ====================================
+            // A claim of 0 is either "nothing was due" or a refusal, and every
+            // refusal has already told the player why - saying "nothing to
+            // claim yet" on top of that contradicts it. So the only two lines
+            // sent here are the ones claim() cannot send itself: the missing
+            // reward commands, which it leaves silent on purpose, and the
+            // genuinely empty claim, which still owes the player an answer.
+            // ====================================
+            // A store that never loaded refuses every claim and has already
+            // said so - what is or is not configured is beside the point
+            if (!manager.getStore().isLoaded()) {
+                return;
+            }
+
+            if (config.rewardCommands().isEmpty()) {
+                player.sendMessage(config.messages().get("reward-unconfigured"));
+                return;
+            }
+
+            // peek, not get: deciding which line to send must not create an
+            // entry or dirty the store
+            PlayerData data = manager.getStore().peek(player.getUniqueId());
+            if (data == null || data.claimable(config.rewardEvery()) == 0) {
+                player.sendMessage(config.messages().get("reward-nothing"));
+            }
             return;
         }
         event.getView().getTopInventory().setItem(REWARD_SLOT,

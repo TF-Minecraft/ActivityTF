@@ -9,7 +9,6 @@ import tfmc.justin.activity.models.ActivityDef;
 import tfmc.justin.activity.utils.Weeks;
 
 import java.time.DayOfWeek;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -77,6 +76,10 @@ public class ActivityConfiguration {
         loadActivities(config.getConfigurationSection("activities"));
 
         rewardCommands = config.getStringList("rewards.commands");
+        if (rewardCommands.isEmpty()) {
+            plugin.getLogger().warning("rewards.commands is empty - a full bar can be reached but nothing"
+                + " can ever be claimed.");
+        }
         rewardDisplay = config.getStringList("rewards.display");
 
         guiTitle = config.getString("gui.title", "&8Weekly Activity");
@@ -109,15 +112,6 @@ public class ActivityConfiguration {
         for (String id : section.getKeys(false)) {
             ConfigurationSection entry = section.getConfigurationSection(id);
             if (entry == null) {
-                continue;
-            }
-
-            // The old key: its meaning moved to 'every' with 'points' per award,
-            // so an unconverted entry would hand out its old 50-point award per
-            // single action. Loud and skipped rather than silently wrong.
-            if (entry.contains("daily-goal")) {
-                plugin.getLogger().warning("Activity '" + id + "' still uses 'daily-goal' - skipping it."
-                    + " Convert to every/points/daily-cap (see the default config.yml).");
                 continue;
             }
 
@@ -231,16 +225,16 @@ public class ActivityConfiguration {
     }
 
     // ====================================
-    // The keys "right now" falls in. Every caller used to spell out the same
-    // LocalDateTime.now() plus two Weeks calls; a reset boundary belongs to
-    // the config that defines it.
+    // Both keys off one clock reading. Asking for them separately can straddle
+    // a midnight tick and produce a day key from the new day with a week key
+    // from the old one, which reads as a rollover that never happened.
     // ====================================
-    public String currentWeekKey() {
-        return Weeks.weekKey(LocalDateTime.now(), resetDay, resetHour);
+    public Keys currentKeys() {
+        LocalDateTime now = LocalDateTime.now();
+        return new Keys(Weeks.weekKey(now, resetDay, resetHour), Weeks.dayKey(now.toLocalDate()));
     }
 
-    public String currentDayKey() {
-        return Weeks.dayKey(LocalDate.now());
+    public record Keys(String week, String day) {
     }
 
     public DayOfWeek resetDay() {

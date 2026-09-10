@@ -8,8 +8,10 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.plugin.IllegalPluginAccessException;
 import org.bukkit.plugin.java.JavaPlugin;
 import tfmc.justin.activity.managers.ActivityManager;
+import tfmc.justin.activity.utils.Utils;
 
 import java.util.UUID;
 
@@ -46,35 +48,45 @@ public class VoteListener implements Listener {
             return;
         }
 
-        UUID uuid = resolve(event);
-        if (uuid == null) {
-            return;
-        }
+        // Only plain data is read off the vote thread; every lookup that
+        // touches server state happens on the tick below
+        VotingPluginUser user = event.getVotingPluginUser();
+        UUID javaUuid = user == null ? null : user.getJavaUUID();
+        String name = event.getPlayer();
 
         // The scheduler throws for a disabled plugin, and a vote arriving
         // during shutdown has nowhere to be scored anyway
-        if (manager == null || !plugin.isEnabled()) {
+        if (!plugin.isEnabled()) {
             return;
         }
 
-        Bukkit.getScheduler().runTask(plugin, () -> manager.recordAction(uuid, "vote", 1));
+        // isEnabled() was true a line ago, but a disable landing in between
+        // would throw on VotingPlugin's thread rather than ours
+        try {
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                UUID uuid = resolve(javaUuid, name);
+                if (uuid != null) {
+                    manager.recordAction(uuid, "vote", 1);
+                }
+            });
+        } catch (IllegalPluginAccessException | IllegalStateException e) {
+            // Plugin is being disabled, vote dropped
+        }
     }
 
     // ====================================
-    // Every fallback here reads a local cache only, which is what makes this
-    // safe on the async vote thread. Bukkit.getOfflinePlayer(String) is not
-    // used at all: it blocks on a Mojang lookup and invents a UUID for names
-    // that have never played, which would quietly fill players.yml with junk.
+    // Main thread only: Bukkit.getPlayerExact and the offline-player cache are
+    // not safe off a tick. Bukkit.getOfflinePlayer(String) is not used at all:
+    // it blocks on a Mojang lookup and invents a UUID for names that have
+    // never played, which would quietly fill players.yml with junk.
     // ====================================
-    private UUID resolve(PlayerVoteEvent event) {
-        VotingPluginUser user = event.getVotingPluginUser();
-        if (user != null && user.getJavaUUID() != null) {
-            return user.getJavaUUID();
+    private UUID resolve(UUID javaUuid, String name) {
+        if (javaUuid != null) {
+            return javaUuid;
         }
 
         // Proxy-forwarded votes can arrive with no user attached; the name is
         // always set
-        String name = event.getPlayer();
         if (name == null || name.isBlank()) {
             plugin.getLogger().warning("Ignoring a vote with neither a user nor a player name.");
             return null;
@@ -90,7 +102,8 @@ public class VoteListener implements Listener {
             return cached.getUniqueId();
         }
 
-        plugin.getLogger().info("Dropping a vote from '" + name + "' - no cached player by that name.");
+        plugin.getLogger().info("Dropping a vote from '" + Utils.safeForLog(name)
+            + "' - no cached player by that name.");
         return null;
     }
 }
