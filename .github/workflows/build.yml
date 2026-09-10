@@ -51,3 +51,36 @@ jobs:
           path: target/*.jar
           if-no-files-found: error
           retention-days: 90
+
+  publish:
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    concurrency:
+      group: publish-latest-release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: activity-jar-${{ github.sha }}
+          path: target
+
+      # --clobber only replaces an asset with the same filename; a pom.xml
+      # version bump changes the jar name, so old jars won't be pruned
+      # automatically and must be removed from the release manually.
+      - name: Publish latest release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view latest >/dev/null 2>&1; then
+            gh release upload latest target/*.jar --clobber
+          else
+            gh release create latest target/*.jar \
+              --title "Latest build" --notes "Auto-published from main" --latest=false
+          fi
