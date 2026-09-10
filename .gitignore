@@ -1,5 +1,6 @@
 ﻿target/
 *.jar
-libs/
+libs/*
+!libs/SHA256SUMS
 .idea/
 *.iml
