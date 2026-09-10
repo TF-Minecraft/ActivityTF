@@ -64,6 +64,14 @@ If the user's message starts with one of these prefixes, the user is talking to 
 
 ## Git
 
-- Neither you nor any agent ever commits, pushes, or otherwise changes git state. Read-only git is fine.
-- When the work reaches a state worth committing, give the user the exact commands to run in a `bash` code block: the `git add` paths, a `git commit -m` with a message you wrote, and `git push` if a remote exists. The user runs them.
-- `.claude/settings.json` in this project denies mutating git commands at the tool level. Keep that deny list if the file is merged with other settings.
+- Every change reaches `main` through a pull request. Never commit to `main` directly and never push to `main`.
+- You (the CTO) create the branch, stage, commit, push the branch, and open the PR yourself, once the pipeline for that change is complete and reported to the user. Subagents never touch git state.
+- Branch names: `feat/…`, `fix/…`, `chore/…`, `refactor/…`.
+- Commit messages follow Conventional Commits. Subject imperative, 50 characters or fewer. Body only when the "why" is not obvious from the subject.
+- Never add `Co-Authored-By`, "Generated with Claude Code", or any other attribution trailer to a commit message or PR description.
+- Never force-push, rebase, reset, or amend a commit that already exists on the remote.
+- Never merge a PR. The user reviews and merges.
+- Open the PR with `gh pr create`, then give the user the PR URL. Report the CI result only after reading it with `gh pr checks` or `gh run view`; never predict it.
+- CI (`.github/workflows/build.yml`) builds and tests every commit pushed to a PR and uploads the jar as a workflow artifact. Build output never goes into git: `target/`, `libs/`, and `*.jar` stay gitignored.
+- The three system-scope dependencies in `libs/` live as release assets on the private repo `JustinasLa/tfmc-deps` (tag `v1`). CI fetches them with the `DEPS_TOKEN` secret. If a dependency jar changes, upload the new asset there; do not commit it here.
+- `.claude/settings.json`'s deny list is a guardrail against accidents, not a security boundary — command-string matching is bypassable. The load-bearing control is the ruleset on `main` in GitHub: require a pull request, block force-pushes, block deletions.
