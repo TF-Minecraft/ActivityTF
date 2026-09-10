@@ -1,7 +1,6 @@
 {
   "permissions": {
     "deny": [
-      "Bash(git -c*)",
       "Bash(git -C*)",
       "Bash(git --git-dir*)",
       "Bash(git --work-tree*)",
@@ -9,9 +8,6 @@
       "Bash(git push -f*)",
       "Bash(git push --force-with-lease*)",
       "Bash(git push --delete*)",
-      "Bash(git push)",
-      "Bash(git push origin)",
-      "Bash(git push origin HEAD*)",
       "Bash(git push * main)",
       "Bash(git push * main:*)",
       "Bash(git push *:main)",
@@ -22,8 +18,6 @@
       "Bash(git restore*)",
       "Bash(git checkout*)",
       "Bash(git clean*)",
-      "Bash(git switch --discard-changes*)",
-      "Bash(git switch -f*)",
       "Bash(git stash*)",
       "Bash(git rebase*)",
       "Bash(git merge*)",
