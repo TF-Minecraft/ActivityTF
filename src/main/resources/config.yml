@@ -14,11 +14,11 @@ reset:
 #     v.iron_ingot      the same thing written as a TLibs item path
 #     m.material.steel  an MMOItems item, as m.<type>.<id> - needs TLibs,
 #                       MMOItems and MythicLib all installed
-#   The m. form is resolved by TLibs: without it, or without MMOItems and
-#   MythicLib, such an icon falls back to PAPER and such a craft is never
-#   fed, and either way it is logged the first time it is used (GUI open /
-#   craft), not on startup. A malformed or unsupported path is logged the
-#   same way.
+#   Missing-plugin (TLibs/MMOItems/MythicLib), malformed, and
+#   unsupported-prefix cases are reported once at load (startup or
+#   /activity reload). Only a well-formed m. path that TLibs itself fails
+#   to resolve at runtime is reported the first time it is used (GUI open /
+#   craft).
 # craft: optional; a shift-click bulk craft counts every item it made. One
 #   item feeds one activity - if two claim the same one, only the first is
 #   credited. An unknown name, or a name that is not an item, is logged and
