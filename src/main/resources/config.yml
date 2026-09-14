@@ -8,11 +8,25 @@ reset:
 #   /activity add <player> quest 1
 # playtime: 'every' counts minutes online - see the playtime section at the
 #   bottom, and read what afk-minutes does and does not do before relying on it.
-# craft: optional. The vanilla Material this activity counts crafts of; a
-#   shift-click bulk craft counts every item it made. One material feeds one
-#   activity - if two claim the same one, only the first is credited. An
-#   unknown name, or a name that is not an item, is logged and that activity
-#   is simply never fed.
+# material: the GUI icon, and craft: the item this activity counts crafts of.
+#   Both accept the same three forms:
+#     IRON_INGOT        a bare vanilla Material name
+#     v.iron_ingot      the same thing written as a TLibs item path
+#     m.material.steel  an MMOItems item, as m.<type>.<id> - needs TLibs,
+#                       MMOItems and MythicLib all installed
+#   Malformed and unsupported-prefix values are reported per entry at load
+#   (startup or /activity reload); a missing TLibs/MMOItems/MythicLib is
+#   reported once for the whole file, and only if an m. path is configured.
+#   A well-formed m. path that TLibs itself cannot resolve is reported once,
+#   the first time it is used (GUI open / craft), and TLibs is not asked
+#   about it again until a server restart (/activity reload does not clear
+#   this) - later opens keep falling back to the icon's material without
+#   logging again.
+# craft: optional; a shift-click bulk craft counts every item it made. One
+#   item feeds one activity - if two claim the same one, only the first is
+#   credited. An unknown name, or a name that is not an item, is logged and
+#   that activity is simply never fed. Crafts of a tracked vanilla material
+#   never consult TLibs; other crafts check each m. path.
 #   The count is worked out at the moment of the click, from the same limits
 #   the game itself obeys: a normal click makes exactly one batch, and a
 #   shift-click repeats until either the shortest ingredient stack or the room
@@ -39,7 +53,7 @@ reset:
 activities:
   vote:
     display: "#e6ca40&lVoting"
-    material: PAPER
+    material: v.paper
     every: 1
     points: 1
     daily-cap: 5
@@ -76,7 +90,7 @@ activities:
     craft: DIAMOND_BLOCK
   craft_golden_carrot:
     display: "#e6ca40&lCraft Golden Carrots"
-    material: GOLDEN_CARROT
+    material: v.golden_carrot
     every: 16
     points: 1
     daily-cap: 1

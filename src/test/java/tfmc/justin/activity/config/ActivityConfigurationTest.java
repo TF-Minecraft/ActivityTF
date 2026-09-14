@@ -3,8 +3,10 @@ package tfmc.justin.activity.config;
 import org.bukkit.Material;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Predicate;
@@ -30,8 +32,10 @@ class ActivityConfigurationTest {
     private static final Predicate<Material> CRAFTABLE =
         material -> !Set.of(Material.AIR, Material.BEDROCK, Material.WATER).contains(material);
 
-    private static String register(Map<Material, String> crafts, String name, String id) {
-        return ActivityConfiguration.registerCraft(crafts, name, id, CRAFTABLE);
+    private final List<Map.Entry<String, String>> paths = new ArrayList<>();
+
+    private String register(Map<Material, String> crafts, String name, String id) {
+        return ActivityConfiguration.registerCraft(crafts, paths, name, id, CRAFTABLE);
     }
 
     private static Map<String, String> professions(String... professionIds) {
@@ -40,6 +44,59 @@ class ActivityConfigurationTest {
             map.put(ActivityConfiguration.normalizeProfessionId(professionId), "activity_" + professionId);
         }
         return map;
+    }
+
+    @Test
+    void aVanillaPathRegistersAsItsMaterial() {
+        Map<Material, String> crafts = new HashMap<>();
+
+        assertNull(register(crafts, "v.diamond_block", "craft_diamond_block"));
+        assertEquals(Map.of(Material.DIAMOND_BLOCK, "craft_diamond_block"), crafts);
+        assertTrue(paths.isEmpty());
+    }
+
+    @Test
+    void anItemPathIsKeptAsAPathInConfigOrder() {
+        Map<Material, String> crafts = new HashMap<>();
+
+        assertNull(register(crafts, "m.material.steel", "craft_steel"));
+        assertNull(register(crafts, "m.sword.katana", "craft_katana"));
+
+        assertTrue(crafts.isEmpty());
+        assertEquals(List.of(Map.entry("m.material.steel", "craft_steel"),
+            Map.entry("m.sword.katana", "craft_katana")), paths);
+    }
+
+    @Test
+    void aMalformedItemPathIsReportedAndRegistersNothing() {
+        Map<Material, String> crafts = new HashMap<>();
+
+        String problem = register(crafts, "m.material", "craft_steel");
+
+        assertTrue(problem != null && problem.contains("Malformed item path"), problem);
+        assertTrue(problem.contains("activities.craft_steel.craft"), problem);
+        assertTrue(crafts.isEmpty() && paths.isEmpty());
+    }
+
+    @Test
+    void anUnknownVanillaPathIsReported() {
+        Map<Material, String> crafts = new HashMap<>();
+
+        String problem = register(crafts, "v.dimaond_block", "craft_diamond_block");
+
+        assertTrue(problem != null && problem.contains("Unknown material"), problem);
+        assertTrue(crafts.isEmpty() && paths.isEmpty());
+    }
+
+    @Test
+    void theFirstActivityClaimingAnItemPathKeepsIt() {
+        Map<Material, String> crafts = new HashMap<>();
+
+        assertNull(register(crafts, "m.material.steel", "craft_steel"));
+        String problem = register(crafts, "m.material.STEEL", "craft_steel_again");
+
+        assertEquals(List.of(Map.entry("m.material.steel", "craft_steel")), paths);
+        assertTrue(problem != null && problem.contains("activity 'craft_steel' already tracks"), problem);
     }
 
     @Test

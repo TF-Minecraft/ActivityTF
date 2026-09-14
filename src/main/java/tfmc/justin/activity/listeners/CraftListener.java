@@ -11,8 +11,9 @@ import org.bukkit.inventory.ItemStack;
 import tfmc.justin.activity.managers.ActivityManager;
 
 // ====================================
-// Feeds the activities that carry a 'craft:' key. Vanilla only, so unlike
-// the other listeners this one is always registered.
+// Feeds the activities that carry a 'craft:' key. Always registered, unlike
+// the other listeners: a crafted item is checked against the vanilla
+// Material map first, then against TLibs m.<type>.<id> paths on a miss.
 //
 // CraftItemEvent fires *before* the container transaction runs, so nothing has
 // been crafted yet. Rather than look at the world afterwards to find out what
@@ -60,7 +61,7 @@ public class CraftListener implements Listener {
             return;
         }
 
-        String activityId = manager.getConfiguration().craftActivity(result.getType());
+        String activityId = manager.getConfiguration().craftActivity(result);
         if (activityId == null) {
             return;
         }

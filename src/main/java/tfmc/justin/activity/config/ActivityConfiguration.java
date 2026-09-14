@@ -1,11 +1,15 @@
 package tfmc.justin.activity.config;
 
+import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
+import tfmc.justin.activity.hooks.TLibsItems;
 import tfmc.justin.activity.models.ActivityDef;
 
+import tfmc.justin.activity.utils.ItemPath;
 import tfmc.justin.activity.utils.Utils;
 import tfmc.justin.activity.utils.Weeks;
 
@@ -43,6 +47,35 @@ public class ActivityConfiguration {
     // of walking every activity. Replaced wholesale on reload, same as above.
     // ====================================
     private volatile Map<Material, String> craftActivities = new HashMap<>();
+
+    // ====================================
+    // The same thing for the 'craft:' keys written as a TLibs m.<type>.<id>
+    // path: those cannot be keyed by Material, so they are walked in config
+    // order and the first path the crafted item matches wins. Only reached
+    // when the Material lookup above missed, so a server with no such
+    // activity pays nothing for them.
+    // ====================================
+    private volatile List<Map.Entry<String, String>> craftPaths = List.of();
+
+    // Read once on load rather than per craft event; TLibs is a softdepend,
+    // so it is already enabled or already absent by the time we load.
+    //
+    // TLibs, further gated on MMOItems and MythicLib being enabled too: an
+    // m.<type>.<id> path is resolved by TLibs but built from those two, so
+    // TLibs alone is not enough to trust a path against - it would just
+    // report every one of them as broken on first use instead of never
+    // trying. Read by both the craft/icon paths above and the GUI, so both
+    // ask the same question the same way.
+    private volatile boolean itemPathsUsable;
+
+    // Which of TLibs/MMOItems/MythicLib are not enabled, ready to be named in
+    // the one warning that is worth logging - and only if config.yml actually
+    // asks for an m. path. A server that uses none must stay silent.
+    private String missingItemPathPlugins = "";
+
+    // Set while parsing when any well-formed m.<type>.<id> value is seen, on
+    // an icon or on a craft
+    private boolean pluginPathConfigured;
 
     // ====================================
     // MMOCore profession id (normalized, see normalizeProfessionId) ->
@@ -87,6 +120,15 @@ public class ActivityConfiguration {
         FileConfiguration config = plugin.getConfig();
         messages.reload();
 
+        List<String> missing = new ArrayList<>();
+        for (String name : List.of("TLibs", "MMOItems", "MythicLib")) {
+            if (!Bukkit.getPluginManager().isPluginEnabled(name)) {
+                missing.add(name);
+            }
+        }
+        itemPathsUsable = missing.isEmpty();
+        missingItemPathPlugins = String.join(", ", missing);
+
         resetDay = parseDay(config.getString("reset.day", "MONDAY"));
         resetHour = Math.max(0, Math.min(23, config.getInt("reset.hour", 0)));
 
@@ -100,7 +142,7 @@ public class ActivityConfiguration {
         rewardDisplay = config.getStringList("rewards.display");
 
         guiTitle = config.getString("gui.title", "&8Weekly Activity");
-        rewardMaterial = material(config.getString("gui.reward-material", "CHEST"), "gui.reward-material");
+        rewardMaterial = bareMaterial(config.getString("gui.reward-material", "CHEST"), "gui.reward-material");
 
         barMax = Math.max(1, config.getInt("bar.max", 20));
         rewardEvery = Math.max(1, Math.min(barMax, config.getInt("bar.reward-every", 10)));
@@ -126,16 +168,19 @@ public class ActivityConfiguration {
     }
 
     private void loadActivities(ConfigurationSection section) {
+        pluginPathConfigured = false;
         if (section == null) {
             plugin.getLogger().warning("config.yml has no 'activities' section - the bar can never fill.");
             activities = new LinkedHashMap<>();
             craftActivities = new HashMap<>();
+            craftPaths = List.of();
             professionActivities = Map.of();
             return;
         }
 
         Map<String, ActivityDef> loaded = new LinkedHashMap<>();
         Map<Material, String> crafts = new HashMap<>();
+        List<Map.Entry<String, String>> paths = new ArrayList<>();
         Map<String, String> professions = new LinkedHashMap<>();
         for (String id : section.getKeys(false)) {
             ConfigurationSection entry = section.getConfigurationSection(id);
@@ -152,16 +197,26 @@ public class ActivityConfiguration {
 
             int dailyCap = Math.max(0, wholeNumber(entry, id, "daily-cap", 0));
 
+            String iconValue = entry.getString("material", "PAPER");
+            String iconPath = iconPath(iconValue, "activities." + id + ".material");
+
             loaded.put(id, new ActivityDef(
                 id,
                 entry.getString("display", id),
-                material(entry.getString("material", "PAPER"), "activities." + id + ".material"),
+                // Still PAPER behind a path: what the GUI shows if TLibs is
+                // gone or the path stops resolving. iconPath() has already
+                // reported a path that could not be used, so material() -
+                // which would call it an unknown material - is skipped.
+                ItemPath.isPluginPath(iconValue)
+                    ? Material.PAPER
+                    : material(iconValue, "activities." + id + ".material"),
+                iconPath,
                 Math.max(1, wholeNumber(entry, id, "every", 1)),
                 points,
                 dailyCap
             ));
 
-            loadCraft(crafts, entry.getString("craft"), id);
+            loadCraft(crafts, paths, entry.getString("craft"), id);
 
             String profession = entry.getString("profession");
             if (profession != null && !profession.isBlank()) {
@@ -184,9 +239,21 @@ public class ActivityConfiguration {
             }
         }
 
+        // ====================================
+        // One line for the whole file, and only when config.yml actually asks
+        // for an m. path: the icons and the craft keys all fail for the same
+        // reason, and repeating it per entry buried the rest of the startup log.
+        // ====================================
+        if ((pluginPathConfigured || !paths.isEmpty()) && !itemPathsUsable) {
+            plugin.getLogger().warning("config.yml uses m.<type>.<id> item paths but " + missingItemPathPlugins
+                + (missingItemPathPlugins.contains(",") ? " are" : " is") + " not enabled - those icons"
+                + " fall back to PAPER and those crafts are never credited.");
+        }
+
         // One assignment publishes the whole set
         activities = loaded;
         craftActivities = crafts;
+        craftPaths = List.copyOf(paths);
         professionActivities = professions;
     }
 
@@ -195,8 +262,9 @@ public class ActivityConfiguration {
     // reason to lose the rest of config.yml - say which key is wrong and
     // leave the activity in place, just with nothing feeding it.
     // ====================================
-    private void loadCraft(Map<Material, String> crafts, String name, String id) {
-        String problem = registerCraft(crafts, name, id, ActivityConfiguration::craftableItem);
+    private void loadCraft(Map<Material, String> crafts, List<Map.Entry<String, String>> paths,
+                           String name, String id) {
+        String problem = registerCraft(crafts, paths, name, id, ActivityConfiguration::craftableItem);
         if (problem != null) {
             plugin.getLogger().warning(problem);
         }
@@ -221,8 +289,8 @@ public class ActivityConfiguration {
     // craftable is handed in because Material#isAir and #isItem both go
     // through the item registry, which only exists on a running server.
     // ====================================
-    static String registerCraft(Map<Material, String> crafts, String name, String id,
-                                Predicate<Material> craftable) {
+    static String registerCraft(Map<Material, String> crafts, List<Map.Entry<String, String>> paths,
+                                String name, String id, Predicate<Material> craftable) {
         if (name == null || name.isBlank()) {
             return null;
         }
@@ -232,7 +300,34 @@ public class ActivityConfiguration {
         String safe = Utils.safeForLog(name);
         String safeId = Utils.safeForLog(id);
 
-        Material crafted = Material.matchMaterial(name);
+        // An m.<type>.<id> item cannot be keyed by Material - it is matched
+        // by asking TLibs, so it is kept as the path it was written as. Same
+        // first-one-wins rule as the materials below.
+        if (ItemPath.isPluginPath(name)) {
+            String path = ItemPath.pluginPath(name);
+            if (path == null) {
+                return "Malformed item path '" + safe + "' at activities." + safeId
+                    + ".craft - expected m.<type>.<id> - nothing will ever feed that activity.";
+            }
+            for (Map.Entry<String, String> entry : paths) {
+                if (entry.getKey().equalsIgnoreCase(path)) {
+                    String safeOwner = Utils.safeForLog(entry.getValue());
+                    return "activities." + safeId + ".craft is " + safe
+                        + ", which activity '" + safeOwner + "' already tracks - only '" + safeOwner
+                        + "' will be credited.";
+                }
+            }
+            paths.add(Map.entry(path, id));
+            return null;
+        }
+
+        if (ItemPath.isUnsupportedPath(name)) {
+            return "Unsupported item path '" + safe + "' at activities." + safeId
+                + ".craft - only bare Material names, v.<material> and m.<type>.<id> are supported"
+                + " - nothing will ever feed that activity.";
+        }
+
+        Material crafted = ItemPath.material(name);
         if (crafted == null) {
             return "Unknown material '" + safe + "' at activities." + safeId
                 + ".craft - nothing will ever feed that activity.";
@@ -303,8 +398,48 @@ public class ActivityConfiguration {
         }
     }
 
-    private Material material(String name, String path) {
+    // ====================================
+    // The m.<type>.<id> path an icon should be built from, or null when the
+    // value is a plain material - which material() then reports on as before.
+    // ====================================
+    private String iconPath(String name, String path) {
+        if (!ItemPath.isPluginPath(name)) {
+            return null;
+        }
+        String resolved = ItemPath.pluginPath(name);
+        if (resolved == null) {
+            plugin.getLogger().warning("Malformed item path '" + Utils.safeForLog(name) + "' at " + path
+                + " - expected m.<type>.<id> - using PAPER.");
+            return null;
+        }
+        // Well formed, so it counts as "the admin asked for item paths" even
+        // when nothing can resolve it - loadActivities says that once, for the
+        // whole file, instead of once per icon.
+        pluginPathConfigured = true;
+        return itemPathsUsable ? resolved : null;
+    }
+
+    // ====================================
+    // gui.reward-material is the one item-valued key that is not an item path:
+    // it is the chest in the GUI, not an activity's icon or tracked craft, so
+    // it reads bare Material names only, exactly as before.
+    // ====================================
+    private Material bareMaterial(String name, String path) {
         Material material = name == null ? null : Material.matchMaterial(name);
+        if (material == null) {
+            plugin.getLogger().warning("Unknown material '" + name + "' at " + path + " - using PAPER.");
+            return Material.PAPER;
+        }
+        return material;
+    }
+
+    private Material material(String name, String path) {
+        if (ItemPath.isUnsupportedPath(name)) {
+            plugin.getLogger().warning("Unsupported item path '" + Utils.safeForLog(name) + "' at " + path
+                + " - only bare Material names, v.<material> and m.<type>.<id> are supported - using PAPER.");
+            return Material.PAPER;
+        }
+        Material material = ItemPath.material(name);
         if (material == null) {
             plugin.getLogger().warning("Unknown material '" + name + "' at " + path + " - using PAPER.");
             return Material.PAPER;
@@ -345,9 +480,22 @@ public class ActivityConfiguration {
         return activities.get(id);
     }
 
-    // The activity fed by crafting this material, or null if none is
-    public String craftActivity(Material crafted) {
-        return craftActivities.get(crafted);
+    // ====================================
+    // The activity fed by crafting this item, or null if none is. The
+    // Material map answers first and answers almost every craft; the item
+    // paths are only walked when it missed and there are any.
+    //
+    // ponytail: an MMOItems result whose base Material is also claimed by a
+    // vanilla 'craft:' is credited to the vanilla activity, because the map
+    // answers first. Upgrade path if that combination is ever configured:
+    // check the paths before the map when both claim that Material.
+    // ====================================
+    public String craftActivity(ItemStack crafted) {
+        String id = craftActivities.get(crafted.getType());
+        if (id != null || craftPaths.isEmpty() || !itemPathsUsable) {
+            return id;
+        }
+        return TLibsItems.match(crafted, craftPaths);
     }
 
     // The activity fed by an MMOCore profession, or null if none tracks it
@@ -438,5 +586,13 @@ public class ActivityConfiguration {
 
     public int saveIntervalMinutes() {
         return saveIntervalMinutes;
+    }
+
+    // Whether an m.<type>.<id> path can actually be resolved right now -
+    // TLibs, MMOItems and MythicLib all enabled. The GUI asks this instead
+    // of re-checking isPluginEnabled("TLibs") on its own, so both places
+    // agree on what "usable" means.
+    public boolean itemPathsUsable() {
+        return itemPathsUsable;
     }
 }
