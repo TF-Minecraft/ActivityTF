@@ -18,8 +18,10 @@ reset:
 #   (startup or /activity reload); a missing TLibs/MMOItems/MythicLib is
 #   reported once for the whole file, and only if an m. path is configured.
 #   A well-formed m. path that TLibs itself cannot resolve is reported once,
-#   the first time it is used (GUI open / craft) - later opens keep falling
-#   back to the icon's material without logging again.
+#   the first time it is used (GUI open / craft), and TLibs is not asked
+#   about it again until a server restart (/activity reload does not clear
+#   this) - later opens keep falling back to the icon's material without
+#   logging again.
 # craft: optional; a shift-click bulk craft counts every item it made. One
 #   item feeds one activity - if two claim the same one, only the first is
 #   credited. An unknown name, or a name that is not an item, is logged and

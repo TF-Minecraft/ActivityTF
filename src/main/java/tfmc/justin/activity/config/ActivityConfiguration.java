@@ -246,7 +246,7 @@ public class ActivityConfiguration {
         // ====================================
         if ((pluginPathConfigured || !paths.isEmpty()) && !itemPathsUsable) {
             plugin.getLogger().warning("config.yml uses m.<type>.<id> item paths but " + missingItemPathPlugins
-                + (missingItemPathPlugins.contains(",") ? " are" : " is") + " not installed - those icons"
+                + (missingItemPathPlugins.contains(",") ? " are" : " is") + " not enabled - those icons"
                 + " fall back to PAPER and those crafts are never credited.");
         }
 

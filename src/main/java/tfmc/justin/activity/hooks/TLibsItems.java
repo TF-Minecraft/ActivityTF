@@ -41,6 +41,13 @@ public final class TLibsItems<T> {
     // once rather than once per GUI open or per craft.
     private final Set<String> reportedPaths = ConcurrentHashMap.newKeySet();
 
+    // Paths already known unresolved or throwing in resolve(), so the creator
+    // (and TLibs' own per-call logging) is not invoked again for them. Kept
+    // separate from reportedPaths: that set is also written by firstMatch()
+    // for a throwing checker, which says nothing about whether the creator
+    // side resolves the same path.
+    private final Set<String> unresolvedPaths = ConcurrentHashMap.newKeySet();
+
     TLibsItems(Function<String, T> creator, BiPredicate<T, String> checker,
                Predicate<T> unresolved, Logger logger) {
         this.creator = creator;
@@ -87,14 +94,20 @@ public final class TLibsItems<T> {
     }
 
     // A path that resolves to nothing is reported once and then keeps
-    // returning null, so the caller falls back every time without logging
-    // again - TLibs itself already logs on every call.
+    // returning null without calling the creator again, so the caller falls
+    // back every time without logging again - TLibs itself already logs on
+    // every call. A path that resolves fine is never cached: the GUI wants a
+    // fresh stack each time.
     T resolve(String path) {
+        if (unresolvedPaths.contains(path)) {
+            return null;
+        }
         T result;
         try {
             result = creator.apply(path);
         } catch (RuntimeException | LinkageError e) {
             report(path, e);
+            unresolvedPaths.add(path);
             return null;
         }
         if (unresolved.test(result)) {
@@ -102,6 +115,7 @@ public final class TLibsItems<T> {
                 logger.warning("[activity] item path '" + Utils.safeForLog(path) + "' could not be resolved"
                     + " by TLibs - check the MMOItems type/id.");
             }
+            unresolvedPaths.add(path);
             return null;
         }
         return result;

@@ -149,4 +149,54 @@ class TLibsItemsTest {
         assertSame(Material.DIAMOND_SWORD, tlibs.resolve("m.sword.excalibur"));
         assertTrue(logged.isEmpty(), logged.toString());
     }
+
+    // Once resolve() has seen a path fail to resolve, the creator (and
+    // TLibs' own per-call logging) must not be invoked again for it
+    @Test
+    void anUnresolvedPathStopsCallingTheCreator() {
+        int[] calls = {0};
+        TLibsItems<Material> tlibs = items(path -> {
+            calls[0]++;
+            return Material.DIRT;
+        }, (item, path) -> false);
+
+        assertNull(tlibs.resolve("m.material.x"));
+        assertNull(tlibs.resolve("m.material.x"));
+        assertNull(tlibs.resolve("m.material.x"));
+
+        assertEquals(1, calls[0]);
+    }
+
+    // Same short-circuit for a creator that throws
+    @Test
+    void aThrowingCreatorStopsBeingCalledAgain() {
+        int[] calls = {0};
+        TLibsItems<Material> tlibs = items(path -> {
+            calls[0]++;
+            throw new IllegalStateException("boom");
+        }, (item, path) -> false);
+
+        assertNull(tlibs.resolve("m.material.x"));
+        assertNull(tlibs.resolve("m.material.x"));
+        assertNull(tlibs.resolve("m.material.x"));
+
+        assertEquals(1, calls[0]);
+    }
+
+    // A path that resolves fine is never cached - the GUI wants a fresh
+    // stack on every call
+    @Test
+    void aResolvablePathIsInvokedEveryTime() {
+        int[] calls = {0};
+        TLibsItems<Material> tlibs = items(path -> {
+            calls[0]++;
+            return Material.DIAMOND_SWORD;
+        }, (item, path) -> false);
+
+        tlibs.resolve("m.sword.excalibur");
+        tlibs.resolve("m.sword.excalibur");
+        tlibs.resolve("m.sword.excalibur");
+
+        assertEquals(3, calls[0]);
+    }
 }
