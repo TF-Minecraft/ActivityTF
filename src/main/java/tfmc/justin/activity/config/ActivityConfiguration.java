@@ -69,10 +69,6 @@ public class ActivityConfiguration {
     private volatile int barMax;
     private volatile int rewardEvery;
     private volatile int barLength;
-    private volatile String barFilledChar;
-    private volatile String barEmptyChar;
-    private volatile String barFilledColor;
-    private volatile String barEmptyColor;
 
     private String goalCompleteSound;
     private String barCompleteSound;
@@ -108,11 +104,7 @@ public class ActivityConfiguration {
 
         barMax = Math.max(1, config.getInt("bar.max", 20));
         rewardEvery = Math.max(1, Math.min(barMax, config.getInt("bar.reward-every", 10)));
-        barLength = barLength(config.getInt("bar.length", 20));
-        barFilledChar = config.getString("bar.filled-char", "░");
-        barEmptyChar = config.getString("bar.empty-char", "░");
-        barFilledColor = config.getString("bar.filled-color", "&a");
-        barEmptyColor = config.getString("bar.empty-color", "&7");
+        barLength = barLength(config.getInt("bar.length", 40));
 
         goalCompleteSound = soundKey(config.getString("sounds.goal-complete", ""));
         barCompleteSound = soundKey(config.getString("sounds.bar-complete", ""));
@@ -434,22 +426,6 @@ public class ActivityConfiguration {
 
     public int barLength() {
         return barLength;
-    }
-
-    public String barFilledChar() {
-        return barFilledChar;
-    }
-
-    public String barEmptyChar() {
-        return barEmptyChar;
-    }
-
-    public String barFilledColor() {
-        return barFilledColor;
-    }
-
-    public String barEmptyColor() {
-        return barEmptyColor;
     }
 
     public String goalCompleteSound() {

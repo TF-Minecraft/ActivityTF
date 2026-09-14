@@ -51,8 +51,7 @@ class DefaultResourcesTest {
         assertTrue(messages.getString("gui.bar-name").contains("%points%"));
         assertTrue(messages.getString("gui.bar-name").contains("%max%"));
         assertTrue(messages.getString("gui.reward-click").contains("%count%"));
-        assertTrue(messages.getString("gui.activity-lore-points").contains("%points%"));
-        assertTrue(messages.getString("gui.activity-lore-points").contains("%every%"));
+        assertTrue(messages.getString("gui.activity-lore-progress").contains("%bar%"));
         assertTrue(messages.getString("gui.activity-lore-today").contains("%today%"));
         assertTrue(messages.getString("gui.activity-lore-today-capped").contains("%today%"));
         assertTrue(messages.getString("gui.activity-lore-today-capped").contains("%cap%"));
