@@ -11,7 +11,7 @@ gui:
   reward-lore-claimed: "#d97b66Claimed&e: &6%claimed%&7/&f%total%"
   reward-click: "#6b9c68[#fafa16Click to claim %count% reward(s)#6b9c68]"
   reward-nothing: "&8Nothing to claim yet"
-  activity-lore-points: "#af97bdWorth&e: #50d990%points% #b8906eper %every%"
+  activity-lore-progress: "#af97bdProgress&e: %bar%"
   activity-lore-today: "#d97b66Today&e: &6%today%"
   activity-lore-today-capped: "#d97b66Today&e: &6%today%&7/&f%cap%"
   filler-name: "&8 "

@@ -36,6 +36,9 @@ public class ActivityGui implements Listener {
     private static final int REWARD_SLOT = 22;
     private static final int ACTIVITY_SLOTS = REWARD_SLOT - FIRST_ACTIVITY_SLOT;
 
+    // Marketblock's demand bar length - the per-activity bars match it
+    private static final int PROGRESS_BAR_LENGTH = 20;
+
     private final ActivityManager manager;
 
     // The config outgrowing the window is a startup-time mistake, not a
@@ -105,8 +108,7 @@ public class ActivityGui implements Listener {
     }
 
     private ItemStack barItem(ActivityConfiguration config, Messages messages, PlayerData data) {
-        String bar = Bar.render(data.points(), config.barMax(), config.barLength(), config.barFilledChar(),
-            config.barEmptyChar(), config.barFilledColor(), config.barEmptyColor());
+        String bar = Bar.render(data.points(), config.barMax(), config.barLength());
 
         return item(Material.EXPERIENCE_BOTTLE,
             messages.get("gui.bar-name", "%points%", data.points(), "%max%", config.barMax()),
@@ -114,10 +116,28 @@ public class ActivityGui implements Listener {
     }
 
     private ItemStack activityItem(Messages messages, ActivityDef def, PlayerData data) {
-        int today = def.worth(data.count(def.id()));
+        int count = data.count(def.id());
+        int today = def.worth(count);
 
         List<String> lore = new ArrayList<>();
-        lore.add(messages.get("gui.activity-lore-points", "%points%", def.points(), "%every%", def.every()));
+        // Three cases, since a plain count % every reads wrong at the edges:
+        // capped activities fill across the whole daily budget (every * cap)
+        // and stay full once capped; uncapped ones cycle every 'every' count;
+        // an uncapped 'every: 1' has no meaningful cycle, so no bar is shown.
+        // 'every' and 'daily-cap' are small config ints (clamped >= 1 / >= 0
+        // in ActivityConfiguration), so every * cap cannot overflow an int.
+        String progress;
+        if (def.dailyCap() > 0) {
+            int budget = def.every() * def.dailyCap();
+            progress = Bar.render(Math.min(count, budget), budget, PROGRESS_BAR_LENGTH);
+        } else if (def.every() > 1) {
+            progress = Bar.render(count % def.every(), def.every(), PROGRESS_BAR_LENGTH);
+        } else {
+            progress = null;
+        }
+        if (progress != null) {
+            lore.add(messages.get("gui.activity-lore-progress", "%bar%", Utils.colorize(progress)));
+        }
         lore.add(def.dailyCap() > 0
             ? messages.get("gui.activity-lore-today-capped", "%today%", today, "%cap%", def.dailyCap())
             : messages.get("gui.activity-lore-today", "%today%", today));

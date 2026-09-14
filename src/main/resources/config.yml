@@ -136,11 +136,7 @@ gui:
 bar:
   max: 20            # points to fill the bar
   reward-every: 10   # a claimable reward at every multiple
-  length: 20         # glyphs
-  filled-char: "░"
-  empty-char: "░"
-  filled-color: "#50d990"
-  empty-color: "&7"
+  length: 40         # segments - the weekly bar only; per-activity bars are fixed at 20
 
 sounds:               # Bukkit Sound names, "" disables
   goal-complete: ENTITY_EXPERIENCE_ORB_PICKUP   # every time points are earned

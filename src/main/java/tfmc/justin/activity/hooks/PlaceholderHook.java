@@ -88,8 +88,7 @@ public class PlaceholderHook extends PlaceholderExpansion {
             case "claimable":
                 return String.valueOf(currentWeek ? data.claimable(config.rewardEvery()) : 0);
             case "bar":
-                return Utils.colorize(Bar.render(points, config.barMax(), config.barLength(), config.barFilledChar(),
-                    config.barEmptyChar(), config.barFilledColor(), config.barEmptyColor()));
+                return Utils.colorize(Bar.render(points, config.barMax(), config.barLength()));
             default:
                 break;
         }
