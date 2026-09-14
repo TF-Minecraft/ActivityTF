@@ -60,7 +60,7 @@ public class CraftListener implements Listener {
             return;
         }
 
-        String activityId = manager.getConfiguration().craftActivity(result.getType());
+        String activityId = manager.getConfiguration().craftActivity(result);
         if (activityId == null) {
             return;
         }

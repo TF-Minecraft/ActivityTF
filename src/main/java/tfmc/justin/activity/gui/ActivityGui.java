@@ -12,6 +12,7 @@ import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import tfmc.justin.activity.config.ActivityConfiguration;
+import tfmc.justin.activity.hooks.TLibsItems;
 import tfmc.justin.activity.config.Messages;
 import tfmc.justin.activity.managers.ActivityManager;
 import tfmc.justin.activity.models.ActivityDef;
@@ -143,7 +144,7 @@ public class ActivityGui implements Listener {
             ? messages.get("gui.activity-lore-today-capped", "%today%", today, "%cap%", def.dailyCap())
             : messages.get("gui.activity-lore-today", "%today%", today));
 
-        return item(def.icon(), Utils.colorize(def.display()), lore);
+        return item(iconStack(def), Utils.colorize(def.display()), lore);
     }
 
     private ItemStack rewardItem(ActivityConfiguration config, Messages messages, PlayerData data) {
@@ -162,8 +163,27 @@ public class ActivityGui implements Listener {
         return item(config.rewardMaterial(), messages.get("gui.reward-name"), lore);
     }
 
+    // ====================================
+    // An icon written as a TLibs item path is built by TLibs, so an MMOItems
+    // icon keeps its model and texture; the name and lore below are then set
+    // on it like on any other icon. TLibs missing, or the path no longer
+    // resolving, falls back to the activity's Material.
+    // ====================================
+    private ItemStack iconStack(ActivityDef def) {
+        if (def.iconPath() != null && Bukkit.getPluginManager().isPluginEnabled("TLibs")) {
+            ItemStack fromPath = TLibsItems.item(def.iconPath());
+            if (fromPath != null && !fromPath.getType().isAir()) {
+                return fromPath;
+            }
+        }
+        return new ItemStack(def.icon());
+    }
+
     private ItemStack item(Material material, String name, List<String> lore) {
-        ItemStack stack = new ItemStack(material);
+        return item(new ItemStack(material), name, lore);
+    }
+
+    private ItemStack item(ItemStack stack, String name, List<String> lore) {
         ItemMeta meta = stack.getItemMeta();
         if (meta != null) {
             meta.setDisplayName(name);

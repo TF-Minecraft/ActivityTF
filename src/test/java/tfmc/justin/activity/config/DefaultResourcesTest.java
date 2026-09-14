@@ -123,8 +123,9 @@ class DefaultResourcesTest {
             String material = activities.getString(key + ".material");
             assertFalse(material == null || material.isBlank(),
                     "activities." + key + ".material should not be blank");
-            assertTrue(org.bukkit.Material.matchMaterial(material) != null,
-                    "activities." + key + ".material is not a Material: " + material);
+            assertTrue(tfmc.justin.activity.utils.ItemPath.material(material) != null
+                            || tfmc.justin.activity.utils.ItemPath.pluginPath(material) != null,
+                    "activities." + key + ".material is neither a Material nor an item path: " + material);
         }
     }
 
