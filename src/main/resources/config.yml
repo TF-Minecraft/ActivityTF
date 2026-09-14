@@ -109,7 +109,7 @@ activities:
     every: 5
     points: 1
     daily-cap: 1
-  # SimpleFactions: every participant of a battle that ended with a winner
+  # SimpleFactions: every participant of every ended battle
   battle_joined:
     display: "#e6ca40&lFaction Battles"
     material: IRON_SWORD
