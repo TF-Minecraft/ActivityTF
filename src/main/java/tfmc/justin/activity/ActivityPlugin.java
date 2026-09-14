@@ -5,11 +5,16 @@ import org.bukkit.plugin.java.JavaPlugin;
 import tfmc.justin.activity.commands.ActivityCommand;
 import tfmc.justin.activity.gui.ActivityGui;
 import tfmc.justin.activity.hooks.PlaceholderHook;
+import tfmc.justin.activity.listeners.AdvancedCraftListener;
+import tfmc.justin.activity.listeners.BattleListener;
+import tfmc.justin.activity.listeners.CharacterChatListener;
 import tfmc.justin.activity.listeners.CraftListener;
+import tfmc.justin.activity.listeners.FurnitureListener;
 import tfmc.justin.activity.listeners.GeigerListener;
 import tfmc.justin.activity.listeners.InstrumentListener;
 import tfmc.justin.activity.listeners.JoinListener;
 import tfmc.justin.activity.listeners.ProfessionXpListener;
+import tfmc.justin.activity.listeners.VehicleBuildListener;
 import tfmc.justin.activity.listeners.VoteListener;
 import tfmc.justin.activity.managers.ActivityManager;
 
@@ -90,6 +95,36 @@ public class ActivityPlugin extends JavaPlugin {
             getServer().getPluginManager().registerEvents(
                 new ProfessionXpListener(ActivityManager.getInstance()), this);
             getLogger().info("Hooked into MMOCore.");
+        }
+
+        if (Bukkit.getPluginManager().isPluginEnabled("VFBuilders")) {
+            getServer().getPluginManager().registerEvents(
+                new VehicleBuildListener(ActivityManager.getInstance()), this);
+            getLogger().info("Hooked into VFBuilders.");
+        }
+
+        if (Bukkit.getPluginManager().isPluginEnabled("RPCharacters")) {
+            getServer().getPluginManager().registerEvents(
+                new CharacterChatListener(ActivityManager.getInstance()), this);
+            getLogger().info("Hooked into RPCharacters.");
+        }
+
+        if (Bukkit.getPluginManager().isPluginEnabled("InteractibleFurniture")) {
+            getServer().getPluginManager().registerEvents(
+                new FurnitureListener(ActivityManager.getInstance()), this);
+            getLogger().info("Hooked into InteractibleFurniture.");
+        }
+
+        if (Bukkit.getPluginManager().isPluginEnabled("SimpleFactions")) {
+            getServer().getPluginManager().registerEvents(
+                new BattleListener(ActivityManager.getInstance()), this);
+            getLogger().info("Hooked into SimpleFactions.");
+        }
+
+        if (Bukkit.getPluginManager().isPluginEnabled("AdvancedCrafting")) {
+            getServer().getPluginManager().registerEvents(
+                new AdvancedCraftListener(ActivityManager.getInstance()), this);
+            getLogger().info("Hooked into AdvancedCrafting.");
         }
 
         if (Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI")) {

@@ -88,6 +88,41 @@ activities:
     points: 1
     daily-cap: 1
     craft: ANVIL
+  # VFBuilders: a vehicle finished at a construction station
+  vehicle_build:
+    display: "#e6ca40&lBuild Vehicles"
+    material: MINECART
+    every: 1
+    points: 1
+    daily-cap: 2
+  # RPCharacters: in-character chat messages
+  ic_chat:
+    display: "#e6ca40&lRoleplay Chat"
+    material: WRITABLE_BOOK
+    every: 30
+    points: 1
+    daily-cap: 2
+  # InteractibleFurniture: furniture placed in the world
+  furniture_place:
+    display: "#e6ca40&lPlace Furniture"
+    material: BARREL
+    every: 5
+    points: 1
+    daily-cap: 1
+  # SimpleFactions: every participant of every ended battle
+  battle_joined:
+    display: "#e6ca40&lFaction Battles"
+    material: IRON_SWORD
+    every: 1
+    points: 1
+    daily-cap: 3
+  # AdvancedCrafting: items and alloys crafted at its stations
+  advcraft_item:
+    display: "#e6ca40&lAdvanced Crafting"
+    material: SMITHING_TABLE
+    every: 5
+    points: 1
+    daily-cap: 2
   # MMOCore professions - uncomment to enable. They need MMOCore installed;
   # without it they show in /activity but can never be filled.
   #profession_crafter:
