@@ -92,6 +92,72 @@
             <systemPath>${project.basedir}/libs/MythicLib-dist-1.7.1.jar</systemPath>
         </dependency>
 
+        <!-- VFBuilders: jar-only release, compiled against for VehicleConstructEvent -->
+        <dependency>
+            <groupId>local</groupId>
+            <artifactId>vfbuilders</artifactId>
+            <version>1.0.0</version>
+            <scope>system</scope>
+            <systemPath>${project.basedir}/libs/vfbuilders-1.0.0.jar</systemPath>
+        </dependency>
+
+        <!-- VehicleFramework: VFBuilders' own hard dependency, on the classpath
+             so javac can resolve VehicleConstructEvent's ActiveVehicle field -->
+        <dependency>
+            <groupId>local</groupId>
+            <artifactId>vehicleframework</artifactId>
+            <version>1.1.11</version>
+            <scope>system</scope>
+            <systemPath>${project.basedir}/libs/vehicleframework-1.1.11.jar</systemPath>
+        </dependency>
+
+        <!-- TLibs: shared by every tfminecraft plugin below, needed on the
+             classpath for their event types to resolve -->
+        <dependency>
+            <groupId>local</groupId>
+            <artifactId>TLibs</artifactId>
+            <version>1.0</version>
+            <scope>system</scope>
+            <systemPath>${project.basedir}/libs/TLibs-1.0.jar</systemPath>
+        </dependency>
+
+        <!-- RPCharacters: jar-only release, compiled against for CharacterChatEvent -->
+        <dependency>
+            <groupId>local</groupId>
+            <artifactId>rpcharacters</artifactId>
+            <version>1.1.6</version>
+            <scope>system</scope>
+            <systemPath>${project.basedir}/libs/rpcharacters-1.1.6.jar</systemPath>
+        </dependency>
+
+        <!-- InteractibleFurniture: jar-only release, compiled against for FurniturePlaceEvent -->
+        <dependency>
+            <groupId>local</groupId>
+            <artifactId>interactiblefurniture</artifactId>
+            <version>0.1.3-BETA</version>
+            <scope>system</scope>
+            <systemPath>${project.basedir}/libs/interactiblefurniture-0.1.3-BETA.jar</systemPath>
+        </dependency>
+
+        <!-- SimpleFactions: jar-only release, compiled against for BattleEndedEvent -->
+        <dependency>
+            <groupId>local</groupId>
+            <artifactId>simplefactions</artifactId>
+            <version>2.8.7</version>
+            <scope>system</scope>
+            <systemPath>${project.basedir}/libs/simplefactions-2.8.7.jar</systemPath>
+        </dependency>
+
+        <!-- AdvancedCrafting: jar-only release, compiled against for
+             ItemCraftedEvent and AlloyCraftedEvent -->
+        <dependency>
+            <groupId>local</groupId>
+            <artifactId>advancedcrafting</artifactId>
+            <version>1.1.7</version>
+            <scope>system</scope>
+            <systemPath>${project.basedir}/libs/advancedcrafting-1.1.7.jar</systemPath>
+        </dependency>
+
         <!-- Tests -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>

@@ -111,6 +111,23 @@ class DefaultResourcesTest {
         }
     }
 
+    // A material that does not resolve leaves the activity with no GUI icon,
+    // and YAML alone will not catch a typo in one
+    @Test
+    void everyActivityMaterialResolves() {
+        YamlConfiguration config = load("config.yml");
+        ConfigurationSection activities = config.getConfigurationSection("activities");
+
+        assertTrue(activities != null && !activities.getKeys(false).isEmpty());
+        for (String key : activities.getKeys(false)) {
+            String material = activities.getString(key + ".material");
+            assertFalse(material == null || material.isBlank(),
+                    "activities." + key + ".material should not be blank");
+            assertTrue(org.bukkit.Material.matchMaterial(material) != null,
+                    "activities." + key + ".material is not a Material: " + material);
+        }
+    }
+
     @Test
     void everyRewardDisplayLineIsNonEmpty() {
         YamlConfiguration config = load("config.yml");
