@@ -14,7 +14,6 @@ import tfmc.justin.activity.listeners.GeigerListener;
 import tfmc.justin.activity.listeners.InstrumentListener;
 import tfmc.justin.activity.listeners.JoinListener;
 import tfmc.justin.activity.listeners.ProfessionXpListener;
-import tfmc.justin.activity.listeners.SkillCastListener;
 import tfmc.justin.activity.listeners.VehicleBuildListener;
 import tfmc.justin.activity.listeners.VoteListener;
 import tfmc.justin.activity.managers.ActivityManager;
@@ -95,10 +94,6 @@ public class ActivityPlugin extends JavaPlugin {
         if (Bukkit.getPluginManager().isPluginEnabled("MMOCore")) {
             getServer().getPluginManager().registerEvents(
                 new ProfessionXpListener(ActivityManager.getInstance()), this);
-            // MythicLib's SkillCastEvent, but MMOCore hard-depends on
-            // MythicLib so this gate covers both
-            getServer().getPluginManager().registerEvents(
-                new SkillCastListener(ActivityManager.getInstance()), this);
             getLogger().info("Hooked into MMOCore.");
         }
 

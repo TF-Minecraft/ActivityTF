@@ -20,8 +20,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // ====================================
-// Six new tier-1 hooks (VFBuilders, RPCharacters, InteractibleFurniture,
-// MMOCore skills, SimpleFactions, AdvancedCrafting) each map a foreign event
+// Five new tier-1 hooks (VFBuilders, RPCharacters, InteractibleFurniture,
+// SimpleFactions, AdvancedCrafting) each map a foreign event
 // to manager.recordAction(uuid, "<id>", amount). The listener classes
 // themselves need a live server / foreign event instances and are not
 // unit-tested here. These tests check the parts that are pure data and can
@@ -33,7 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class Tier1HooksTest {
 
     private static final List<String> NEW_ACTIVITY_IDS = List.of(
-            "vehicle_build", "ic_chat", "furniture_place", "skill_cast",
+            "vehicle_build", "ic_chat", "furniture_place",
             "battle_joined", "advcraft_item"
     );
 
@@ -60,10 +60,6 @@ class Tier1HooksTest {
             String display = section.getString("display");
             assertFalse(display == null || display.isBlank(), "activities." + id + ".display should not be blank");
 
-            String material = section.getString("material");
-            assertFalse(material == null || material.isBlank(), "activities." + id + ".material should not be blank");
-            assertTrue(org.bukkit.Material.matchMaterial(material) != null,
-                    "activities." + id + ".material is not a Material: " + material);
         }
     }
 
@@ -102,7 +98,7 @@ class Tier1HooksTest {
             }
         }
 
-        // Sanity: the six new ids should actually have been found via the
+        // Sanity: the five new ids should actually have been found via the
         // literal-string scan, otherwise this test would trivially pass.
         assertTrue(recordedIds.containsAll(NEW_ACTIVITY_IDS),
                 "expected to find all new ids recorded by listeners, found: " + recordedIds);

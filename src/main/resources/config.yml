@@ -109,13 +109,6 @@ activities:
     every: 5
     points: 1
     daily-cap: 1
-  # MMOCore/MythicLib: skills the player cast deliberately and that succeeded
-  skill_cast:
-    display: "#e6ca40&lCast Skills"
-    material: BLAZE_POWDER
-    every: 30
-    points: 1
-    daily-cap: 2
   # SimpleFactions: every participant of a battle that ended with a winner
   battle_joined:
     display: "#e6ca40&lFaction Battles"

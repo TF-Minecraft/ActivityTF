@@ -15,8 +15,8 @@ import java.util.UUID;
 // cancellable. Only constructed when SimpleFactions is enabled - see
 // ActivityPlugin.
 //
-// hasWinner() mirrors TFMCCore's own battle stat: a battle that ended with no
-// winning side is not one worth counting.
+// Every participant of every ended battle is credited, including battles that
+// ran out the timer with no winning side - taking part is the activity.
 //
 // recordAction takes a UUID and tolerates an offline player, so a participant
 // who logged off before the battle ended still gets credited.
@@ -31,10 +31,6 @@ public class BattleListener implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onBattleEnded(BattleEndedEvent event) {
-        if (!event.hasWinner()) {
-            return;
-        }
-
         Set<UUID> participants = event.getParticipantIds();
         if (participants == null) {
             return;

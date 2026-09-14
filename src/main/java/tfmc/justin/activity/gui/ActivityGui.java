@@ -23,18 +23,24 @@ import java.util.ArrayList;
 import java.util.List;
 
 // ====================================
-// Chest view of the week: the bar on top, one item per activity, the reward
-// chest at the bottom - clicking it claims whatever milestones are due. Also
+// Double-chest view of the week: the bar on top, one item per activity, the
+// reward chest at the bottom - clicking it claims whatever milestones are due. Also
 // the click listener - a marker holder is the cheapest way to tell our
 // inventory apart from every other one.
 // ====================================
 public class ActivityGui implements Listener {
 
-    private static final int SIZE = 27;
+    private static final int SIZE = 54;
     private static final int BAR_SLOT = 4;
-    private static final int FIRST_ACTIVITY_SLOT = 10;
-    private static final int REWARD_SLOT = 22;
-    private static final int ACTIVITY_SLOTS = REWARD_SLOT - FIRST_ACTIVITY_SLOT;
+    private static final int REWARD_SLOT = 49;
+
+    // Marketblock's grid: rows 2-5, columns 2-8 of a double chest
+    private static final int[] ACTIVITY_SLOTS = {
+        10, 11, 12, 13, 14, 15, 16,
+        19, 20, 21, 22, 23, 24, 25,
+        28, 29, 30, 31, 32, 33, 34,
+        37, 38, 39, 40, 41, 42, 43
+    };
 
     // Marketblock's demand bar length - the per-activity bars match it
     private static final int PROGRESS_BAR_LENGTH = 20;
@@ -71,19 +77,14 @@ public class ActivityGui implements Listener {
         inventory.setItem(BAR_SLOT, barItem(config, messages, data));
 
         List<ActivityDef> defs = config.activities();
-        if (defs.size() > ACTIVITY_SLOTS && !warnedTooManyActivities) {
+        if (defs.size() > ACTIVITY_SLOTS.length && !warnedTooManyActivities) {
             warnedTooManyActivities = true;
             Bukkit.getLogger().warning("[activity] config.yml defines " + defs.size()
-                + " activities but the GUI has room for " + ACTIVITY_SLOTS + " - the rest are not shown.");
+                + " activities but the GUI has room for " + ACTIVITY_SLOTS.length + " - the rest are not shown.");
         }
 
-        int slot = FIRST_ACTIVITY_SLOT;
-        for (ActivityDef def : defs) {
-            if (slot >= REWARD_SLOT) {
-                break;
-            }
-            inventory.setItem(slot, activityItem(messages, def, data));
-            slot++;
+        for (int i = 0; i < ACTIVITY_SLOTS.length && i < defs.size(); i++) {
+            inventory.setItem(ACTIVITY_SLOTS[i], activityItem(messages, defs.get(i), data));
         }
 
         inventory.setItem(REWARD_SLOT, rewardItem(config, messages, data));
