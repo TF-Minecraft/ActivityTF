@@ -38,51 +38,51 @@ reset:
 #   profession XP is unbounded, unlike the one-per-action activities.
 activities:
   vote:
-    display: "&aVoting"
+    display: "#e6ca40&lVoting"
     material: PAPER
     every: 1
     points: 1
     daily-cap: 5
   quest:
-    display: "&bDaily Quests"
+    display: "#e6ca40&lDaily Quests"
     material: BOOK
     every: 1
     points: 1
     daily-cap: 5
   geiger:
-    display: "&eRadioactive Sources"
+    display: "#e6ca40&lRadioactive Sources"
     material: SPYGLASS
     every: 3
     points: 1
     daily-cap: 1
   instrument:
-    display: "&dMusical Instruments"
+    display: "#e6ca40&lMusical Instruments"
     material: NOTE_BLOCK
     every: 20
     points: 1
     daily-cap: 1
   playtime:
-    display: "&6Time Played"
+    display: "#e6ca40&lTime Played"
     material: CLOCK
     every: 60          # 60 counted minutes => 1 point
     points: 1
     daily-cap: 3
   craft_diamond_block:
-    display: "&bCraft Diamond Blocks"
+    display: "#e6ca40&lCraft Diamond Blocks"
     material: DIAMOND_BLOCK
     every: 3
     points: 1
     daily-cap: 1
     craft: DIAMOND_BLOCK
   craft_golden_carrot:
-    display: "&6Craft Golden Carrots"
+    display: "#e6ca40&lCraft Golden Carrots"
     material: GOLDEN_CARROT
     every: 16
     points: 1
     daily-cap: 1
     craft: GOLDEN_CARROT
   craft_anvil:
-    display: "&7Craft Anvils"
+    display: "#e6ca40&lCraft Anvils"
     material: ANVIL
     every: 1
     points: 1
@@ -91,21 +91,21 @@ activities:
   # MMOCore professions - uncomment to enable. They need MMOCore installed;
   # without it they show in /activity but can never be filled.
   #profession_crafter:
-  #  display: "&6Crafter XP"
+  #  display: "#e6ca40&lCrafter XP"
   #  material: CRAFTING_TABLE
   #  every: 500       # 500 profession XP → 1 point
   #  points: 1
   #  daily-cap: 2
   #  profession: crafter
   #profession_forager:
-  #  display: "&2Forager XP"
+  #  display: "#e6ca40&lForager XP"
   #  material: WHEAT
   #  every: 500
   #  points: 1
   #  daily-cap: 2
   #  profession: forager
   #profession_herborist:
-  #  display: "&aHerborist XP"
+  #  display: "#e6ca40&lHerborist XP"
   #  material: FERN
   #  every: 500
   #  points: 1
@@ -127,7 +127,7 @@ rewards:
   commands:
     - "give %player% diamond 3"
   display:            # shown in GUI reward item
-    - "&f3x Diamond"
+    - "#50d990x3 #b8906eDiamond"
 
 gui:
   title: "&8Weekly Activity"
@@ -139,7 +139,7 @@ bar:
   length: 20         # glyphs
   filled-char: "░"
   empty-char: "░"
-  filled-color: "&a"
+  filled-color: "#50d990"
   empty-color: "&7"
 
 sounds:               # Bukkit Sound names, "" disables

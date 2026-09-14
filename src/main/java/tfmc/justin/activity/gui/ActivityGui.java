@@ -85,7 +85,23 @@ public class ActivityGui implements Listener {
 
         inventory.setItem(REWARD_SLOT, rewardItem(config, messages, data));
 
+        fillEmptySlots(inventory, messages);
+
         return inventory;
+    }
+
+    // ====================================
+    // Marketblock's filler: every slot the loops above left null gets a gray
+    // pane instead, so the window reads as intentionally designed rather than
+    // half-empty. Clicks on it are already cancelled by onClick.
+    // ====================================
+    private void fillEmptySlots(Inventory inventory, Messages messages) {
+        ItemStack filler = item(Material.GRAY_STAINED_GLASS_PANE, messages.get("gui.filler-name"), List.of());
+        for (int slot = 0; slot < SIZE; slot++) {
+            if (inventory.getItem(slot) == null) {
+                inventory.setItem(slot, filler);
+            }
+        }
     }
 
     private ItemStack barItem(ActivityConfiguration config, Messages messages, PlayerData data) {
@@ -117,6 +133,7 @@ public class ActivityGui implements Listener {
         lore.addAll(Messages.colorize(config.rewardDisplay()));
         lore.add(messages.get("gui.reward-lore-claimed", "%claimed%", data.claimedPoints() / config.rewardEvery(),
             "%total%", config.barMax() / config.rewardEvery()));
+        lore.add(" ");
         lore.add(due > 0
             ? messages.get("gui.reward-click", "%count%", due)
             : messages.get("gui.reward-nothing"));
