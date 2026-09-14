@@ -61,6 +61,14 @@ public class ActivityConfiguration {
     // so it is already enabled or already absent by the time we load.
     private volatile boolean tlibs;
 
+    // tlibs, further gated on MMOItems and MythicLib being enabled too: an
+    // m.<type>.<id> path is resolved by TLibs but built from those two, so
+    // TLibs alone is not enough to trust a path against - it would just
+    // report every one of them as broken on first use instead of never
+    // trying. Read by both the craft/icon paths above and the GUI, so both
+    // ask the same question the same way.
+    private volatile boolean itemPathsUsable;
+
     // ====================================
     // MMOCore profession id (normalized, see normalizeProfessionId) ->
     // activity id. Built once on load so the experience-gain listener, which
@@ -105,6 +113,12 @@ public class ActivityConfiguration {
         messages.reload();
 
         tlibs = Bukkit.getPluginManager().isPluginEnabled("TLibs");
+        boolean mmoItems = Bukkit.getPluginManager().isPluginEnabled("MMOItems");
+        boolean mythicLib = Bukkit.getPluginManager().isPluginEnabled("MythicLib");
+        itemPathsUsable = tlibs && mmoItems && mythicLib;
+        if (tlibs && !itemPathsUsable) {
+            plugin.getLogger().warning("m. item paths need MMOItems and MythicLib.");
+        }
 
         resetDay = parseDay(config.getString("reset.day", "MONDAY"));
         resetHour = Math.max(0, Math.min(23, config.getInt("reset.hour", 0)));
@@ -215,9 +229,9 @@ public class ActivityConfiguration {
             }
         }
 
-        if (!paths.isEmpty() && !tlibs) {
-            plugin.getLogger().warning("Some activities have a 'craft:' item path but TLibs is not installed"
-                + " - nothing will ever feed them.");
+        if (!paths.isEmpty() && !itemPathsUsable) {
+            plugin.getLogger().warning("Some activities have a 'craft:' item path but TLibs, MMOItems and"
+                + " MythicLib are not all installed - nothing will ever feed them.");
         }
 
         // One assignment publishes the whole set
@@ -289,6 +303,12 @@ public class ActivityConfiguration {
             }
             paths.add(Map.entry(path, id));
             return null;
+        }
+
+        if (ItemPath.isUnsupportedPath(name)) {
+            return "Unsupported item path '" + safe + "' at activities." + safeId
+                + ".craft - only bare Material names, v.<material> and m.<type>.<id> are supported"
+                + " - nothing will ever feed that activity.";
         }
 
         Material crafted = ItemPath.material(name);
@@ -376,14 +396,20 @@ public class ActivityConfiguration {
                 + " - expected m.<type>.<id> - using PAPER.");
             return null;
         }
-        if (!tlibs) {
-            plugin.getLogger().warning(path + " is an item path but TLibs is not installed - using PAPER.");
+        if (!itemPathsUsable) {
+            plugin.getLogger().warning(path + " is an item path but TLibs, MMOItems and MythicLib are not all"
+                + " installed - using PAPER.");
             return null;
         }
         return resolved;
     }
 
     private Material material(String name, String path) {
+        if (ItemPath.isUnsupportedPath(name)) {
+            plugin.getLogger().warning("Unsupported item path '" + Utils.safeForLog(name) + "' at " + path
+                + " - only bare Material names, v.<material> and m.<type>.<id> are supported - using PAPER.");
+            return Material.PAPER;
+        }
         Material material = ItemPath.material(name);
         if (material == null) {
             plugin.getLogger().warning("Unknown material '" + name + "' at " + path + " - using PAPER.");
@@ -437,7 +463,7 @@ public class ActivityConfiguration {
     // ====================================
     public String craftActivity(ItemStack crafted) {
         String id = craftActivities.get(crafted.getType());
-        if (id != null || craftPaths.isEmpty() || !tlibs) {
+        if (id != null || craftPaths.isEmpty() || !itemPathsUsable) {
             return id;
         }
         return TLibsItems.match(crafted, craftPaths);
@@ -531,5 +557,13 @@ public class ActivityConfiguration {
 
     public int saveIntervalMinutes() {
         return saveIntervalMinutes;
+    }
+
+    // Whether an m.<type>.<id> path can actually be resolved right now -
+    // TLibs, MMOItems and MythicLib all enabled. The GUI asks this instead
+    // of re-checking isPluginEnabled("TLibs") on its own, so both places
+    // agree on what "usable" means.
+    public boolean itemPathsUsable() {
+        return itemPathsUsable;
     }
 }

@@ -55,4 +55,38 @@ class ItemPathTest {
         assertNull(ItemPath.pluginPath(null));
         assertFalse(ItemPath.isPluginPath(null));
     }
+
+    @Test
+    void surroundingWhitespaceIsIgnored() {
+        assertTrue(ItemPath.isPluginPath("  m.material.steel  "));
+        assertEquals("m.material.steel", ItemPath.pluginPath("  m.material.steel  "));
+        assertEquals(Material.IRON_INGOT, ItemPath.material("  IRON_INGOT  "));
+        assertEquals(Material.IRON_INGOT, ItemPath.material("  v.iron_ingot  "));
+    }
+
+    @Test
+    void prefixesAreCaseInsensitive() {
+        assertTrue(ItemPath.isPluginPath("M.MATERIAL.STEEL"));
+        assertEquals("M.MATERIAL.STEEL", ItemPath.pluginPath("M.MATERIAL.STEEL"));
+        assertNull(ItemPath.material("M.MATERIAL.STEEL"));
+
+        assertEquals(Material.IRON_INGOT, ItemPath.material("V.IRON_INGOT"));
+        assertFalse(ItemPath.isPluginPath("V.IRON_INGOT"));
+    }
+
+    @Test
+    void anUnrecognizedPrefixIsUnsupportedNotUnknown() {
+        assertTrue(ItemPath.isUnsupportedPath("ia.foo:bar"));
+        assertFalse(ItemPath.isPluginPath("ia.foo:bar"));
+        assertNull(ItemPath.material("ia.foo:bar"));
+        assertNull(ItemPath.pluginPath("ia.foo:bar"));
+
+        assertTrue(ItemPath.isUnsupportedPath("nx.x"));
+        assertFalse(ItemPath.isPluginPath("nx.x"));
+        assertNull(ItemPath.material("nx.x"));
+
+        assertFalse(ItemPath.isUnsupportedPath("IRON_INGOT"));
+        assertFalse(ItemPath.isUnsupportedPath("v.iron_ingot"));
+        assertFalse(ItemPath.isUnsupportedPath("m.material.steel"));
+    }
 }

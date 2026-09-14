@@ -85,7 +85,7 @@ public class ActivityGui implements Listener {
         }
 
         for (int i = 0; i < ACTIVITY_SLOTS.length && i < defs.size(); i++) {
-            inventory.setItem(ACTIVITY_SLOTS[i], activityItem(messages, defs.get(i), data));
+            inventory.setItem(ACTIVITY_SLOTS[i], activityItem(config, messages, defs.get(i), data));
         }
 
         inventory.setItem(REWARD_SLOT, rewardItem(config, messages, data));
@@ -117,7 +117,7 @@ public class ActivityGui implements Listener {
             List.of(Utils.colorize(bar)));
     }
 
-    private ItemStack activityItem(Messages messages, ActivityDef def, PlayerData data) {
+    private ItemStack activityItem(ActivityConfiguration config, Messages messages, ActivityDef def, PlayerData data) {
         int count = data.count(def.id());
         int today = def.worth(count);
 
@@ -144,7 +144,7 @@ public class ActivityGui implements Listener {
             ? messages.get("gui.activity-lore-today-capped", "%today%", today, "%cap%", def.dailyCap())
             : messages.get("gui.activity-lore-today", "%today%", today));
 
-        return item(iconStack(def), Utils.colorize(def.display()), lore);
+        return item(iconStack(config, def), Utils.colorize(def.display()), lore);
     }
 
     private ItemStack rewardItem(ActivityConfiguration config, Messages messages, PlayerData data) {
@@ -169,8 +169,8 @@ public class ActivityGui implements Listener {
     // on it like on any other icon. TLibs missing, or the path no longer
     // resolving, falls back to the activity's Material.
     // ====================================
-    private ItemStack iconStack(ActivityDef def) {
-        if (def.iconPath() != null && Bukkit.getPluginManager().isPluginEnabled("TLibs")) {
+    private ItemStack iconStack(ActivityConfiguration config, ActivityDef def) {
+        if (def.iconPath() != null && config.itemPathsUsable()) {
             ItemStack fromPath = TLibsItems.item(def.iconPath());
             if (fromPath != null && !fromPath.getType().isAir()) {
                 return fromPath;

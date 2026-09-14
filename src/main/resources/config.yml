@@ -12,15 +12,18 @@ reset:
 #   Both accept the same three forms:
 #     IRON_INGOT        a bare vanilla Material name
 #     v.iron_ingot      the same thing written as a TLibs item path
-#     m.material.steel  an MMOItems item, as m.<type>.<id> - needs TLibs
-#   The m. form is resolved by TLibs: without TLibs installed such an icon
-#   falls back to PAPER and such a craft is never fed, and either way it is
-#   logged on startup. A malformed path is logged the same way.
+#     m.material.steel  an MMOItems item, as m.<type>.<id> - needs TLibs,
+#                       MMOItems and MythicLib all installed
+#   The m. form is resolved by TLibs: without it, or without MMOItems and
+#   MythicLib, such an icon falls back to PAPER and such a craft is never
+#   fed, and either way it is logged the first time it is used (GUI open /
+#   craft), not on startup. A malformed or unsupported path is logged the
+#   same way.
 # craft: optional; a shift-click bulk craft counts every item it made. One
 #   item feeds one activity - if two claim the same one, only the first is
 #   credited. An unknown name, or a name that is not an item, is logged and
-#   that activity is simply never fed. Vanilla crafts are matched by material
-#   first, so adding m. entries costs nothing on a normal craft.
+#   that activity is simply never fed. Crafts of a tracked vanilla material
+#   never consult TLibs; other crafts check each m. path.
 #   The count is worked out at the moment of the click, from the same limits
 #   the game itself obeys: a normal click makes exactly one batch, and a
 #   shift-click repeats until either the shortest ingredient stack or the room
@@ -174,7 +177,7 @@ rewards:
 
 gui:
   title: "&8Weekly Activity"
-  reward-material: CHEST
+  reward-material: CHEST # bare name or v.<material> only - not an m. item path
 
 bar:
   max: 20            # points to fill the bar
