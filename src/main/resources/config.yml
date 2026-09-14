@@ -14,11 +14,12 @@ reset:
 #     v.iron_ingot      the same thing written as a TLibs item path
 #     m.material.steel  an MMOItems item, as m.<type>.<id> - needs TLibs,
 #                       MMOItems and MythicLib all installed
-#   Missing-plugin (TLibs/MMOItems/MythicLib), malformed, and
-#   unsupported-prefix cases are reported once at load (startup or
-#   /activity reload). Only a well-formed m. path that TLibs itself fails
-#   to resolve at runtime is reported the first time it is used (GUI open /
-#   craft).
+#   Malformed and unsupported-prefix values are reported per entry at load
+#   (startup or /activity reload); a missing TLibs/MMOItems/MythicLib is
+#   reported once for the whole file, and only if an m. path is configured.
+#   A well-formed m. path that TLibs itself cannot resolve is reported once,
+#   the first time it is used (GUI open / craft) - later opens keep falling
+#   back to the icon's material without logging again.
 # craft: optional; a shift-click bulk craft counts every item it made. One
 #   item feeds one activity - if two claim the same one, only the first is
 #   credited. An unknown name, or a name that is not an item, is logged and
@@ -177,7 +178,7 @@ rewards:
 
 gui:
   title: "&8Weekly Activity"
-  reward-material: CHEST # bare name or v.<material> only - not an m. item path
+  reward-material: CHEST
 
 bar:
   max: 20            # points to fill the bar

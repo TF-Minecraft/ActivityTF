@@ -59,15 +59,23 @@ public class ActivityConfiguration {
 
     // Read once on load rather than per craft event; TLibs is a softdepend,
     // so it is already enabled or already absent by the time we load.
-    private volatile boolean tlibs;
-
-    // tlibs, further gated on MMOItems and MythicLib being enabled too: an
+    //
+    // TLibs, further gated on MMOItems and MythicLib being enabled too: an
     // m.<type>.<id> path is resolved by TLibs but built from those two, so
     // TLibs alone is not enough to trust a path against - it would just
     // report every one of them as broken on first use instead of never
     // trying. Read by both the craft/icon paths above and the GUI, so both
     // ask the same question the same way.
     private volatile boolean itemPathsUsable;
+
+    // Which of TLibs/MMOItems/MythicLib are not enabled, ready to be named in
+    // the one warning that is worth logging - and only if config.yml actually
+    // asks for an m. path. A server that uses none must stay silent.
+    private String missingItemPathPlugins = "";
+
+    // Set while parsing when any well-formed m.<type>.<id> value is seen, on
+    // an icon or on a craft
+    private boolean pluginPathConfigured;
 
     // ====================================
     // MMOCore profession id (normalized, see normalizeProfessionId) ->
@@ -112,13 +120,14 @@ public class ActivityConfiguration {
         FileConfiguration config = plugin.getConfig();
         messages.reload();
 
-        tlibs = Bukkit.getPluginManager().isPluginEnabled("TLibs");
-        boolean mmoItems = Bukkit.getPluginManager().isPluginEnabled("MMOItems");
-        boolean mythicLib = Bukkit.getPluginManager().isPluginEnabled("MythicLib");
-        itemPathsUsable = tlibs && mmoItems && mythicLib;
-        if (tlibs && !itemPathsUsable) {
-            plugin.getLogger().warning("m. item paths need MMOItems and MythicLib.");
+        List<String> missing = new ArrayList<>();
+        for (String name : List.of("TLibs", "MMOItems", "MythicLib")) {
+            if (!Bukkit.getPluginManager().isPluginEnabled(name)) {
+                missing.add(name);
+            }
         }
+        itemPathsUsable = missing.isEmpty();
+        missingItemPathPlugins = String.join(", ", missing);
 
         resetDay = parseDay(config.getString("reset.day", "MONDAY"));
         resetHour = Math.max(0, Math.min(23, config.getInt("reset.hour", 0)));
@@ -133,7 +142,7 @@ public class ActivityConfiguration {
         rewardDisplay = config.getStringList("rewards.display");
 
         guiTitle = config.getString("gui.title", "&8Weekly Activity");
-        rewardMaterial = material(config.getString("gui.reward-material", "CHEST"), "gui.reward-material");
+        rewardMaterial = bareMaterial(config.getString("gui.reward-material", "CHEST"), "gui.reward-material");
 
         barMax = Math.max(1, config.getInt("bar.max", 20));
         rewardEvery = Math.max(1, Math.min(barMax, config.getInt("bar.reward-every", 10)));
@@ -159,6 +168,7 @@ public class ActivityConfiguration {
     }
 
     private void loadActivities(ConfigurationSection section) {
+        pluginPathConfigured = false;
         if (section == null) {
             plugin.getLogger().warning("config.yml has no 'activities' section - the bar can never fill.");
             activities = new LinkedHashMap<>();
@@ -229,9 +239,15 @@ public class ActivityConfiguration {
             }
         }
 
-        if (!paths.isEmpty() && !itemPathsUsable) {
-            plugin.getLogger().warning("Some activities have a 'craft:' item path but TLibs, MMOItems and"
-                + " MythicLib are not all installed - nothing will ever feed them.");
+        // ====================================
+        // One line for the whole file, and only when config.yml actually asks
+        // for an m. path: the icons and the craft keys all fail for the same
+        // reason, and repeating it per entry buried the rest of the startup log.
+        // ====================================
+        if ((pluginPathConfigured || !paths.isEmpty()) && !itemPathsUsable) {
+            plugin.getLogger().warning("config.yml uses m.<type>.<id> item paths but " + missingItemPathPlugins
+                + (missingItemPathPlugins.contains(",") ? " are" : " is") + " not installed - those icons"
+                + " fall back to PAPER and those crafts are never credited.");
         }
 
         // One assignment publishes the whole set
@@ -396,12 +412,25 @@ public class ActivityConfiguration {
                 + " - expected m.<type>.<id> - using PAPER.");
             return null;
         }
-        if (!itemPathsUsable) {
-            plugin.getLogger().warning(path + " is an item path but TLibs, MMOItems and MythicLib are not all"
-                + " installed - using PAPER.");
-            return null;
+        // Well formed, so it counts as "the admin asked for item paths" even
+        // when nothing can resolve it - loadActivities says that once, for the
+        // whole file, instead of once per icon.
+        pluginPathConfigured = true;
+        return itemPathsUsable ? resolved : null;
+    }
+
+    // ====================================
+    // gui.reward-material is the one item-valued key that is not an item path:
+    // it is the chest in the GUI, not an activity's icon or tracked craft, so
+    // it reads bare Material names only, exactly as before.
+    // ====================================
+    private Material bareMaterial(String name, String path) {
+        Material material = name == null ? null : Material.matchMaterial(name);
+        if (material == null) {
+            plugin.getLogger().warning("Unknown material '" + name + "' at " + path + " - using PAPER.");
+            return Material.PAPER;
         }
-        return resolved;
+        return material;
     }
 
     private Material material(String name, String path) {
