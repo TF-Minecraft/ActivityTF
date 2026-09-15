@@ -151,6 +151,14 @@ activities:
     every: 30
     points: 1
     daily-cap: 2
+  # RPCharacters: injured (as the target, not the attacker)
+  injured:
+    group: roleplay
+    display: "#e6ca40&lInjure Yourself"
+    material: BONE
+    every: 1
+    points: 5
+    daily-cap: 5
   # InteractibleFurniture: furniture placed in the world
   furniture_place:
     group: roleplay
@@ -181,6 +189,14 @@ activities:
     display: "#e6ca40&lAdvanced Crafting"
     material: SMITHING_TABLE
     every: 5
+    points: 1
+    daily-cap: 2
+  # RPCharacters: profession upgrades purchased
+  profession_upgrade:
+    group: crafting
+    display: "#e6ca40&lProfession Upgrade"
+    material: EXPERIENCE_BOTTLE
+    every: 1
     points: 1
     daily-cap: 2
   # MMOCore professions - uncomment to enable. They need MMOCore installed;

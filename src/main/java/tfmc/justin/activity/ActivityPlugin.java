@@ -12,8 +12,10 @@ import tfmc.justin.activity.listeners.CharacterChatListener;
 import tfmc.justin.activity.listeners.CraftListener;
 import tfmc.justin.activity.listeners.FurnitureListener;
 import tfmc.justin.activity.listeners.GeigerListener;
+import tfmc.justin.activity.listeners.InjuryListener;
 import tfmc.justin.activity.listeners.InstrumentListener;
 import tfmc.justin.activity.listeners.JoinListener;
+import tfmc.justin.activity.listeners.ProfessionUpgradeListener;
 import tfmc.justin.activity.listeners.ProfessionXpListener;
 import tfmc.justin.activity.listeners.VehicleBuildListener;
 import tfmc.justin.activity.listeners.VoteListener;
@@ -107,6 +109,10 @@ public class ActivityPlugin extends JavaPlugin {
         if (Bukkit.getPluginManager().isPluginEnabled("RPCharacters")) {
             getServer().getPluginManager().registerEvents(
                 new CharacterChatListener(ActivityManager.getInstance()), this);
+            getServer().getPluginManager().registerEvents(
+                new InjuryListener(ActivityManager.getInstance()), this);
+            getServer().getPluginManager().registerEvents(
+                new ProfessionUpgradeListener(ActivityManager.getInstance()), this);
             getLogger().info("Hooked into RPCharacters.");
         }
 
