@@ -6,8 +6,10 @@ import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
+import tfmc.justin.activity.gui.ActivityGui;
 import tfmc.justin.activity.hooks.TLibsItems;
 import tfmc.justin.activity.models.ActivityDef;
+import tfmc.justin.activity.models.GroupDef;
 
 import tfmc.justin.activity.utils.ItemPath;
 import tfmc.justin.activity.utils.Utils;
@@ -40,6 +42,13 @@ public class ActivityConfiguration {
     // never see a half-rebuilt map.
     // ====================================
     private volatile Map<String, ActivityDef> activities = new LinkedHashMap<>();
+
+    // ====================================
+    // Insertion-ordered for the same reason: the GUI gives each group a row,
+    // top to bottom in config order. Loaded before the activities, which are
+    // validated against it.
+    // ====================================
+    private volatile Map<String, GroupDef> groups = new LinkedHashMap<>();
 
     // ====================================
     // Crafted material -> the activity id its 'craft:' key belongs to. Built
@@ -132,6 +141,10 @@ public class ActivityConfiguration {
         resetDay = parseDay(config.getString("reset.day", "MONDAY"));
         resetHour = Math.max(0, Math.min(23, config.getInt("reset.hour", 0)));
 
+        // Reset here rather than in loadActivities: both sections can carry an
+        // m. path and the one warning about them is logged after both are read
+        pluginPathConfigured = false;
+        loadGroups(config.getConfigurationSection("groups"));
         loadActivities(config.getConfigurationSection("activities"));
 
         rewardCommands = config.getStringList("rewards.commands");
@@ -167,8 +180,45 @@ public class ActivityConfiguration {
         warnIfBarUnreachable();
     }
 
+    // ====================================
+    // The GUI's rows. A group carries nothing but a label item, so there is
+    // nothing here that can be wrong beyond an icon - only the count is
+    // checked, since the window has room for ActivityGui.GROUP_ROWS of them.
+    // ====================================
+    private void loadGroups(ConfigurationSection section) {
+        Map<String, GroupDef> loaded = new LinkedHashMap<>();
+        if (section == null) {
+            plugin.getLogger().warning("config.yml has no 'groups' section - every activity belongs to an"
+                + " unknown group and the GUI will be empty.");
+            groups = loaded;
+            return;
+        }
+
+        for (String id : section.getKeys(false)) {
+            ConfigurationSection entry = section.getConfigurationSection(id);
+            if (entry == null) {
+                continue;
+            }
+
+            String iconValue = entry.getString("material", "PAPER");
+            String path = "groups." + id + ".material";
+            loaded.put(id, new GroupDef(
+                id,
+                entry.getString("display", id),
+                ItemPath.isPluginPath(iconValue) ? Material.PAPER : material(iconValue, path),
+                iconPath(iconValue, path)
+            ));
+        }
+
+        if (loaded.size() > ActivityGui.GROUP_ROWS) {
+            plugin.getLogger().warning("config.yml defines " + loaded.size() + " groups but the GUI has room for "
+                + ActivityGui.GROUP_ROWS + " - the rest are not shown.");
+        }
+
+        groups = loaded;
+    }
+
     private void loadActivities(ConfigurationSection section) {
-        pluginPathConfigured = false;
         if (section == null) {
             plugin.getLogger().warning("config.yml has no 'activities' section - the bar can never fill.");
             activities = new LinkedHashMap<>();
@@ -195,6 +245,24 @@ public class ActivityConfiguration {
                 continue;
             }
 
+            // ====================================
+            // The GUI lays activities out group by group, so an activity with
+            // no group, or one naming a group that does not exist, has nowhere
+            // to be drawn. Same treatment as a worthless activity: name it and
+            // leave it out rather than lose the rest of config.yml.
+            // ====================================
+            String group = entry.getString("group");
+            if (group == null || group.isBlank()) {
+                plugin.getLogger().warning("Activity '" + id + "' has no 'group' - skipping it, since the GUI"
+                    + " lays activities out one group per row.");
+                continue;
+            }
+            if (!groups.containsKey(group)) {
+                plugin.getLogger().warning("Activity '" + id + "' is in group '" + Utils.safeForLog(group)
+                    + "', which is not defined under 'groups' - skipping it.");
+                continue;
+            }
+
             int dailyCap = Math.max(0, wholeNumber(entry, id, "daily-cap", 0));
 
             String iconValue = entry.getString("material", "PAPER");
@@ -213,7 +281,8 @@ public class ActivityConfiguration {
                 iconPath,
                 Math.max(1, wholeNumber(entry, id, "every", 1)),
                 points,
-                dailyCap
+                dailyCap,
+                group
             ));
 
             loadCraft(crafts, paths, entry.getString("craft"), id);
@@ -248,6 +317,19 @@ public class ActivityConfiguration {
             plugin.getLogger().warning("config.yml uses m.<type>.<id> item paths but " + missingItemPathPlugins
                 + (missingItemPathPlugins.contains(",") ? " are" : " is") + " not enabled - those icons"
                 + " fall back to PAPER and those crafts are never credited.");
+        }
+
+        // ====================================
+        // A group only gets one row, so anything past the seventh activity in
+        // it is dropped from the GUI. A startup-time mistake, said once at
+        // startup - not once per /activity.
+        // ====================================
+        for (String groupId : groups.keySet()) {
+            long size = loaded.values().stream().filter(def -> groupId.equals(def.group())).count();
+            if (size > ActivityGui.GROUP_WIDTH) {
+                plugin.getLogger().warning("Group '" + groupId + "' has " + size + " activities but its GUI row"
+                    + " has room for " + ActivityGui.GROUP_WIDTH + " - the rest are not shown.");
+            }
         }
 
         // One assignment publishes the whole set
@@ -474,6 +556,11 @@ public class ActivityConfiguration {
 
     public List<ActivityDef> activities() {
         return new ArrayList<>(activities.values());
+    }
+
+    // Insertion-ordered, one GUI row each
+    public Map<String, GroupDef> groups() {
+        return Collections.unmodifiableMap(groups);
     }
 
     public ActivityDef activity(String id) {

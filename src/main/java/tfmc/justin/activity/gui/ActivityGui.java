@@ -16,6 +16,7 @@ import tfmc.justin.activity.hooks.TLibsItems;
 import tfmc.justin.activity.config.Messages;
 import tfmc.justin.activity.managers.ActivityManager;
 import tfmc.justin.activity.models.ActivityDef;
+import tfmc.justin.activity.models.GroupDef;
 import tfmc.justin.activity.models.PlayerData;
 import tfmc.justin.activity.utils.Bar;
 import tfmc.justin.activity.utils.Utils;
@@ -24,8 +25,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 // ====================================
-// Double-chest view of the week: the bar on top, one item per activity, the
-// reward chest at the bottom - clicking it claims whatever milestones are due. Also
+// Double-chest view of the week: the bar on top, one row per group - its label
+// in column 1, its activities beside it - and the reward chest at the bottom,
+// clicking which claims whatever milestones are due. Also
 // the click listener - a marker holder is the cheapest way to tell our
 // inventory apart from every other one.
 // ====================================
@@ -35,22 +37,20 @@ public class ActivityGui implements Listener {
     private static final int BAR_SLOT = 4;
     private static final int REWARD_SLOT = 49;
 
-    // Marketblock's grid: rows 2-5, columns 2-8 of a double chest
-    private static final int[] ACTIVITY_SLOTS = {
-        10, 11, 12, 13, 14, 15, 16,
-        19, 20, 21, 22, 23, 24, 25,
-        28, 29, 30, 31, 32, 33, 34,
-        37, 38, 39, 40, 41, 42, 43
-    };
+    // ====================================
+    // Marketblock's grid, one group per row: the group label sits in column 1
+    // and its activities run along columns 2-8 of the same row. Public because
+    // ActivityConfiguration reports a config that outgrows the window at load
+    // time, and both sides must mean the same rows.
+    // ====================================
+    private static final int[] GROUP_SLOTS = {9, 18, 27, 36};
+    public static final int GROUP_ROWS = GROUP_SLOTS.length;
+    public static final int GROUP_WIDTH = 7;
 
     // Marketblock's demand bar length - the per-activity bars match it
     private static final int PROGRESS_BAR_LENGTH = 20;
 
     private final ActivityManager manager;
-
-    // The config outgrowing the window is a startup-time mistake, not a
-    // per-open one - saying it every time anybody runs /activity is spam
-    private boolean warnedTooManyActivities;
 
     public ActivityGui(ActivityManager manager) {
         this.manager = manager;
@@ -77,15 +77,33 @@ public class ActivityGui implements Listener {
 
         inventory.setItem(BAR_SLOT, barItem(config, messages, data));
 
+        // ====================================
+        // Groups in config order, activities in config order within each. A
+        // group with nothing in it still gets its label row - that is the
+        // config author's layout, and dropping it would shuffle every row
+        // below. Anything past the fourth group or the seventh activity of a
+        // group has no slot and is left out; load() has already said so.
+        // ====================================
         List<ActivityDef> defs = config.activities();
-        if (defs.size() > ACTIVITY_SLOTS.length && !warnedTooManyActivities) {
-            warnedTooManyActivities = true;
-            Bukkit.getLogger().warning("[activity] config.yml defines " + defs.size()
-                + " activities but the GUI has room for " + ACTIVITY_SLOTS.length + " - the rest are not shown.");
-        }
+        int row = 0;
+        for (GroupDef group : config.groups().values()) {
+            if (row >= GROUP_ROWS) {
+                break;
+            }
+            inventory.setItem(GROUP_SLOTS[row], groupItem(config, group));
 
-        for (int i = 0; i < ACTIVITY_SLOTS.length && i < defs.size(); i++) {
-            inventory.setItem(ACTIVITY_SLOTS[i], activityItem(config, messages, defs.get(i), data));
+            int column = 0;
+            for (ActivityDef def : defs) {
+                if (!group.id().equals(def.group())) {
+                    continue;
+                }
+                if (column >= GROUP_WIDTH) {
+                    break;
+                }
+                inventory.setItem(GROUP_SLOTS[row] + 1 + column, activityItem(config, messages, def, data));
+                column++;
+            }
+            row++;
         }
 
         inventory.setItem(REWARD_SLOT, rewardItem(config, messages, data));
@@ -117,6 +135,12 @@ public class ActivityGui implements Listener {
             List.of(Utils.colorize(bar)));
     }
 
+    // The row's header: nothing but an icon and a name, since everything worth
+    // saying about a group is already on the activities next to it
+    private ItemStack groupItem(ActivityConfiguration config, GroupDef group) {
+        return item(iconStack(config, group.icon(), group.iconPath()), Utils.colorize(group.display()), List.of());
+    }
+
     private ItemStack activityItem(ActivityConfiguration config, Messages messages, ActivityDef def, PlayerData data) {
         int count = data.count(def.id());
         int today = def.worth(count);
@@ -144,7 +168,7 @@ public class ActivityGui implements Listener {
             ? messages.get("gui.activity-lore-today-capped", "%today%", today, "%cap%", def.dailyCap())
             : messages.get("gui.activity-lore-today", "%today%", today));
 
-        return item(iconStack(config, def), Utils.colorize(def.display()), lore);
+        return item(iconStack(config, def.icon(), def.iconPath()), Utils.colorize(def.display()), lore);
     }
 
     private ItemStack rewardItem(ActivityConfiguration config, Messages messages, PlayerData data) {
@@ -167,16 +191,17 @@ public class ActivityGui implements Listener {
     // An icon written as a TLibs item path is built by TLibs, so an MMOItems
     // icon keeps its model and texture; the name and lore below are then set
     // on it like on any other icon. TLibs missing, or the path no longer
-    // resolving, falls back to the activity's Material.
+    // resolving, falls back to the Material. Activity icons and group labels
+    // are built the same way, so both hand their pair in here.
     // ====================================
-    private ItemStack iconStack(ActivityConfiguration config, ActivityDef def) {
-        if (def.iconPath() != null && config.itemPathsUsable()) {
-            ItemStack fromPath = TLibsItems.item(def.iconPath());
+    private ItemStack iconStack(ActivityConfiguration config, Material icon, String iconPath) {
+        if (iconPath != null && config.itemPathsUsable()) {
+            ItemStack fromPath = TLibsItems.item(iconPath);
             if (fromPath != null && !fromPath.getType().isAir()) {
                 return fromPath;
             }
         }
-        return new ItemStack(def.icon());
+        return new ItemStack(icon);
     }
 
     private ItemStack item(Material material, String name, List<String> lore) {

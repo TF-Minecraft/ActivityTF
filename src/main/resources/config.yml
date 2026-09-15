@@ -2,12 +2,36 @@ reset:
   day: MONDAY      # server timezone
   hour: 0          # 0-23
 
+# The /activity window gives each group below one row: its label item in the
+# first column and that group's activities beside it. Groups are shown in the
+# order written here, activities in the order written under 'activities'.
+# At most 4 groups and at most 7 activities per group fit; anything past that
+# is reported at load and simply not drawn.
+# display: the label's name. material: its icon, same three forms as an
+# activity's material below.
+groups:
+  server:
+    display: "#e6ca40&lServer"
+    material: NETHER_STAR
+  crafting:
+    display: "#e6ca40&lCrafting"
+    material: CRAFTING_TABLE
+  roleplay:
+    display: "#e6ca40&lRoleplay"
+    material: NAME_TAG
+  factions:
+    display: "#e6ca40&lFactions"
+    material: IRON_SWORD
+
 # Every 'every' actions → earn 'points'. 'daily-cap' = most points one
 # activity can add per day (0 = no cap). Bar caps at bar.max.
 # vote: one point per vote site. quest: fed by the quests plugin via
 #   /activity add <player> quest 1
 # playtime: 'every' counts minutes online - see the playtime section at the
 #   bottom, and read what afk-minutes does and does not do before relying on it.
+# group: required, one of the ids under 'groups' above - it is the row the
+#   activity is drawn in. An activity with no group, or with one that is not
+#   defined, is reported at load and left out entirely.
 # material: the GUI icon, and craft: the item this activity counts crafts of.
 #   Both accept the same three forms:
 #     IRON_INGOT        a bare vanilla Material name
@@ -52,36 +76,42 @@ reset:
 #   profession XP is unbounded, unlike the one-per-action activities.
 activities:
   vote:
+    group: server
     display: "#e6ca40&lVoting"
     material: v.paper
     every: 1
     points: 1
     daily-cap: 5
   quest:
+    group: server
     display: "#e6ca40&lDaily Quests"
     material: BOOK
     every: 1
     points: 1
     daily-cap: 5
   geiger:
+    group: roleplay
     display: "#e6ca40&lRadioactive Sources"
     material: SPYGLASS
     every: 3
     points: 1
     daily-cap: 1
   instrument:
+    group: roleplay
     display: "#e6ca40&lMusical Instruments"
     material: NOTE_BLOCK
     every: 20
     points: 1
     daily-cap: 1
   playtime:
+    group: server
     display: "#e6ca40&lTime Played"
     material: CLOCK
     every: 60          # 60 counted minutes => 1 point
     points: 1
     daily-cap: 3
   craft_diamond_block:
+    group: crafting
     display: "#e6ca40&lCraft Diamond Blocks"
     material: DIAMOND_BLOCK
     every: 3
@@ -89,6 +119,7 @@ activities:
     daily-cap: 1
     craft: DIAMOND_BLOCK
   craft_golden_carrot:
+    group: crafting
     display: "#e6ca40&lCraft Golden Carrots"
     material: v.golden_carrot
     every: 16
@@ -96,6 +127,7 @@ activities:
     daily-cap: 1
     craft: GOLDEN_CARROT
   craft_anvil:
+    group: crafting
     display: "#e6ca40&lCraft Anvils"
     material: ANVIL
     every: 1
@@ -104,6 +136,7 @@ activities:
     craft: ANVIL
   # VFBuilders: a vehicle finished at a construction station
   vehicle_build:
+    group: roleplay
     display: "#e6ca40&lBuild Vehicles"
     material: MINECART
     every: 1
@@ -111,6 +144,7 @@ activities:
     daily-cap: 2
   # RPCharacters: in-character chat messages
   ic_chat:
+    group: roleplay
     display: "#e6ca40&lRoleplay Chat"
     material: WRITABLE_BOOK
     every: 30
@@ -118,6 +152,7 @@ activities:
     daily-cap: 2
   # InteractibleFurniture: furniture placed in the world
   furniture_place:
+    group: roleplay
     display: "#e6ca40&lPlace Furniture"
     material: BARREL
     every: 5
@@ -125,6 +160,7 @@ activities:
     daily-cap: 1
   # SimpleFactions: every participant of every ended battle
   battle_joined:
+    group: factions
     display: "#e6ca40&lFaction Battles"
     material: IRON_SWORD
     every: 1
@@ -132,6 +168,7 @@ activities:
     daily-cap: 3
   # AdvancedCrafting: items and alloys crafted at its stations
   advcraft_item:
+    group: crafting
     display: "#e6ca40&lAdvanced Crafting"
     material: SMITHING_TABLE
     every: 5
@@ -140,6 +177,7 @@ activities:
   # MMOCore professions - uncomment to enable. They need MMOCore installed;
   # without it they show in /activity but can never be filled.
   #profession_crafter:
+  #  group: crafting
   #  display: "#e6ca40&lCrafter XP"
   #  material: CRAFTING_TABLE
   #  every: 500       # 500 profession XP → 1 point
@@ -147,6 +185,7 @@ activities:
   #  daily-cap: 2
   #  profession: crafter
   #profession_forager:
+  #  group: crafting
   #  display: "#e6ca40&lForager XP"
   #  material: WHEAT
   #  every: 500
@@ -154,6 +193,7 @@ activities:
   #  daily-cap: 2
   #  profession: forager
   #profession_herborist:
+  #  group: crafting
   #  display: "#e6ca40&lHerborist XP"
   #  material: FERN
   #  every: 500
