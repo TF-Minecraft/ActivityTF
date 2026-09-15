@@ -255,6 +255,9 @@ public class ActivityConfiguration {
         for (String id : section.getKeys(false)) {
             ConfigurationSection entry = section.getConfigurationSection(id);
             if (entry == null) {
+                plugin.getLogger().warning("Activity '" + id + "' is not a configuration section, so it has no"
+                    + " 'group' - the GUI has nowhere to draw it, so it is dropped entirely and nothing will ever"
+                    + " be credited to it.");
                 continue;
             }
 
