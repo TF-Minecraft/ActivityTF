@@ -61,4 +61,16 @@ class ActivityGuiTest {
                 name + " (" + control + ") is also a grid slot");
         }
     }
+
+    // GRID is walked slot-by-slot with an incrementing index in build() and
+    // buildGroup() - if it were ever out of order, activities/groups would
+    // render in a visually scrambled order even though nothing else breaks.
+    @Test
+    void theGridIsStrictlyIncreasing() throws ReflectiveOperationException {
+        int[] grid = grid();
+        for (int i = 1; i < grid.length; i++) {
+            assertTrue(grid[i] > grid[i - 1],
+                "GRID is not strictly increasing at index " + i + ": " + grid[i - 1] + " -> " + grid[i]);
+        }
+    }
 }
