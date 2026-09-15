@@ -191,9 +191,9 @@ public class ActivityConfiguration {
     }
 
     // ====================================
-    // The GUI's rows. A group carries nothing but a label item, so there is
-    // nothing here that can be wrong beyond an icon - only the count is
-    // checked, since the window has room for GroupDef.MAX_GROUPS of them.
+    // The GUI's group tiles. A group carries nothing but a tile item, so
+    // there is nothing here that can be wrong beyond an icon - only the count
+    // is checked, since the grid has room for GroupDef.MAX_GROUPS of them.
     // Ids are lower-cased and trimmed here, and the same is done to an
     // activity's 'group' before it is looked up below, so 'Server' and
     // 'server' are the same group rather than a silent mismatch.
@@ -335,14 +335,14 @@ public class ActivityConfiguration {
         }
 
         // ====================================
-        // A group only gets one row, so anything past the seventh activity in
-        // it is dropped from the GUI. A startup-time mistake, said once at
+        // A group's page has one grid, so anything past GroupDef.MAX_ACTIVITIES
+        // in it is dropped from the GUI. A startup-time mistake, said once at
         // startup - not once per /activity.
         // ====================================
         for (String groupId : groups.keySet()) {
             long size = loaded.values().stream().filter(def -> groupId.equals(def.group())).count();
             if (size > GroupDef.MAX_ACTIVITIES) {
-                plugin.getLogger().warning("Group '" + groupId + "' has " + size + " activities but its GUI row"
+                plugin.getLogger().warning("Group '" + groupId + "' has " + size + " activities but its GUI page"
                     + " has room for " + GroupDef.MAX_ACTIVITIES + " - the rest are not shown.");
             }
         }

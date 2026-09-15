@@ -2,13 +2,13 @@ reset:
   day: MONDAY      # server timezone
   hour: 0          # 0-23
 
-# The /activity window gives each group below one row: its label item in the
-# first column and that group's activities beside it. Groups are shown in the
-# order written here, activities in the order written under 'activities'.
-# At most 4 groups and at most 7 activities per group fit; anything past that
-# is reported at load and simply not drawn.
-# display: the label's name. material: its icon, same three forms as an
-# activity's material below.
+# The /activity window shows one clickable tile per group below; clicking one
+# opens a page of that group's activities. Groups are shown in the order
+# written here, activities in the order written under 'activities'.
+# At most 28 groups and at most 28 activities per group fit; anything past
+# that is reported at load and simply not drawn.
+# display: the tile's name, and the page's title. material: its icon, same
+# three forms as an activity's material below.
 # Group ids are case-insensitive: an activity's 'group: Server' matches a
 # 'server:' key here.
 groups:
@@ -31,8 +31,8 @@ groups:
 #   /activity add <player> quest 1
 # playtime: 'every' counts minutes online - see the playtime section at the
 #   bottom, and read what afk-minutes does and does not do before relying on it.
-# group: required, one of the ids under 'groups' above - it is the row the
-#   activity is drawn in. An activity with no group, or with one that is not
+# group: required, one of the ids under 'groups' above - it is the page the
+#   activity is drawn on. An activity with no group, or with one that is not
 #   defined, is reported at load and left out entirely.
 # material: the GUI icon, and craft: the item this activity counts crafts of.
 #   Both accept the same three forms:
@@ -178,8 +178,7 @@ activities:
     daily-cap: 2
   # MMOCore professions - uncomment to enable. They need MMOCore installed;
   # without it they show in /activity but can never be filled.
-  # Enabling all three puts the 'crafting' group at 7 activities, the
-  # per-row maximum.
+  # Enabling all three puts the 'crafting' group at 7 activities.
   #profession_crafter:
   #  group: crafting
   #  display: "#e6ca40&lCrafter XP"

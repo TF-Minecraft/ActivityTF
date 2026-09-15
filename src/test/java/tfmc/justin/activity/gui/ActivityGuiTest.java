@@ -4,58 +4,61 @@ import org.junit.jupiter.api.Test;
 import tfmc.justin.activity.models.GroupDef;
 
 import java.lang.reflect.Field;
+import java.util.Arrays;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // ====================================
 // ActivityGui.build() needs a live Bukkit server (Bukkit.createInventory) and
 // is not reachable here. What is checked instead is the slot geometry every
-// build() call relies on: GROUP_SLOTS, SIZE etc are private, read through
-// reflection rather than widened just for this test.
+// build() call relies on: GRID, SIZE etc are private, read through reflection
+// rather than widened just for this test.
 // ====================================
 class ActivityGuiTest {
 
-    private static int[] groupSlots() throws ReflectiveOperationException {
-        Field field = ActivityGui.class.getDeclaredField("GROUP_SLOTS");
+    private static int[] grid() throws ReflectiveOperationException {
+        Field field = ActivityGui.class.getDeclaredField("GRID");
         field.setAccessible(true);
         return (int[]) field.get(null);
     }
 
-    private static int size() throws ReflectiveOperationException {
-        Field field = ActivityGui.class.getDeclaredField("SIZE");
+    private static int slot(String name) throws ReflectiveOperationException {
+        Field field = ActivityGui.class.getDeclaredField(name);
         field.setAccessible(true);
         return field.getInt(null);
     }
 
     @Test
-    void thereAreExactlyGroupRowsAnchors() throws ReflectiveOperationException {
-        assertEquals(GroupDef.MAX_GROUPS, groupSlots().length);
+    void theGridHoldsExactlyTheConfiguredMaximums() throws ReflectiveOperationException {
+        assertEquals(GroupDef.MAX_GROUPS, grid().length);
+        assertEquals(GroupDef.MAX_ACTIVITIES, grid().length);
     }
 
     @Test
-    void everyAnchorIsColumnOneOfItsRow() throws ReflectiveOperationException {
-        // Column 1 (0-indexed) of a 9-wide Marketblock row: the label sits one
-        // slot in, not at the row's leftmost edge.
-        for (int anchor : groupSlots()) {
-            assertEquals(0, anchor % 9, "anchor " + anchor + " is not the first column of its row");
+    void everyGridSlotIsInsideRowsTwoThroughFive() throws ReflectiveOperationException {
+        int size = slot("SIZE");
+        for (int slot : grid()) {
+            assertTrue(slot >= 0 && slot < size, "slot " + slot + " is outside the inventory (" + size + ")");
+            int row = slot / 9;
+            int column = slot % 9;
+            assertTrue(row >= 1 && row <= 4, "slot " + slot + " is not in rows 2-5");
+            assertTrue(column >= 1 && column <= 7, "slot " + slot + " is not in columns 2-8");
         }
     }
 
     @Test
-    void anchorsAreRowsTwoThroughFive() throws ReflectiveOperationException {
-        assertArrayEquals(new int[] {9, 18, 27, 36}, groupSlots());
+    void theGridHasNoDuplicates() throws ReflectiveOperationException {
+        assertEquals(grid().length, Arrays.stream(grid()).distinct().count(),
+            "GRID lists the same slot twice");
     }
 
     @Test
-    void anchorPlusGroupWidthStaysWithinTheSameRow() throws ReflectiveOperationException {
-        int size = size();
-        for (int anchor : groupSlots()) {
-            int last = anchor + GroupDef.MAX_ACTIVITIES;
-            assertTrue(last < size, "anchor " + anchor + " + MAX_ACTIVITIES overruns the inventory (" + last + ")");
-            assertEquals(anchor / 9, last / 9,
-                "anchor " + anchor + " + MAX_ACTIVITIES (" + last + ") spills into the next row");
+    void theGridAvoidsTheFixedControls() throws ReflectiveOperationException {
+        for (String name : new String[] {"BAR_SLOT", "REWARD_SLOT", "BACK_SLOT"}) {
+            int control = slot(name);
+            assertTrue(Arrays.stream(grid()).noneMatch(value -> value == control),
+                name + " (" + control + ") is also a grid slot");
         }
     }
 }

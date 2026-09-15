@@ -2,6 +2,7 @@ package tfmc.justin.activity.gui;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -11,6 +12,7 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.persistence.PersistentDataType;
 import tfmc.justin.activity.config.ActivityConfiguration;
 import tfmc.justin.activity.hooks.TLibsItems;
 import tfmc.justin.activity.config.Messages;
@@ -25,43 +27,64 @@ import java.util.ArrayList;
 import java.util.List;
 
 // ====================================
-// Double-chest view of the week: the bar on top, one row per group - its label
-// in column 1, its activities beside it - and the reward chest at the bottom,
-// clicking which claims whatever milestones are due. Also
-// the click listener - a marker holder is the cheapest way to tell our
-// inventory apart from every other one.
+// Two double-chest views of the week. The main one - what /activity opens -
+// holds the bar on top, one item per group in the grid, and the reward chest
+// at the bottom, clicking which claims whatever milestones are due. Clicking
+// a group opens the second view: the same bar, that group's activities in the
+// same grid, and a Back button. Also the click listener - a marker holder is
+// the cheapest way to tell our inventories apart from every other one, and it
+// carries which of the two views was clicked.
 // ====================================
 public class ActivityGui implements Listener {
 
     private static final int SIZE = 54;
     private static final int BAR_SLOT = 4;
     private static final int REWARD_SLOT = 49;
+    private static final int BACK_SLOT = 53;
 
     // ====================================
-    // Marketblock's grid, one group per row: the group label sits in column 1
-    // and its activities run along columns 2-8 of the same row. Sized off
-    // GroupDef.MAX_GROUPS/MAX_ACTIVITIES rather than its own constants, so
-    // ActivityConfiguration can validate a config against the same numbers
-    // without importing this package.
+    // Marketblock's grid: rows 2-5, columns 2-8, so the contents float inside
+    // a border of filler. Both views draw into it - groups on the main one,
+    // that group's activities on the other. Sized off GroupDef.MAX_GROUPS/
+    // MAX_ACTIVITIES rather than its own constants, so ActivityConfiguration
+    // can validate a config against the same numbers without importing this
+    // package.
     // ====================================
-    private static final int[] GROUP_SLOTS = {9, 18, 27, 36};
-
-    static {
-        assert GROUP_SLOTS.length == GroupDef.MAX_GROUPS : "GROUP_SLOTS must have GroupDef.MAX_GROUPS entries";
-    }
+    private static final int[] GRID = {
+        10, 11, 12, 13, 14, 15, 16,
+        19, 20, 21, 22, 23, 24, 25,
+        28, 29, 30, 31, 32, 33, 34,
+        37, 38, 39, 40, 41, 42, 43
+    };
 
     // Marketblock's demand bar length - the per-activity bars match it
     private static final int PROGRESS_BAR_LENGTH = 20;
 
     private final ActivityManager manager;
 
+    // The group id a group item carries, read back when it is clicked
+    private final NamespacedKey groupKey;
+
     public ActivityGui(ActivityManager manager) {
         this.manager = manager;
+        this.groupKey = new NamespacedKey(manager.getPlugin(), "activity_group");
     }
+
+    private enum View { MAIN, GROUP }
 
     private static final class Marker implements InventoryHolder {
 
+        private final View view;
+
+        // The group being shown, or null on the main view
+        private final String groupId;
+
         private Inventory inventory;
+
+        private Marker(View view, String groupId) {
+            this.view = view;
+            this.groupId = groupId;
+        }
 
         @Override
         public Inventory getInventory() {
@@ -74,45 +97,65 @@ public class ActivityGui implements Listener {
         Messages messages = config.messages();
         PlayerData data = manager.getStore().get(player.getUniqueId());
 
-        Marker marker = new Marker();
-        Inventory inventory = Bukkit.createInventory(marker, SIZE, Utils.colorize(config.guiTitle()));
-        marker.inventory = inventory;
-
+        Inventory inventory = window(View.MAIN, null, Utils.colorize(config.guiTitle()));
         inventory.setItem(BAR_SLOT, barItem(config, messages, data));
 
         // ====================================
-        // Groups in config order, activities in config order within each. A
-        // group with nothing in it still gets its label row - that is the
-        // config author's layout, and dropping it would shuffle every row
-        // below. Anything past the fourth group or the seventh activity of a
-        // group has no slot and is left out; load() has already said so.
+        // Groups in config order. Anything past the grid's capacity has no
+        // slot and is left out; load() has already said so.
         // ====================================
-        List<ActivityDef> defs = config.activities();
-        int row = 0;
+        int slot = 0;
         for (GroupDef group : config.groups().values()) {
-            if (row >= GroupDef.MAX_GROUPS) {
+            if (slot >= GRID.length) {
                 break;
             }
-            inventory.setItem(GROUP_SLOTS[row], groupItem(config, group));
-
-            int column = 0;
-            for (ActivityDef def : defs) {
-                if (!group.id().equals(def.group())) {
-                    continue;
-                }
-                if (column >= GroupDef.MAX_ACTIVITIES) {
-                    break;
-                }
-                inventory.setItem(GROUP_SLOTS[row] + 1 + column, activityItem(config, messages, def, data));
-                column++;
-            }
-            row++;
+            inventory.setItem(GRID[slot], groupItem(config, messages, group));
+            slot++;
         }
 
         inventory.setItem(REWARD_SLOT, rewardItem(config, messages, data));
 
         fillEmptySlots(inventory, messages);
 
+        return inventory;
+    }
+
+    // ====================================
+    // The second level: one group's activities, in config order, and nothing
+    // else live but the Back button. No reward chest here - claiming stays on
+    // the main view, which Back is the only way out to.
+    // ====================================
+    public Inventory buildGroup(Player player, GroupDef group) {
+        ActivityConfiguration config = manager.getConfiguration();
+        Messages messages = config.messages();
+        PlayerData data = manager.getStore().get(player.getUniqueId());
+
+        Inventory inventory = window(View.GROUP, group.id(), Utils.colorize(group.display()));
+        inventory.setItem(BAR_SLOT, barItem(config, messages, data));
+
+        int slot = 0;
+        for (ActivityDef def : config.activities()) {
+            if (slot >= GRID.length) {
+                break;
+            }
+            if (!group.id().equals(def.group())) {
+                continue;
+            }
+            inventory.setItem(GRID[slot], activityItem(config, messages, def, data));
+            slot++;
+        }
+
+        inventory.setItem(BACK_SLOT, item(Material.BARRIER, messages.get("gui.back-name"), List.of()));
+
+        fillEmptySlots(inventory, messages);
+
+        return inventory;
+    }
+
+    private Inventory window(View view, String groupId, String title) {
+        Marker marker = new Marker(view, groupId);
+        Inventory inventory = Bukkit.createInventory(marker, SIZE, title);
+        marker.inventory = inventory;
         return inventory;
     }
 
@@ -138,10 +181,22 @@ public class ActivityGui implements Listener {
             List.of(Utils.colorize(bar)));
     }
 
-    // The row's header: nothing but an icon and a name, since everything worth
-    // saying about a group is already on the activities next to it
-    private ItemStack groupItem(ActivityConfiguration config, GroupDef group) {
-        return item(iconStack(config, group.icon(), group.iconPath()), Utils.colorize(group.display()), List.of());
+    // ====================================
+    // The main view's tile: an icon, a name and an invitation to click it. The
+    // group id rides along in the item's data container, the way Marketblock
+    // carries a category id, so the click handler does not have to match on a
+    // display name or a slot.
+    // ====================================
+    private ItemStack groupItem(ActivityConfiguration config, Messages messages, GroupDef group) {
+        ItemStack stack = item(iconStack(config, group.icon(), group.iconPath()), Utils.colorize(group.display()),
+            List.of(messages.get("gui.group-lore-click")));
+
+        ItemMeta meta = stack.getItemMeta();
+        if (meta != null) {
+            meta.getPersistentDataContainer().set(groupKey, PersistentDataType.STRING, group.id());
+            stack.setItemMeta(meta);
+        }
+        return stack;
     }
 
     private ItemStack activityItem(ActivityConfiguration config, Messages messages, ActivityDef def, PlayerData data) {
@@ -222,22 +277,36 @@ public class ActivityGui implements Listener {
     }
 
     // ====================================
-    // Nothing in this view is takeable, so every click in it is cancelled -
-    // including shift-clicks from the player's own inventory, which is why
+    // Nothing in either view is takeable, so every click in them is cancelled
+    // - including shift-clicks from the player's own inventory, which is why
     // the top inventory is what gets checked rather than the clicked slot.
-    // The reward chest is the one live control: it claims and redraws itself.
+    // Which view was clicked comes off the holder, the way Marketblock reads
+    // it off MBHolder, and decides what the live controls are.
     // ====================================
     @EventHandler
     public void onClick(InventoryClickEvent event) {
-        if (!(event.getView().getTopInventory().getHolder() instanceof Marker)) {
+        if (!(event.getView().getTopInventory().getHolder() instanceof Marker marker)) {
             return;
         }
         event.setCancelled(true);
 
-        if (event.getRawSlot() != REWARD_SLOT || !(event.getWhoClicked() instanceof Player player)) {
+        if (!(event.getWhoClicked() instanceof Player player)) {
             return;
         }
 
+        switch (marker.view) {
+            case MAIN -> mainClick(player, event);
+            case GROUP -> groupClick(player, event);
+        }
+    }
+
+    // ====================================
+    // The main view's two live controls: the reward chest claims, and a group
+    // item opens that group. The item is what is asked for the group id - a
+    // config reloaded between opening and clicking can leave a tile naming a
+    // group that is gone, and that click is simply ignored.
+    // ====================================
+    private void mainClick(Player player, InventoryClickEvent event) {
         // The permission is checked on /activity, but an inventory can outlive
         // the permission that opened it - a revoked player must not still be
         // able to click a reward out of a window they left open
@@ -245,6 +314,37 @@ public class ActivityGui implements Listener {
             return;
         }
 
+        if (event.getRawSlot() != REWARD_SLOT) {
+            GroupDef group = clickedGroup(event.getCurrentItem());
+            if (group != null) {
+                player.openInventory(buildGroup(player, group));
+            }
+            return;
+        }
+
+        claim(player, event);
+    }
+
+    // Back is the only thing that does anything here
+    private void groupClick(Player player, InventoryClickEvent event) {
+        if (event.getRawSlot() == BACK_SLOT && player.hasPermission("activity.use")) {
+            player.openInventory(build(player));
+        }
+    }
+
+    private GroupDef clickedGroup(ItemStack clicked) {
+        if (clicked == null) {
+            return null;
+        }
+        ItemMeta meta = clicked.getItemMeta();
+        if (meta == null) {
+            return null;
+        }
+        String id = meta.getPersistentDataContainer().get(groupKey, PersistentDataType.STRING);
+        return id == null ? null : manager.getConfiguration().groups().get(id);
+    }
+
+    private void claim(Player player, InventoryClickEvent event) {
         ActivityConfiguration config = manager.getConfiguration();
         if (manager.claim(player) == 0) {
             // ====================================
