@@ -6,6 +6,7 @@ import tfmc.justin.activity.commands.ActivityCommand;
 import tfmc.justin.activity.gui.ActivityGui;
 import tfmc.justin.activity.hooks.PlaceholderHook;
 import tfmc.justin.activity.listeners.AdvancedCraftListener;
+import tfmc.justin.activity.listeners.ArchaeologyListener;
 import tfmc.justin.activity.listeners.BattleListener;
 import tfmc.justin.activity.listeners.CharacterChatListener;
 import tfmc.justin.activity.listeners.CraftListener;
@@ -125,6 +126,12 @@ public class ActivityPlugin extends JavaPlugin {
             getServer().getPluginManager().registerEvents(
                 new AdvancedCraftListener(ActivityManager.getInstance()), this);
             getLogger().info("Hooked into AdvancedCrafting.");
+        }
+
+        if (Bukkit.getPluginManager().isPluginEnabled("Archaeo")) {
+            getServer().getPluginManager().registerEvents(
+                new ArchaeologyListener(ActivityManager.getInstance()), this);
+            getLogger().info("Hooked into Archaeo.");
         }
 
         if (Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI")) {

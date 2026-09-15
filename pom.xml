@@ -158,6 +158,15 @@
             <systemPath>${project.basedir}/libs/advancedcrafting-1.1.7.jar</systemPath>
         </dependency>
 
+        <!-- Archaeo: jar-only release, compiled against for FindRecoveredEvent -->
+        <dependency>
+            <groupId>local</groupId>
+            <artifactId>archeology-plugin</artifactId>
+            <version>1.0.1</version>
+            <scope>system</scope>
+            <systemPath>${project.basedir}/libs/archeology-plugin-1.0.1.jar</systemPath>
+        </dependency>
+
         <!-- Tests -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
