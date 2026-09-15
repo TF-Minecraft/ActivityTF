@@ -43,7 +43,7 @@ jobs:
             --pattern 'TLibs-1.0.jar' \
             --pattern 'vehicleframework-1.1.11.jar' \
             --pattern 'vfbuilders-1.0.0.jar' \
-            --pattern 'rpcharacters-1.1.6.jar' \
+            --pattern 'rpcharacters-1.1.7.jar' \
             --pattern 'interactiblefurniture-0.1.3-BETA.jar' \
             --pattern 'simplefactions-2.8.7.jar' \
             --pattern 'advancedcrafting-1.1.7.jar' \

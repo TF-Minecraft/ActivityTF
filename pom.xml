@@ -125,9 +125,9 @@
         <dependency>
             <groupId>local</groupId>
             <artifactId>rpcharacters</artifactId>
-            <version>1.1.6</version>
+            <version>1.1.7</version>
             <scope>system</scope>
-            <systemPath>${project.basedir}/libs/rpcharacters-1.1.6.jar</systemPath>
+            <systemPath>${project.basedir}/libs/rpcharacters-1.1.7.jar</systemPath>
         </dependency>
 
         <!-- InteractibleFurniture: jar-only release, compiled against for FurniturePlaceEvent -->
