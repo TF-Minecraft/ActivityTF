@@ -20,6 +20,12 @@ public class ArchaeologyListener implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onFindRecovered(FindRecoveredEvent event) {
+        // The source plugin builds the event itself; a null player would
+        // only be a bug there, but it must not take this listener down
+        if (event.getPlayer() == null) {
+            return;
+        }
+
         manager.recordAction(event.getPlayer().getUniqueId(), "archaeology_find", 1);
     }
 }
