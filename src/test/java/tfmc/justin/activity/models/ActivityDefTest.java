@@ -1,0 +1,33 @@
+package tfmc.justin.activity.models;
+
+import org.bukkit.Material;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+
+class ActivityDefTest {
+
+    @Test
+    void iconPathAndGroupCanBeNull() {
+        ActivityDef def = new ActivityDef("vote", "Vote", Material.PAPER, null, 3, 2, 5, null);
+
+        assertNull(def.iconPath());
+        assertNull(def.group());
+        assertEquals("vote", def.id());
+        assertEquals("Vote", def.display());
+        assertEquals(Material.PAPER, def.icon());
+        assertEquals(3, def.every());
+        assertEquals(2, def.points());
+        assertEquals(5, def.dailyCap());
+    }
+
+    @Test
+    void theFullConstructorRoundTripsIconPathAndGroup() {
+        ActivityDef def = new ActivityDef("vote", "Vote", Material.PAPER, "m.item.ballot",
+            1, 1, 5, "voting");
+
+        assertEquals("m.item.ballot", def.iconPath());
+        assertEquals("voting", def.group());
+    }
+}

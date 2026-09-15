@@ -8,13 +8,10 @@ import org.bukkit.Material;
 // iconPath: the TLibs m.<type>.<id> path the GUI icon comes from, or null
 // when the icon is the plain Material - in which case 'icon' is also the
 // fallback used if TLibs is missing or the path no longer resolves.
+// group: the GroupDef id this activity is laid out under in the GUI.
 // ====================================
 public record ActivityDef(String id, String display, Material icon, String iconPath, int every, int points,
-                          int dailyCap) {
-
-    public ActivityDef(String id, String display, Material icon, int every, int points, int dailyCap) {
-        this(id, display, icon, null, every, points, dailyCap);
-    }
+                          int dailyCap, String group) {
 
     // What a day's action count is worth in points, after every and dailyCap
     public int worth(int count) {

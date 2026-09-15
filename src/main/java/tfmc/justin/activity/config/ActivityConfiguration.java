@@ -8,6 +8,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 import tfmc.justin.activity.hooks.TLibsItems;
 import tfmc.justin.activity.models.ActivityDef;
+import tfmc.justin.activity.models.GroupDef;
 
 import tfmc.justin.activity.utils.ItemPath;
 import tfmc.justin.activity.utils.Utils;
@@ -40,6 +41,13 @@ public class ActivityConfiguration {
     // never see a half-rebuilt map.
     // ====================================
     private volatile Map<String, ActivityDef> activities = new LinkedHashMap<>();
+
+    // ====================================
+    // Insertion-ordered for the same reason: the GUI gives each group a row,
+    // top to bottom in config order. Loaded before the activities, which are
+    // validated against it.
+    // ====================================
+    private volatile Map<String, GroupDef> groups = new LinkedHashMap<>();
 
     // ====================================
     // Crafted material -> the activity id its 'craft:' key belongs to. Built
@@ -132,7 +140,22 @@ public class ActivityConfiguration {
         resetDay = parseDay(config.getString("reset.day", "MONDAY"));
         resetHour = Math.max(0, Math.min(23, config.getInt("reset.hour", 0)));
 
+        // Reset here rather than in loadActivities: both sections can carry an
+        // m. path and the one warning about them is logged after both are read
+        pluginPathConfigured = false;
+        loadGroups(config.getConfigurationSection("groups"));
         loadActivities(config.getConfigurationSection("activities"));
+
+        // ====================================
+        // One line for the whole file, and only when config.yml actually asks
+        // for an m. path: the icons and the craft keys all fail for the same
+        // reason, and repeating it per entry buried the rest of the startup log.
+        // ====================================
+        if ((pluginPathConfigured || !craftPaths.isEmpty()) && !itemPathsUsable) {
+            plugin.getLogger().warning("config.yml uses m.<type>.<id> item paths but " + missingItemPathPlugins
+                + (missingItemPathPlugins.contains(",") ? " are" : " is") + " not enabled - those icons"
+                + " fall back to PAPER and those crafts are never credited.");
+        }
 
         rewardCommands = config.getStringList("rewards.commands");
         if (rewardCommands.isEmpty()) {
@@ -167,8 +190,55 @@ public class ActivityConfiguration {
         warnIfBarUnreachable();
     }
 
+    // ====================================
+    // The GUI's rows. A group carries nothing but a label item, so there is
+    // nothing here that can be wrong beyond an icon - only the count is
+    // checked, since the window has room for GroupDef.MAX_GROUPS of them.
+    // Ids are lower-cased and trimmed here, and the same is done to an
+    // activity's 'group' before it is looked up below, so 'Server' and
+    // 'server' are the same group rather than a silent mismatch.
+    // ====================================
+    private void loadGroups(ConfigurationSection section) {
+        Map<String, GroupDef> loaded = new LinkedHashMap<>();
+        if (section == null) {
+            plugin.getLogger().warning("config.yml has no 'groups' section - every activity belongs to an"
+                + " unknown group and the GUI will be empty.");
+            groups = loaded;
+            return;
+        }
+
+        for (String id : section.getKeys(false)) {
+            ConfigurationSection entry = section.getConfigurationSection(id);
+            if (entry == null) {
+                plugin.getLogger().warning("groups." + id + " is not a section - ignoring it.");
+                continue;
+            }
+
+            String key = id.trim().toLowerCase(Locale.ROOT);
+            if (loaded.containsKey(key)) {
+                plugin.getLogger().warning("groups." + id + " collides with an earlier group '" + key
+                    + "' after lower-casing - ignoring it.");
+                continue;
+            }
+            String iconValue = entry.getString("material", "PAPER");
+            String path = "groups." + id + ".material";
+            loaded.put(key, new GroupDef(
+                key,
+                entry.getString("display", id),
+                ItemPath.isPluginPath(iconValue) ? Material.PAPER : material(iconValue, path),
+                iconPath(iconValue, path)
+            ));
+        }
+
+        if (loaded.size() > GroupDef.MAX_GROUPS) {
+            plugin.getLogger().warning("config.yml defines " + loaded.size() + " groups but the GUI has room for "
+                + GroupDef.MAX_GROUPS + " - the rest are not shown.");
+        }
+
+        groups = loaded;
+    }
+
     private void loadActivities(ConfigurationSection section) {
-        pluginPathConfigured = false;
         if (section == null) {
             plugin.getLogger().warning("config.yml has no 'activities' section - the bar can never fill.");
             activities = new LinkedHashMap<>();
@@ -185,6 +255,30 @@ public class ActivityConfiguration {
         for (String id : section.getKeys(false)) {
             ConfigurationSection entry = section.getConfigurationSection(id);
             if (entry == null) {
+                plugin.getLogger().warning("Activity '" + id + "' is not a configuration section, so it has no"
+                    + " 'group' - the GUI has nowhere to draw it, so it is dropped entirely and nothing will ever"
+                    + " be credited to it.");
+                continue;
+            }
+
+            // ====================================
+            // The GUI lays activities out group by group, so an activity with
+            // no group, or one naming a group that does not exist, has nowhere
+            // to be drawn. Checked first so it is reported even when the
+            // activity also fails a later check, rather than being dropped
+            // silently once the first 'continue' below fires.
+            // ====================================
+            String group = entry.getString("group");
+            if (group == null || group.isBlank()) {
+                plugin.getLogger().warning("Activity '" + id + "' has no 'group' - the GUI has nowhere to draw"
+                    + " it, so it is dropped entirely and nothing will ever be credited to it.");
+                continue;
+            }
+            String groupKey = group.trim().toLowerCase(Locale.ROOT);
+            if (!groups.containsKey(groupKey)) {
+                plugin.getLogger().warning("Activity '" + id + "' is in group '" + Utils.safeForLog(group)
+                    + "', which is not defined under 'groups' - the GUI has nowhere to draw it, so it is"
+                    + " dropped entirely and nothing will ever be credited to it.");
                 continue;
             }
 
@@ -213,7 +307,8 @@ public class ActivityConfiguration {
                 iconPath,
                 Math.max(1, wholeNumber(entry, id, "every", 1)),
                 points,
-                dailyCap
+                dailyCap,
+                groupKey
             ));
 
             loadCraft(crafts, paths, entry.getString("craft"), id);
@@ -240,14 +335,16 @@ public class ActivityConfiguration {
         }
 
         // ====================================
-        // One line for the whole file, and only when config.yml actually asks
-        // for an m. path: the icons and the craft keys all fail for the same
-        // reason, and repeating it per entry buried the rest of the startup log.
+        // A group only gets one row, so anything past the seventh activity in
+        // it is dropped from the GUI. A startup-time mistake, said once at
+        // startup - not once per /activity.
         // ====================================
-        if ((pluginPathConfigured || !paths.isEmpty()) && !itemPathsUsable) {
-            plugin.getLogger().warning("config.yml uses m.<type>.<id> item paths but " + missingItemPathPlugins
-                + (missingItemPathPlugins.contains(",") ? " are" : " is") + " not enabled - those icons"
-                + " fall back to PAPER and those crafts are never credited.");
+        for (String groupId : groups.keySet()) {
+            long size = loaded.values().stream().filter(def -> groupId.equals(def.group())).count();
+            if (size > GroupDef.MAX_ACTIVITIES) {
+                plugin.getLogger().warning("Group '" + groupId + "' has " + size + " activities but its GUI row"
+                    + " has room for " + GroupDef.MAX_ACTIVITIES + " - the rest are not shown.");
+            }
         }
 
         // One assignment publishes the whole set
@@ -474,6 +571,11 @@ public class ActivityConfiguration {
 
     public List<ActivityDef> activities() {
         return new ArrayList<>(activities.values());
+    }
+
+    // Insertion-ordered, one GUI row each
+    public Map<String, GroupDef> groups() {
+        return Collections.unmodifiableMap(groups);
     }
 
     public ActivityDef activity(String id) {
