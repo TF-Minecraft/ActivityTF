@@ -169,6 +169,34 @@ class DefaultResourcesTest {
         }
     }
 
+    // Locks in the order activities are drawn within each default group's GUI
+    // row - the GUI keeps the order activities appear in the file, so the
+    // config's activity block order is part of the shipped behaviour.
+    @Test
+    void defaultGroupsListActivitiesInShippedOrder() {
+        YamlConfiguration config = load("config.yml");
+        ConfigurationSection activities = config.getConfigurationSection("activities");
+        assertTrue(activities != null);
+
+        assertEquals(List.of("vote", "quest", "playtime"), inGroup(activities, "server"));
+        assertEquals(List.of("craft_diamond_block", "craft_golden_carrot", "craft_anvil", "advcraft_item"),
+                inGroup(activities, "crafting"));
+        assertEquals(List.of("geiger", "instrument", "ic_chat", "furniture_place", "vehicle_build"),
+                inGroup(activities, "roleplay"));
+        assertEquals(List.of("battle_joined"), inGroup(activities, "factions"));
+    }
+
+    private static List<String> inGroup(ConfigurationSection activities, String group) {
+        List<String> result = new java.util.ArrayList<>();
+        for (String key : activities.getKeys(false)) {
+            String activityGroup = activities.getString(key + ".group");
+            if (activityGroup != null && group.equalsIgnoreCase(activityGroup.trim())) {
+                result.add(key);
+            }
+        }
+        return result;
+    }
+
     @Test
     void everyGroupMaterialResolves() {
         YamlConfiguration config = load("config.yml");

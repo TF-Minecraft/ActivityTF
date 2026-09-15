@@ -215,6 +215,11 @@ public class ActivityConfiguration {
             }
 
             String key = id.trim().toLowerCase(Locale.ROOT);
+            if (loaded.containsKey(key)) {
+                plugin.getLogger().warning("groups." + id + " collides with an earlier group '" + key
+                    + "' after lower-casing - ignoring it.");
+                continue;
+            }
             String iconValue = entry.getString("material", "PAPER");
             String path = "groups." + id + ".material";
             loaded.put(key, new GroupDef(
@@ -253,18 +258,12 @@ public class ActivityConfiguration {
                 continue;
             }
 
-            int points = wholeNumber(entry, id, "points", 0);
-            if (points <= 0) {
-                plugin.getLogger().warning("Activity '" + id + "' is worth " + points
-                    + " points - skipping it, since meeting its goal could never move the bar.");
-                continue;
-            }
-
             // ====================================
             // The GUI lays activities out group by group, so an activity with
             // no group, or one naming a group that does not exist, has nowhere
-            // to be drawn. Same treatment as a worthless activity: name it and
-            // leave it out rather than lose the rest of config.yml.
+            // to be drawn. Checked first so it is reported even when the
+            // activity also fails a later check, rather than being dropped
+            // silently once the first 'continue' below fires.
             // ====================================
             String group = entry.getString("group");
             if (group == null || group.isBlank()) {
@@ -277,6 +276,13 @@ public class ActivityConfiguration {
                 plugin.getLogger().warning("Activity '" + id + "' is in group '" + Utils.safeForLog(group)
                     + "', which is not defined under 'groups' - the GUI has nowhere to draw it, so it is"
                     + " dropped entirely and nothing will ever be credited to it.");
+                continue;
+            }
+
+            int points = wholeNumber(entry, id, "points", 0);
+            if (points <= 0) {
+                plugin.getLogger().warning("Activity '" + id + "' is worth " + points
+                    + " points - skipping it, since meeting its goal could never move the bar.");
                 continue;
             }
 

@@ -136,14 +136,6 @@ activities:
     points: 1
     daily-cap: 1
     craft: ANVIL
-  # VFBuilders: a vehicle finished at a construction station
-  vehicle_build:
-    group: roleplay
-    display: "#e6ca40&lBuild Vehicles"
-    material: MINECART
-    every: 1
-    points: 1
-    daily-cap: 2
   # RPCharacters: in-character chat messages
   ic_chat:
     group: roleplay
@@ -160,6 +152,14 @@ activities:
     every: 5
     points: 1
     daily-cap: 1
+  # VFBuilders: a vehicle finished at a construction station
+  vehicle_build:
+    group: roleplay
+    display: "#e6ca40&lBuild Vehicles"
+    material: MINECART
+    every: 1
+    points: 1
+    daily-cap: 2
   # SimpleFactions: every participant of every ended battle
   battle_joined:
     group: factions
