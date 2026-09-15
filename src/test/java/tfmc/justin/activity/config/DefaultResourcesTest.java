@@ -169,9 +169,10 @@ class DefaultResourcesTest {
         }
     }
 
-    // Locks in the order activities are drawn within each default group's GUI
-    // row - the GUI keeps the order activities appear in the file, so the
-    // config's activity block order is part of the shipped behaviour.
+    // Locks in the order activities are drawn within each default group's page
+    // (accessible as a tile on the main screen) - the GUI keeps the order
+    // activities appear in the file, so the config's activity block order is
+    // part of the shipped behaviour.
     @Test
     void defaultGroupsListActivitiesInShippedOrder() {
         YamlConfiguration config = load("config.yml");
