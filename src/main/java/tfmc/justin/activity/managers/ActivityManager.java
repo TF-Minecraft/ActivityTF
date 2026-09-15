@@ -151,12 +151,6 @@ public class ActivityManager {
         return store;
     }
 
-    // Only the owner of a NamespacedKey needs this - the GUI tags its group
-    // items with one so a click can name the group it came from
-    public JavaPlugin getPlugin() {
-        return plugin;
-    }
-
     // ====================================
     // Record progress towards an activity. Returns false for an unknown id or
     // a non-positive amount, so the admin command can say which it was;

@@ -1,10 +1,14 @@
 package tfmc.justin.activity.gui;
 
+import org.bukkit.Material;
 import org.junit.jupiter.api.Test;
+import tfmc.justin.activity.models.ActivityDef;
 import tfmc.justin.activity.models.GroupDef;
 
 import java.lang.reflect.Field;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -72,5 +76,45 @@ class ActivityGuiTest {
             assertTrue(grid[i] > grid[i - 1],
                 "GRID is not strictly increasing at index " + i + ": " + grid[i - 1] + " -> " + grid[i]);
         }
+    }
+
+    // ====================================
+    // 30 config entries across two groups, interleaved rather than grouped
+    // together: group A's two entries sit at the front, and group B's 30
+    // entries (more than the grid's 28 slots) are threaded in after each of
+    // them plus the rest of the list. pageOf("b") must return only B's
+    // entries, in config order, capped at the grid's length - none of A's.
+    // ====================================
+    @Test
+    void pageOfReturnsAGroupsActivitiesInOrderCappedAtTheGrid() throws ReflectiveOperationException {
+        List<ActivityDef> all = new ArrayList<>();
+        List<ActivityDef> expectedB = new ArrayList<>();
+
+        ActivityDef a1 = activity("a1", "a");
+        ActivityDef a2 = activity("a2", "a");
+        ActivityDef b0 = activity("b0", "b");
+        expectedB.add(b0);
+        ActivityDef b1 = activity("b1", "b");
+        expectedB.add(b1);
+
+        // Interleave: a1, b0, a2, b1, then the rest of B straight through
+        all.add(a1);
+        all.add(b0);
+        all.add(a2);
+        all.add(b1);
+        for (int i = 2; i < 30; i++) {
+            ActivityDef def = activity("b" + i, "b");
+            all.add(def);
+            expectedB.add(def);
+        }
+
+        List<ActivityDef> page = ActivityGui.pageOf(all, "b");
+
+        assertEquals(grid().length, page.size());
+        assertEquals(expectedB.subList(0, grid().length), page);
+    }
+
+    private static ActivityDef activity(String id, String group) {
+        return new ActivityDef(id, id, Material.PAPER, null, 1, 1, 0, group);
     }
 }

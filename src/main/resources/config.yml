@@ -178,7 +178,6 @@ activities:
     daily-cap: 2
   # MMOCore professions - uncomment to enable. They need MMOCore installed;
   # without it they show in /activity but can never be filled.
-  # Enabling all three puts the 'crafting' group at 7 activities.
   #profession_crafter:
   #  group: crafting
   #  display: "#e6ca40&lCrafter XP"

@@ -43,8 +43,8 @@ public class ActivityConfiguration {
     private volatile Map<String, ActivityDef> activities = new LinkedHashMap<>();
 
     // ====================================
-    // Insertion-ordered for the same reason: the GUI gives each group a row,
-    // top to bottom in config order. Loaded before the activities, which are
+    // Insertion-ordered for the same reason: the GUI gives each group a tile
+    // in the grid, in config order. Loaded before the activities, which are
     // validated against it.
     // ====================================
     private volatile Map<String, GroupDef> groups = new LinkedHashMap<>();
@@ -573,7 +573,7 @@ public class ActivityConfiguration {
         return new ArrayList<>(activities.values());
     }
 
-    // Insertion-ordered, one GUI row each
+    // Insertion-ordered, one GUI tile each
     public Map<String, GroupDef> groups() {
         return Collections.unmodifiableMap(groups);
     }

@@ -24,6 +24,7 @@ import tfmc.justin.activity.utils.Bar;
 import tfmc.justin.activity.utils.Utils;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 
 // ====================================
@@ -60,14 +61,13 @@ public class ActivityGui implements Listener {
     // Marketblock's demand bar length - the per-activity bars match it
     private static final int PROGRESS_BAR_LENGTH = 20;
 
-    private final ActivityManager manager;
-
     // The group id a group item carries, read back when it is clicked
-    private final NamespacedKey groupKey;
+    private static final NamespacedKey GROUP_KEY = new NamespacedKey("activity", "activity_group");
+
+    private final ActivityManager manager;
 
     public ActivityGui(ActivityManager manager) {
         this.manager = manager;
-        this.groupKey = new NamespacedKey(manager.getPlugin(), "activity_group");
     }
 
     private enum View { MAIN, GROUP }
@@ -76,14 +76,10 @@ public class ActivityGui implements Listener {
 
         private final View view;
 
-        // The group being shown, or null on the main view
-        private final String groupId;
-
         private Inventory inventory;
 
-        private Marker(View view, String groupId) {
+        private Marker(View view) {
             this.view = view;
-            this.groupId = groupId;
         }
 
         @Override
@@ -97,7 +93,7 @@ public class ActivityGui implements Listener {
         Messages messages = config.messages();
         PlayerData data = manager.getStore().get(player.getUniqueId());
 
-        Inventory inventory = window(View.MAIN, null, Utils.colorize(config.guiTitle()));
+        Inventory inventory = window(View.MAIN, Utils.colorize(config.guiTitle()));
         inventory.setItem(BAR_SLOT, barItem(config, messages, data));
 
         // ====================================
@@ -130,19 +126,12 @@ public class ActivityGui implements Listener {
         Messages messages = config.messages();
         PlayerData data = manager.getStore().get(player.getUniqueId());
 
-        Inventory inventory = window(View.GROUP, group.id(), Utils.colorize(group.display()));
+        Inventory inventory = window(View.GROUP, Utils.colorize(group.display()));
         inventory.setItem(BAR_SLOT, barItem(config, messages, data));
 
-        int slot = 0;
-        for (ActivityDef def : config.activities()) {
-            if (slot >= GRID.length) {
-                break;
-            }
-            if (!group.id().equals(def.group())) {
-                continue;
-            }
-            inventory.setItem(GRID[slot], activityItem(config, messages, def, data));
-            slot++;
+        List<ActivityDef> page = pageOf(config.activities(), group.id());
+        for (int slot = 0; slot < page.size(); slot++) {
+            inventory.setItem(GRID[slot], activityItem(config, messages, page.get(slot), data));
         }
 
         inventory.setItem(BACK_SLOT, item(Material.BARRIER, messages.get("gui.back-name"), List.of()));
@@ -152,11 +141,29 @@ public class ActivityGui implements Listener {
         return inventory;
     }
 
-    private Inventory window(View view, String groupId, String title) {
-        Marker marker = new Marker(view, groupId);
+    private Inventory window(View view, String title) {
+        Marker marker = new Marker(view);
         Inventory inventory = Bukkit.createInventory(marker, SIZE, title);
         marker.inventory = inventory;
         return inventory;
+    }
+
+    // ====================================
+    // The activities of one group, in config order, capped at the grid's
+    // capacity. Package-private and static so a test can check the ordering
+    // and cap without building a whole GUI.
+    // ====================================
+    static List<ActivityDef> pageOf(Collection<ActivityDef> all, String groupId) {
+        List<ActivityDef> page = new ArrayList<>();
+        for (ActivityDef def : all) {
+            if (page.size() >= GRID.length) {
+                break;
+            }
+            if (groupId.equals(def.group())) {
+                page.add(def);
+            }
+        }
+        return page;
     }
 
     // ====================================
@@ -193,7 +200,7 @@ public class ActivityGui implements Listener {
 
         ItemMeta meta = stack.getItemMeta();
         if (meta != null) {
-            meta.getPersistentDataContainer().set(groupKey, PersistentDataType.STRING, group.id());
+            meta.getPersistentDataContainer().set(GROUP_KEY, PersistentDataType.STRING, group.id());
             stack.setItemMeta(meta);
         }
         return stack;
@@ -290,6 +297,14 @@ public class ActivityGui implements Listener {
         }
         event.setCancelled(true);
 
+        // Bottom-inventory clicks (the player's own inventory) and clicks
+        // outside any inventory (raw slot -999) are cancelled above but must
+        // not reach mainClick/groupClick, which only make sense for a slot in
+        // our own top inventory
+        if (event.getClickedInventory() != event.getView().getTopInventory()) {
+            return;
+        }
+
         if (!(event.getWhoClicked() instanceof Player player)) {
             return;
         }
@@ -309,7 +324,8 @@ public class ActivityGui implements Listener {
     private void mainClick(Player player, InventoryClickEvent event) {
         // The permission is checked on /activity, but an inventory can outlive
         // the permission that opened it - a revoked player must not still be
-        // able to click a reward out of a window they left open
+        // able to claim a reward or navigate into a group from a window they
+        // left open
         if (!player.hasPermission("activity.use")) {
             return;
         }
@@ -340,7 +356,7 @@ public class ActivityGui implements Listener {
         if (meta == null) {
             return null;
         }
-        String id = meta.getPersistentDataContainer().get(groupKey, PersistentDataType.STRING);
+        String id = meta.getPersistentDataContainer().get(GROUP_KEY, PersistentDataType.STRING);
         return id == null ? null : manager.getConfiguration().groups().get(id);
     }
 
