@@ -1,6 +1,7 @@
 package tfmc.justin.activity.gui;
 
 import org.junit.jupiter.api.Test;
+import tfmc.justin.activity.models.GroupDef;
 
 import java.lang.reflect.Field;
 
@@ -30,7 +31,7 @@ class ActivityGuiTest {
 
     @Test
     void thereAreExactlyGroupRowsAnchors() throws ReflectiveOperationException {
-        assertEquals(ActivityGui.GROUP_ROWS, groupSlots().length);
+        assertEquals(GroupDef.MAX_GROUPS, groupSlots().length);
     }
 
     @Test
@@ -51,10 +52,10 @@ class ActivityGuiTest {
     void anchorPlusGroupWidthStaysWithinTheSameRow() throws ReflectiveOperationException {
         int size = size();
         for (int anchor : groupSlots()) {
-            int last = anchor + ActivityGui.GROUP_WIDTH;
-            assertTrue(last < size, "anchor " + anchor + " + GROUP_WIDTH overruns the inventory (" + last + ")");
+            int last = anchor + GroupDef.MAX_ACTIVITIES;
+            assertTrue(last < size, "anchor " + anchor + " + MAX_ACTIVITIES overruns the inventory (" + last + ")");
             assertEquals(anchor / 9, last / 9,
-                "anchor " + anchor + " + GROUP_WIDTH (" + last + ") spills into the next row");
+                "anchor " + anchor + " + MAX_ACTIVITIES (" + last + ") spills into the next row");
         }
     }
 }

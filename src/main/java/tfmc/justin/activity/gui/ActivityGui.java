@@ -39,13 +39,16 @@ public class ActivityGui implements Listener {
 
     // ====================================
     // Marketblock's grid, one group per row: the group label sits in column 1
-    // and its activities run along columns 2-8 of the same row. Public because
-    // ActivityConfiguration reports a config that outgrows the window at load
-    // time, and both sides must mean the same rows.
+    // and its activities run along columns 2-8 of the same row. Sized off
+    // GroupDef.MAX_GROUPS/MAX_ACTIVITIES rather than its own constants, so
+    // ActivityConfiguration can validate a config against the same numbers
+    // without importing this package.
     // ====================================
     private static final int[] GROUP_SLOTS = {9, 18, 27, 36};
-    public static final int GROUP_ROWS = GROUP_SLOTS.length;
-    public static final int GROUP_WIDTH = 7;
+
+    static {
+        assert GROUP_SLOTS.length == GroupDef.MAX_GROUPS : "GROUP_SLOTS must have GroupDef.MAX_GROUPS entries";
+    }
 
     // Marketblock's demand bar length - the per-activity bars match it
     private static final int PROGRESS_BAR_LENGTH = 20;
@@ -87,7 +90,7 @@ public class ActivityGui implements Listener {
         List<ActivityDef> defs = config.activities();
         int row = 0;
         for (GroupDef group : config.groups().values()) {
-            if (row >= GROUP_ROWS) {
+            if (row >= GroupDef.MAX_GROUPS) {
                 break;
             }
             inventory.setItem(GROUP_SLOTS[row], groupItem(config, group));
@@ -97,7 +100,7 @@ public class ActivityGui implements Listener {
                 if (!group.id().equals(def.group())) {
                     continue;
                 }
-                if (column >= GROUP_WIDTH) {
+                if (column >= GroupDef.MAX_ACTIVITIES) {
                     break;
                 }
                 inventory.setItem(GROUP_SLOTS[row] + 1 + column, activityItem(config, messages, def, data));

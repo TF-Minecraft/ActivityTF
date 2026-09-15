@@ -3,10 +3,13 @@ package tfmc.justin.activity.config;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.junit.jupiter.api.Test;
+import tfmc.justin.activity.models.GroupDef;
 import tfmc.justin.activity.utils.Utils;
 
 import java.io.File;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -126,6 +129,59 @@ class DefaultResourcesTest {
             assertTrue(tfmc.justin.activity.utils.ItemPath.material(material) != null
                             || tfmc.justin.activity.utils.ItemPath.pluginPath(material) != null,
                     "activities." + key + ".material is neither a Material nor an item path: " + material);
+        }
+    }
+
+    // Mirrors the load-time validation in ActivityConfiguration: every
+    // activity's group must resolve to a real 'groups' key (case-insensitive),
+    // and both sides must fit the GUI window ActivityGui draws into.
+    @Test
+    void everyActivityGroupResolvesAndFitsTheGui() {
+        YamlConfiguration config = load("config.yml");
+        ConfigurationSection groupsSection = config.getConfigurationSection("groups");
+        ConfigurationSection activities = config.getConfigurationSection("activities");
+
+        assertTrue(groupsSection != null && !groupsSection.getKeys(false).isEmpty());
+        assertTrue(activities != null && !activities.getKeys(false).isEmpty());
+
+        assertTrue(groupsSection.getKeys(false).size() <= GroupDef.MAX_GROUPS,
+                "groups has more than GroupDef.MAX_GROUPS (" + GroupDef.MAX_GROUPS + ") entries");
+
+        Map<String, String> groupKeys = new HashMap<>();
+        for (String key : groupsSection.getKeys(false)) {
+            groupKeys.put(key.toLowerCase(Locale.ROOT), key);
+        }
+
+        Map<String, Integer> perGroupCount = new HashMap<>();
+        for (String key : activities.getKeys(false)) {
+            String group = activities.getString(key + ".group");
+            assertFalse(group == null || group.isBlank(), "activities." + key + ".group should not be blank");
+            String groupKey = group.trim().toLowerCase(Locale.ROOT);
+            assertTrue(groupKeys.containsKey(groupKey),
+                    "activities." + key + ".group '" + group + "' is not a key of 'groups'");
+            perGroupCount.merge(groupKey, 1, Integer::sum);
+        }
+
+        for (Map.Entry<String, Integer> entry : perGroupCount.entrySet()) {
+            assertTrue(entry.getValue() <= GroupDef.MAX_ACTIVITIES,
+                    "group '" + entry.getKey() + "' has " + entry.getValue()
+                            + " activities, more than GroupDef.MAX_ACTIVITIES (" + GroupDef.MAX_ACTIVITIES + ")");
+        }
+    }
+
+    @Test
+    void everyGroupMaterialResolves() {
+        YamlConfiguration config = load("config.yml");
+        ConfigurationSection groupsSection = config.getConfigurationSection("groups");
+
+        assertTrue(groupsSection != null && !groupsSection.getKeys(false).isEmpty());
+        for (String key : groupsSection.getKeys(false)) {
+            String material = groupsSection.getString(key + ".material");
+            assertFalse(material == null || material.isBlank(),
+                    "groups." + key + ".material should not be blank");
+            assertTrue(tfmc.justin.activity.utils.ItemPath.material(material) != null
+                            || tfmc.justin.activity.utils.ItemPath.pluginPath(material) != null,
+                    "groups." + key + ".material is neither a Material nor an item path: " + material);
         }
     }
 

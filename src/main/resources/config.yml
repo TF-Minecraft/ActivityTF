@@ -9,6 +9,8 @@ reset:
 # is reported at load and simply not drawn.
 # display: the label's name. material: its icon, same three forms as an
 # activity's material below.
+# Group ids are case-insensitive: an activity's 'group: Server' matches a
+# 'server:' key here.
 groups:
   server:
     display: "#e6ca40&lServer"
@@ -176,6 +178,8 @@ activities:
     daily-cap: 2
   # MMOCore professions - uncomment to enable. They need MMOCore installed;
   # without it they show in /activity but can never be filled.
+  # Enabling all three puts the 'crafting' group at 7 activities, the
+  # per-row maximum.
   #profession_crafter:
   #  group: crafting
   #  display: "#e6ca40&lCrafter XP"

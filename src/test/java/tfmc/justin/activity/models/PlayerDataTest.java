@@ -14,10 +14,11 @@ class PlayerDataTest {
     private static final int MAX = 20;
     private static final int EVERY = 10;
 
-    private static final ActivityDef VOTE = new ActivityDef("vote", "Vote", Material.PAPER, 1, 1, 5);
-    private static final ActivityDef QUEST = new ActivityDef("quest", "Quest", Material.BOOK, 1, 1, 5);
-    private static final ActivityDef INSTRUMENT = new ActivityDef("instrument", "Notes", Material.NOTE_BLOCK, 20, 1, 1);
-    private static final ActivityDef UNCAPPED = new ActivityDef("free", "Free", Material.STONE, 1, 1, 0);
+    private static final ActivityDef VOTE = new ActivityDef("vote", "Vote", Material.PAPER, null, 1, 1, 5, null);
+    private static final ActivityDef QUEST = new ActivityDef("quest", "Quest", Material.BOOK, null, 1, 1, 5, null);
+    private static final ActivityDef INSTRUMENT =
+        new ActivityDef("instrument", "Notes", Material.NOTE_BLOCK, null, 20, 1, 1, null);
+    private static final ActivityDef UNCAPPED = new ActivityDef("free", "Free", Material.STONE, null, 1, 1, 0, null);
 
     private PlayerData data() {
         return new PlayerData(WEEK, DAY);
@@ -158,7 +159,7 @@ class PlayerDataTest {
 
     @Test
     void worthDoesNotOverflowOnHugeCounts() {
-        ActivityDef rich = new ActivityDef("rich", "Rich", Material.STONE, 1, 1_000_000, 0);
+        ActivityDef rich = new ActivityDef("rich", "Rich", Material.STONE, null, 1, 1_000_000, 0, null);
 
         assertEquals(Integer.MAX_VALUE, rich.worth(Integer.MAX_VALUE));
     }

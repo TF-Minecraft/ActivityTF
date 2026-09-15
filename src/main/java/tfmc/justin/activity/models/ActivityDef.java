@@ -13,10 +13,6 @@ import org.bukkit.Material;
 public record ActivityDef(String id, String display, Material icon, String iconPath, int every, int points,
                           int dailyCap, String group) {
 
-    public ActivityDef(String id, String display, Material icon, int every, int points, int dailyCap) {
-        this(id, display, icon, null, every, points, dailyCap, null);
-    }
-
     // What a day's action count is worth in points, after every and dailyCap
     public int worth(int count) {
         long raw = (long) (count / every) * points;
