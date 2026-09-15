@@ -98,6 +98,13 @@ activities:
     every: 3
     points: 1
     daily-cap: 1
+  archaeology_find:
+    group: roleplay
+    display: "#e6ca40&lArchaeology"
+    material: BRUSH
+    every: 3
+    points: 1
+    daily-cap: 2
   instrument:
     group: roleplay
     display: "#e6ca40&lMusical Instruments"
