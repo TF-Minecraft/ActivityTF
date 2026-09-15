@@ -169,9 +169,10 @@ class DefaultResourcesTest {
         }
     }
 
-    // Locks in the order activities are drawn within each default group's GUI
-    // row - the GUI keeps the order activities appear in the file, so the
-    // config's activity block order is part of the shipped behaviour.
+    // Locks in the order activities are drawn within each default group's page
+    // (accessible as a tile on the main screen) - the GUI keeps the order
+    // activities appear in the file, so the config's activity block order is
+    // part of the shipped behaviour.
     @Test
     void defaultGroupsListActivitiesInShippedOrder() {
         YamlConfiguration config = load("config.yml");
@@ -221,6 +222,46 @@ class DefaultResourcesTest {
         assertFalse(display.isEmpty());
         for (String line : display) {
             assertFalse(line == null || line.isBlank(), "rewards.display entries should not be blank");
+        }
+    }
+
+    // The group tile's "click to open" hint and the group view's Back button
+    // label, added with the two-level GUI - both must ship a real value, not
+    // just be present as a key.
+    @Test
+    void groupViewMessagesAreNonBlank() {
+        YamlConfiguration messages = load("messages.yml");
+
+        String clickHint = messages.getString("gui.group-lore-click");
+        String backName = messages.getString("gui.back-name");
+
+        assertFalse(clickHint == null || clickHint.isBlank(), "gui.group-lore-click should not be blank");
+        assertFalse(backName == null || backName.isBlank(), "gui.back-name should not be blank");
+    }
+
+    // Every "gui.<key>" literal ActivityGui.java passes to Messages.get(...)
+    // must resolve against the shipped messages.yml - read straight from the
+    // source file rather than hand-copied, so a new lookup added there without
+    // a matching messages.yml entry fails this test instead of NPEing at
+    // runtime in front of a player.
+    @Test
+    void everyGuiMessageKeyActivityGuiReadsExistsInMessagesYml() throws java.io.IOException {
+        File source = new File("src/main/java/tfmc/justin/activity/gui/ActivityGui.java");
+        assertTrue(source.exists(), "ActivityGui.java should exist");
+        String content = java.nio.file.Files.readString(source.toPath());
+
+        Pattern lookup = Pattern.compile("messages\\.get\\(\"(gui\\.[a-zA-Z0-9-]+)\"");
+        Matcher matcher = lookup.matcher(content);
+        List<String> keys = new java.util.ArrayList<>();
+        while (matcher.find()) {
+            keys.add(matcher.group(1));
+        }
+        assertFalse(keys.isEmpty(), "expected to find gui.* message lookups in ActivityGui.java");
+
+        YamlConfiguration messages = load("messages.yml");
+        for (String key : keys) {
+            String value = messages.getString(key);
+            assertFalse(value == null || value.isBlank(), key + " is read by ActivityGui but missing/blank in messages.yml");
         }
     }
 
