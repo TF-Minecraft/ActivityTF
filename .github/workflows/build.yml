@@ -47,7 +47,8 @@ jobs:
             --pattern 'interactiblefurniture-0.1.3-BETA.jar' \
             --pattern 'simplefactions-2.8.7.jar' \
             --pattern 'advancedcrafting-1.1.7.jar' \
-            --pattern 'archeology-plugin-1.0.1.jar' \n            --pattern 'marketblock-0.0.2.jar'
+            --pattern 'archeology-plugin-1.0.1.jar' \
+            --pattern 'marketblock-0.0.2.jar'
 
       - name: Verify private dependencies
         run: sha256sum -c libs/SHA256SUMS
