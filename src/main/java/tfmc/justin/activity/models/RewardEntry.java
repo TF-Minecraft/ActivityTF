@@ -10,11 +10,11 @@ import java.util.List;
 public record RewardEntry(int weight, String display, List<String> commands) {
 
     public static int totalWeight(List<RewardEntry> pool) {
-        int total = 0;
+        long total = 0;
         for (RewardEntry entry : pool) {
             total += entry.weight();
         }
-        return total;
+        return (int) Math.min(Integer.MAX_VALUE, total);
     }
 
     // ====================================

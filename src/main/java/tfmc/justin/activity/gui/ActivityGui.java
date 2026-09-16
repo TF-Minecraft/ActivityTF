@@ -222,7 +222,7 @@ public class ActivityGui implements Listener {
         StringBuilder joined = new StringBuilder();
         for (int i = 0; i < milestones.size(); i++) {
             if (i > 0) {
-                joined.append(i == milestones.size() - 1 ? " and " : ", ");
+                joined.append(", ");
             }
             joined.append(milestones.get(i));
         }
@@ -401,15 +401,18 @@ public class ActivityGui implements Listener {
 
     private void claim(Player player, InventoryClickEvent event) {
         ActivityConfiguration config = manager.getConfiguration();
+        boolean hadClaimable = manager.getStore().isLoaded()
+            && manager.getStore().get(player.getUniqueId()).claimable(config.milestones()) > 0;
         if (manager.claim(player) == 0) {
             // ====================================
             // A claim of 0 is either "nothing was due" or a refusal, and every
             // refusal has already told the player why. Nothing was due needs
             // no line either - the bar's own lore says when the next reward
             // lands. The one thing claim() stays silent about and the player
-            // cannot read off the bar is a pool with nothing in it.
+            // cannot read off the bar is a pool with nothing in it - and only
+            // when a milestone was actually due for this click.
             // ====================================
-            if (manager.getStore().isLoaded() && config.rewardPool().isEmpty()) {
+            if (hadClaimable && config.rewardPool().isEmpty()) {
                 player.sendMessage(config.messages().get("reward-unconfigured"));
             }
             return;

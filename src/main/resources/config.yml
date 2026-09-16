@@ -468,9 +468,10 @@ activities:
     daily-cap: 1
     station: animal-station/animal-whistle
 
-# The reward pool. Clicking the weekly bar in /activity claims one milestone
-# (see bar.milestones) and draws ONE entry from this pool at random, then runs
-# that entry's commands.
+# The reward pool. Clicking the weekly bar in /activity claims every
+# milestone reached and not yet claimed (see bar.milestones), drawing one
+# entry from this pool at random per milestone and running that entry's
+# commands.
 #   weight   - how likely the entry is, relative to the others. Optional,
 #              defaults to 1; an entry with weight 0 or less is dropped with a
 #              warning and can never be drawn.

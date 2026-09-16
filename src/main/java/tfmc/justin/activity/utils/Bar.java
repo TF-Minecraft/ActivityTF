@@ -37,8 +37,11 @@ public final class Bar {
 
     // ====================================
     // The same bar with a marker on the segment each milestone sits at, so a
-    // player can see where the rewards are. A milestone landing exactly on the
-    // end of the bar marks the last segment rather than falling off it.
+    // player can see where the rewards are. The marker sits one segment
+    // before round(milestone / max * length): that is the segment which
+    // fills the instant the milestone is reached, rather than the first
+    // segment still to come. A milestone landing exactly on the end of the
+    // bar marks the last segment rather than falling off it.
     // ====================================
     public static String render(int value, int max, int length, List<Integer> milestones) {
         double ratio = max <= 0 ? 0 : (double) value / max;
@@ -56,7 +59,7 @@ public final class Bar {
                 if (milestone == null || milestone < 1) {
                     continue;
                 }
-                int position = (int) Math.round((double) milestone / max * length);
+                int position = (int) Math.round((double) milestone / max * length) - 1;
                 segments[Math.max(0, Math.min(length - 1, position))] = MARKER;
             }
         }

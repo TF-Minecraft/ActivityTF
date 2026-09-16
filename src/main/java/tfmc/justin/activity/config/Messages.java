@@ -10,7 +10,6 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.List;
 
 // ====================================
@@ -114,11 +113,4 @@ public class Messages {
         }
     }
 
-    public static List<String> colorize(List<String> lines) {
-        List<String> out = new ArrayList<>(lines.size());
-        for (String line : lines) {
-            out.add(Utils.colorize(line));
-        }
-        return out;
-    }
 }

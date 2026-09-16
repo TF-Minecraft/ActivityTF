@@ -87,22 +87,25 @@ class BarTest {
     }
 
     // ====================================
-    // The milestone markers: one segment each, at round(milestone / max *
-    // length), keeping the colour of the run they land in.
+    // The milestone markers: one segment each, one before
+    // round(milestone / max * length) - the segment that fills the instant
+    // the milestone is reached - keeping the colour of the run they land in.
     // ====================================
     @Test
     void milestonesMarkTheirSegment() {
-        // max 20, length 10: 10 points marks segment index 5, 20 points lands
-        // on index 10 - off the end, so it marks the last segment instead
+        // max 20, length 10: 10 points marks segment index 4, 20 points would
+        // land on index 10 - off the end, so it marks the last segment instead
         String bar = Bar.render(0, 20, 10, List.of(10, 20));
 
-        assertEquals("|||||┃|||┃", segments(bar));
+        assertEquals("||||┃||||┃", segments(bar));
     }
 
     @Test
     void aMarkerKeepsTheColourOfItsPosition() {
-        // Half full: both markers sit in the unfilled run and keep its colour
-        assertEquals("#aaaaaa[#558000" + "|".repeat(5) + "#1c2a00┃|||┃#aaaaaa]",
+        // value == milestone (10): that milestone's marker sits in the just-
+        // filled run and shows the filled colour; the 20 milestone is still
+        // ahead, in the unfilled run
+        assertEquals("#aaaaaa[#558000||||┃#1c2a00||||┃#aaaaaa]",
             Bar.render(10, 20, 10, List.of(10, 20)));
     }
 
@@ -117,14 +120,15 @@ class BarTest {
         assertEquals(10, segments(Bar.render(7, 20, 10, List.of(5, 10, 15, 20))).length());
     }
 
-    // max 50, length 40: 10/50*40 = 8.0 and 20/50*40 = 16.0, landing exactly
-    // on segment indices 8 and 16
+    // max 50, length 40: 10/50*40 = 8.0 and 20/50*40 = 16.0, one segment
+    // earlier than that (the segment that fills when the milestone is
+    // reached) lands on indices 7 and 15
     @Test
     void milestonesMarkTheirComputedSegmentIndex() {
         String bar = segments(Bar.render(0, 50, 40, List.of(10, 20)));
 
-        assertEquals('┃', bar.charAt(8));
-        assertEquals('┃', bar.charAt(16));
+        assertEquals('┃', bar.charAt(7));
+        assertEquals('┃', bar.charAt(15));
         // every other segment stays the plain pipe
         assertEquals(38, bar.chars().filter(c -> c == '|').count());
     }
@@ -149,9 +153,9 @@ class BarTest {
     @Test
     void aMarkerInTheFilledRunKeepsTheFilledColour() {
         // Bar is entirely full, so the milestone marker sits in the filled
-        // (green) run rather than the dim unfilled one. 12/20*10 = 6.0, so
-        // the marker lands at segment index 6.
-        assertEquals("#aaaaaa[#00ff00" + "|".repeat(6) + "┃" + "|".repeat(3) + "#aaaaaa]",
+        // (green) run rather than the dim unfilled one. 12/20*10 = 6.0, one
+        // segment earlier, so the marker lands at segment index 5.
+        assertEquals("#aaaaaa[#00ff00" + "|".repeat(5) + "┃" + "|".repeat(4) + "#aaaaaa]",
             Bar.render(20, 20, 10, List.of(12)));
     }
 

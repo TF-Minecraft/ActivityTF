@@ -127,6 +127,9 @@ public class PlayerData {
                 due.add(milestone);
             }
         }
+        // Config order is not guaranteed ascending; claim() pays these in
+        // order and burns claimedPoints up to the highest one.
+        due.sort(null);
         return due;
     }
 

@@ -14,6 +14,8 @@ import tfmc.justin.activity.store.PlayerStore;
 import tfmc.justin.activity.utils.Utils;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
@@ -208,9 +210,12 @@ public class ActivityManager {
     //
     // The order is the whole point, because a reward has real in-game value:
     //
-    //   1. Every reason to refuse is checked before anything is touched. The
-    //      unsafe-name case especially - that is what a Bedrock player clicking
-    //      the bar over and over hits, and it must not cost a disk write.
+    //   1. Every reason to refuse is checked before anything is touched. In
+    //      particular, the pool is first narrowed to the entries this player's
+    //      name can actually be paid from (see runnableEntries) - an unsafe
+    //      name that only some entries can pay is not a reason to fail the
+    //      whole claim, and it must not cost a disk write either way. That is
+    //      what a Bedrock player clicking the bar over and over hits.
     //   2. The milestones are burned and written to disk BEFORE the first
     //      command runs: a crash between the give and the next autosave would
     //      otherwise hand the whole lot out again on restart, and a reward
@@ -222,8 +227,9 @@ public class ActivityManager {
     //      went out stays burned; the rest goes back, never below where it
     //      started.
     //
-    // The pool is snapshotted once, so a reward command that runs
-    // /activity reload cannot change what the rest of the loop hands out.
+    // The (already narrowed) pool is snapshotted once, so a reward command
+    // that runs /activity reload cannot change what the rest of the loop
+    // hands out.
     // ====================================
     public int claim(Player player) {
         Messages messages = config.messages();
@@ -261,11 +267,13 @@ public class ActivityManager {
             return 0;
         }
 
-        // A name no command in the pool can take is a failure the player
-        // should hear about, and it is answered here - before any mutation or
-        // save - because it is the one refusal a player can trigger at click
-        // rate
-        if (!canRunAnyRewardCommand(pool, player.getName())) {
+        // A name no entry in the pool can pay is a failure the player should
+        // hear about, and it is answered here - before any mutation or save -
+        // because it is the one refusal a player can trigger at click rate.
+        // Entries that can pay only sometimes (a mix of %player% and %uuid%
+        // commands) stay in; only the ones this name cannot pay at all drop out.
+        List<RewardEntry> runnablePool = runnableEntries(pool, player.getName());
+        if (runnablePool.isEmpty()) {
             plugin.getLogger().warning("No reward command could be run for '"
                 + Utils.safeForLog(player.getName()) + "': the name cannot be safely pasted into a console"
                 + " command. Use %uuid%-based reward commands to support Bedrock/unsafe names.");
@@ -274,7 +282,7 @@ public class ActivityManager {
         }
 
         int claimedBefore = data.claimedPoints();
-        int claimedAfter = due.get(due.size() - 1);
+        int claimedAfter = Collections.max(due);
         data.setClaimedPoints(claimedAfter);
         store.markDirty();
 
@@ -290,7 +298,7 @@ public class ActivityManager {
 
         int paid = 0;
         for (int i = 0; i < due.size(); i++) {
-            RewardEntry drawn = draw(pool);
+            RewardEntry drawn = draw(runnablePool);
             if (drawn == null || !dispatchRewards(player, drawn.commands())) {
                 break;
             }
@@ -331,23 +339,30 @@ public class ActivityManager {
     }
 
     // ====================================
-    // What stays burned when only part of the payout went out: the last
-    // milestone that actually paid, or where this click started when none
-    // did. Never hands back a milestone paid before this click.
+    // What stays burned when only part of the payout went out: the highest of
+    // the milestones that actually paid, or where this click started when
+    // none did. Never hands back a milestone paid before this click. Takes the
+    // max of the paid prefix rather than assuming 'due' is sorted ascending,
+    // so it stays correct even if a caller hands it an unsorted list.
     // ====================================
     static int rollbackClaimedPoints(int claimedBefore, int paid, List<Integer> due) {
-        return paid <= 0 ? claimedBefore : due.get(Math.min(paid, due.size()) - 1);
+        int cap = Math.min(paid, due.size());
+        return cap <= 0 ? claimedBefore : Collections.max(due.subList(0, cap));
     }
 
-    private static boolean canRunAnyRewardCommand(List<RewardEntry> pool, String name) {
+    // The pool entries at least one of whose commands can be run for this
+    // player's name - see canRunRewardCommand.
+    private static List<RewardEntry> runnableEntries(List<RewardEntry> pool, String name) {
+        List<RewardEntry> runnable = new ArrayList<>();
         for (RewardEntry entry : pool) {
             for (String command : entry.commands()) {
                 if (canRunRewardCommand(command, name)) {
-                    return true;
+                    runnable.add(entry);
+                    break;
                 }
             }
         }
-        return false;
+        return runnable;
     }
 
     // ====================================
