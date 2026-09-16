@@ -101,6 +101,14 @@ class ActivityManagerTest {
         assertEquals(0, ActivityManager.rollbackClaimedPoints(0, 0, List.of(10)));
     }
 
+    @Test
+    void payingEverythingRollsForwardToTheLastDueMilestone() {
+        List<Integer> due = List.of(20, 30, 40);
+
+        assertEquals(40, ActivityManager.rollbackClaimedPoints(10, 3, due));
+        assertEquals(40, ActivityManager.rollbackClaimedPoints(10, due.size(), due));
+    }
+
     // ====================================
     // The two bounds that make a partial payout safe, over every shape the
     // numbers can take:

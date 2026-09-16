@@ -450,4 +450,72 @@ class PlayerDataTest {
         assertEquals(0, result.pointsAwarded());
         assertEquals(15, data.dailyPoints());
     }
+
+    // ====================================
+    // PlayerData.due: the static helper claim() and claimable() both go
+    // through. Milestones [10, 20] throughout.
+    // ====================================
+    @Test
+    void pointsExactlyOnAMilestoneOwesIt() {
+        assertEquals(List.of(10), PlayerData.due(10, 0, MILESTONES));
+    }
+
+    @Test
+    void reachingTheSecondMilestoneOwesOnlyWhatWasNotYetClaimed() {
+        assertEquals(List.of(20), PlayerData.due(20, 10, MILESTONES));
+    }
+
+    @Test
+    void everythingClaimedOwesNothingEvenWithPointsToSpare() {
+        assertEquals(List.of(), PlayerData.due(50, 20, MILESTONES));
+    }
+
+    // A stale claimedPoints above the current points (e.g. milestones edited
+    // down after a claim) must owe nothing, not a negative count
+    @Test
+    void claimedAboveCurrentPointsOwesNothingAndNeverGoesNegative() {
+        assertEquals(List.of(), PlayerData.due(5, 100, MILESTONES));
+    }
+
+    @Test
+    void anEmptyMilestoneListIsNeverDueAndNeverCountsAsReached() {
+        PlayerData data = data();
+
+        assertEquals(List.of(), PlayerData.due(100, 0, List.of()));
+        assertEquals(0, data.claimable(List.of()));
+        assertEquals(0, data.record(25, UNCAPPED, MAX, DAILY_MAX, List.of()).milestonesReached());
+    }
+
+    @Test
+    void oneRecordCallJumpingPastBothMilestonesCountsBothAsReached() {
+        PlayerData data = data();
+
+        RecordResult result = data.record(25, UNCAPPED, 1_000_000, 1_000_000, MILESTONES);
+
+        assertEquals(2, result.milestonesReached());
+    }
+
+    // The same two milestones must come due regardless of how the points were
+    // earned: 10 in one day then 10 the next, versus 5 a day for four days.
+    @Test
+    void theSameTwoMilestonesComeDueRegardlessOfPace() {
+        PlayerData playerA = new PlayerData(WEEK, DAY);
+        record(playerA, UNCAPPED, 10);
+        playerA.roll(WEEK, "2026-09-10");
+        record(playerA, UNCAPPED, 10);
+
+        PlayerData playerB = new PlayerData(WEEK, DAY);
+        record(playerB, UNCAPPED, 5);
+        playerB.roll(WEEK, "2026-09-10");
+        record(playerB, UNCAPPED, 5);
+        playerB.roll(WEEK, "2026-09-11");
+        record(playerB, UNCAPPED, 5);
+        playerB.roll(WEEK, "2026-09-12");
+        record(playerB, UNCAPPED, 5);
+
+        assertEquals(20, playerA.points());
+        assertEquals(20, playerB.points());
+        assertEquals(List.of(10, 20), PlayerData.due(playerA.points(), playerA.claimedPoints(), MILESTONES));
+        assertEquals(List.of(10, 20), PlayerData.due(playerB.points(), playerB.claimedPoints(), MILESTONES));
+    }
 }

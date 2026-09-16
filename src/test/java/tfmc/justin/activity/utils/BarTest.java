@@ -116,4 +116,54 @@ class BarTest {
     void theSegmentCountIsUnchangedByMarkers() {
         assertEquals(10, segments(Bar.render(7, 20, 10, List.of(5, 10, 15, 20))).length());
     }
+
+    // max 50, length 40: 10/50*40 = 8.0 and 20/50*40 = 16.0, landing exactly
+    // on segment indices 8 and 16
+    @Test
+    void milestonesMarkTheirComputedSegmentIndex() {
+        String bar = segments(Bar.render(0, 50, 40, List.of(10, 20)));
+
+        assertEquals('┃', bar.charAt(8));
+        assertEquals('┃', bar.charAt(16));
+        // every other segment stays the plain pipe
+        assertEquals(38, bar.chars().filter(c -> c == '|').count());
+    }
+
+    @Test
+    void aMilestoneExactlyAtMaxMarksTheLastSegment() {
+        String bar = segments(Bar.render(0, 50, 40, List.of(50)));
+
+        assertEquals("|".repeat(39) + "┃", bar);
+    }
+
+    // Pinning documented behaviour: a milestone above max (e.g. bar.max was
+    // lowered after it was configured) is clamped to the last segment rather
+    // than falling off the end of the array.
+    @Test
+    void aMilestoneAboveMaxClampsToTheLastSegment() {
+        String bar = segments(Bar.render(0, 50, 40, List.of(1000)));
+
+        assertEquals("|".repeat(39) + "┃", bar);
+    }
+
+    @Test
+    void aMarkerInTheFilledRunKeepsTheFilledColour() {
+        // Bar is entirely full, so the milestone marker sits in the filled
+        // (green) run rather than the dim unfilled one. 12/20*10 = 6.0, so
+        // the marker lands at segment index 6.
+        assertEquals("#aaaaaa[#00ff00" + "|".repeat(6) + "┃" + "|".repeat(3) + "#aaaaaa]",
+            Bar.render(20, 20, 10, List.of(12)));
+    }
+
+    @Test
+    void emptyMilestoneListMatchesTheThreeArgOverload() {
+        assertEquals(Bar.render(10, 20, 10), Bar.render(10, 20, 10, List.of()));
+        assertEquals(Bar.render(0, 20, 10), Bar.render(0, 20, 10, List.of()));
+    }
+
+    @Test
+    void lengthOneStillPlacesTheMarker() {
+        assertEquals("┃", segments(Bar.render(0, 20, 1, List.of(10))));
+        assertEquals("┃", segments(Bar.render(0, 20, 1, List.of(1))));
+    }
 }
