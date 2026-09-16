@@ -410,12 +410,12 @@ class PlayerDataTest {
         assertEquals(barMax, result.pointsAwarded());
     }
 
-    // Pinning documented behaviour: dailyPoints tracks the full amount earned
-    // before the weekly bar clamps it, not the (possibly smaller) amount that
-    // actually landed on the weekly total. A weekly-clamped award still burns
-    // its full daily budget.
+    // Pinning documented behaviour: dailyPoints tracks only the amount that
+    // actually landed on the weekly total, not the (possibly larger) amount
+    // earned before the weekly bar clamped it. A weekly-clamped award only
+    // consumes as much daily budget as reached the bar.
     @Test
-    void weeklyClampedAwardStillConsumesItsFullDailyBudget() {
+    void weeklyClampedAwardConsumesOnlyWhatReachedTheBar() {
         PlayerData data = data();
         int barMax = 5;
 
@@ -423,7 +423,7 @@ class PlayerDataTest {
 
         assertEquals(barMax, data.points());
         assertEquals(barMax, result.pointsAwarded());
-        assertEquals(20, data.dailyPoints());
+        assertEquals(5, data.dailyPoints());
     }
 
     @Test

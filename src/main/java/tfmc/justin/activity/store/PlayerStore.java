@@ -352,7 +352,9 @@ public class PlayerStore {
         for (Map.Entry<UUID, PlayerData> entry : players.entrySet()) {
             PlayerData data = entry.getValue();
             // A player who has nothing is the same as a player with no entry,
-            // and writing one per joiner grows the file for no reason
+            // and writing one per joiner grows the file for no reason.
+            // dailyPoints() == 0 is implied by daily().isEmpty() (and vice
+            // versa) but is checked explicitly too - belt and braces.
             if (data.points() == 0 && data.claimedPoints() == 0 && data.dailyPoints() == 0
                 && data.daily().isEmpty()) {
                 continue;

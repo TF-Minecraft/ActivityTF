@@ -192,10 +192,11 @@ public class ActivityGui implements Listener {
     }
 
     private ItemStack dailyBarItem(ActivityConfiguration config, Messages messages, PlayerData data) {
-        String bar = Bar.render(data.dailyPoints(), config.dailyMax(), config.barLength());
+        int dailyPoints = Math.min(data.dailyPoints(), config.dailyMax());
+        String bar = Bar.render(dailyPoints, config.dailyMax(), config.barLength());
 
         return item(Material.CLOCK,
-            messages.get("gui.daily-bar-name", "%points%", data.dailyPoints(), "%max%", config.dailyMax()),
+            messages.get("gui.daily-bar-name", "%points%", dailyPoints, "%max%", config.dailyMax()),
             List.of(Utils.colorize(bar)));
     }
 

@@ -29,7 +29,8 @@ groups:
     material: IRON_SWORD
 
 # Every 'every' actions → earn 'points'. 'daily-cap' = most points one
-# activity can add per day (0 = no cap). Bar caps at bar.max.
+# activity can add per day (0 = no cap). Bar caps at bar.max; bar.daily-max
+# caps what can reach it on any single day, first.
 # vote: one point per vote site.
 # playtime: 'every' counts minutes online - see the playtime section at the
 #   bottom, and read what afk-minutes does and does not do before relying on it.
@@ -514,8 +515,8 @@ save-interval-minutes: 5
 #
 # The real limit on that is daily-cap. With every: 60 and daily-cap: 3 above, a
 # player who leaves a macro running all week earns 21 points against bar.max of
-# 50 - i.e. a fifth of the weekly bar every two days, from playtime alone, and
-# 3 of the 10 points bar.daily-max allows each day. If that matters on your
+# 50 - well under half the weekly bar over the whole week, from playtime alone,
+# and 3 of the 10 points bar.daily-max allows each day. If that matters on your
 # server, lower playtime's daily-cap; changing afk-minutes will not help.
 playtime:
   afk-minutes: 5     # client silent this long => the minute does not count; 0 disables the check

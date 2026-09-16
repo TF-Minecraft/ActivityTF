@@ -92,10 +92,9 @@ public class PlayerData {
         if (earned <= 0) {
             return new RecordResult(0, 0);
         }
-        dailyPoints += earned;
-
         int pointsBefore = points;
         addPoints(earned, max);
+        dailyPoints += points - pointsBefore;
 
         return new RecordResult(points - pointsBefore, points / rewardEvery - pointsBefore / rewardEvery);
     }
