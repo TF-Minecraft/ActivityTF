@@ -12,6 +12,7 @@ class PlayerDataTest {
     private static final String WEEK = "2026-09-07";
     private static final String DAY = "2026-09-09";
     private static final int MAX = 20;
+    private static final int DAILY_MAX = 1000;
     private static final int EVERY = 10;
 
     private static final ActivityDef VOTE = new ActivityDef("vote", "Vote", Material.PAPER, null, 1, 1, 5, null);
@@ -25,7 +26,7 @@ class PlayerDataTest {
     }
 
     private RecordResult record(PlayerData data, ActivityDef def, int amount) {
-        return data.record(amount, def, MAX, EVERY);
+        return data.record(amount, def, MAX, DAILY_MAX, EVERY);
     }
 
     @Test
@@ -166,7 +167,7 @@ class PlayerDataTest {
 
     @Test
     void clampPullsLegacyPointsDownToTheBar() {
-        PlayerData data = new PlayerData(100, WEEK, DAY, 0, java.util.Map.of());
+        PlayerData data = new PlayerData(100, 0, WEEK, DAY, 0, java.util.Map.of());
 
         assertTrue(data.clamp(MAX));
         assertEquals(MAX, data.points());
@@ -273,7 +274,7 @@ class PlayerDataTest {
     // ====================================
     @Test
     void partlyClaimedPointsOnlyOweTheRemainder() {
-        PlayerData data = new PlayerData(20, WEEK, DAY, 10, java.util.Map.of());
+        PlayerData data = new PlayerData(20, 0, WEEK, DAY, 10, java.util.Map.of());
 
         // 20 / 5 - 10 / 5 = 4 - 2 = 2, not 20 / 5 = 4 and not 3
         assertEquals(2, data.claimable(5));
@@ -281,7 +282,7 @@ class PlayerDataTest {
 
     @Test
     void pointsShortOfAThresholdDoNotOweIt() {
-        PlayerData data = new PlayerData(45, WEEK, DAY, 0, java.util.Map.of());
+        PlayerData data = new PlayerData(45, 0, WEEK, DAY, 0, java.util.Map.of());
 
         // 45 / 20 - 0 / 20 = 2: the last 5 points have not reached the third
         assertEquals(2, data.claimable(20));
@@ -295,5 +296,24 @@ class PlayerDataTest {
         data.setClaimedPoints(100);
 
         assertEquals(0, data.claimable(EVERY));
+    }
+
+    // Points past the daily max are lost: they must not reach the weekly bar
+    // today, nor leak into it once the day rolls over.
+    @Test
+    void pointsPastTheDailyMaxAreLost() {
+        PlayerData data = data();
+
+        assertEquals(3, data.record(36, UNCAPPED, MAX, 3, EVERY).pointsAwarded());
+        assertEquals(3, data.dailyPoints());
+        assertEquals(3, data.points());
+
+        assertEquals(0, data.record(10, UNCAPPED, MAX, 3, EVERY).pointsAwarded());
+        assertEquals(3, data.points());
+
+        data.roll(WEEK, "2026-09-10");
+        assertEquals(0, data.dailyPoints());
+        assertEquals(3, data.record(25, UNCAPPED, MAX, 3, EVERY).pointsAwarded());
+        assertEquals(6, data.points());
     }
 }

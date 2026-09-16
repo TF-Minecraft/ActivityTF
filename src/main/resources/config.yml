@@ -489,7 +489,8 @@ gui:
   reward-material: CHEST
 
 bar:
-  max: 20            # points to fill the bar
+  max: 50            # points to fill the weekly bar
+  daily-max: 10      # most points one day can add - anything past it is lost and never reaches the weekly bar
   reward-every: 10   # a claimable reward at every multiple
   length: 40         # segments - the weekly bar only; per-activity bars are fixed at 20
 
@@ -513,7 +514,8 @@ save-interval-minutes: 5
 #
 # The real limit on that is daily-cap. With every: 60 and daily-cap: 3 above, a
 # player who leaves a macro running all week earns 21 points against bar.max of
-# 20 - i.e. a full bar from playtime alone. If that matters on your server,
-# lower playtime's daily-cap; changing afk-minutes will not help.
+# 50 - i.e. a fifth of the weekly bar every two days, from playtime alone, and
+# 3 of the 10 points bar.daily-max allows each day. If that matters on your
+# server, lower playtime's daily-cap; changing afk-minutes will not help.
 playtime:
   afk-minutes: 5     # client silent this long => the minute does not count; 0 disables the check

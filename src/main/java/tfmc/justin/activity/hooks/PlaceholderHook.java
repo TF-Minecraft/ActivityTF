@@ -13,7 +13,8 @@ import java.util.Locale;
 
 // ====================================
 // %activity_points%, %activity_max%, %activity_percent%, %activity_bar%,
-// %activity_claimable%, %activity_done_<id>%
+// %activity_claimable%, %activity_daily_points%, %activity_daily_max%,
+// %activity_done_<id>%
 // Only registered when PlaceholderAPI is enabled - see ActivityPlugin.
 // ====================================
 public class PlaceholderHook extends PlaceholderExpansion {
@@ -87,6 +88,12 @@ public class PlaceholderHook extends PlaceholderExpansion {
                 return String.valueOf(points * 100 / config.barMax());
             case "claimable":
                 return String.valueOf(currentWeek ? data.claimable(config.rewardEvery()) : 0);
+            case "daily_points":
+                // A stale day has nothing earned today, whatever is stored
+                return String.valueOf(currentWeek && data.dayKey().equals(keys.day())
+                    ? Math.min(data.dailyPoints(), config.dailyMax()) : 0);
+            case "daily_max":
+                return String.valueOf(config.dailyMax());
             case "bar":
                 return Utils.colorize(Bar.render(points, config.barMax(), config.barLength()));
             default:

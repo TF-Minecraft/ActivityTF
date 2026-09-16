@@ -117,6 +117,7 @@ public class ActivityConfiguration {
     private Material rewardMaterial;
 
     private volatile int barMax;
+    private volatile int dailyMax;
     private volatile int rewardEvery;
     private volatile int barLength;
 
@@ -176,7 +177,8 @@ public class ActivityConfiguration {
         guiTitle = config.getString("gui.title", "&8Weekly Activity");
         rewardMaterial = bareMaterial(config.getString("gui.reward-material", "CHEST"), "gui.reward-material");
 
-        barMax = Math.max(1, config.getInt("bar.max", 20));
+        barMax = Math.max(1, config.getInt("bar.max", 50));
+        dailyMax = Math.max(1, config.getInt("bar.daily-max", 10));
         rewardEvery = Math.max(1, Math.min(barMax, config.getInt("bar.reward-every", 10)));
         barLength = barLength(config.getInt("bar.length", 40));
 
@@ -557,9 +559,9 @@ public class ActivityConfiguration {
     }
 
     // ====================================
-    // Seven days of every capped activity is the ceiling - if that is under
-    // the first milestone nothing can ever be claimed. An uncapped activity
-    // has no ceiling, so the check is skipped.
+    // Seven days of every capped activity, itself capped by bar.daily-max, is
+    // the ceiling - if that is under the first milestone nothing can ever be
+    // claimed. An uncapped activity has no ceiling, so the check is skipped.
     // ====================================
     private void warnIfBarUnreachable() {
         long weekly = 0;
@@ -569,7 +571,7 @@ public class ActivityConfiguration {
             }
             weekly += def.dailyCap();
         }
-        weekly *= 7;
+        weekly = Math.min(weekly, dailyMax) * 7;
 
         if (weekly < rewardEvery) {
             plugin.getLogger().warning("All activities together are capped at " + weekly
@@ -769,6 +771,10 @@ public class ActivityConfiguration {
 
     public int barMax() {
         return barMax;
+    }
+
+    public int dailyMax() {
+        return dailyMax;
     }
 
     public int rewardEvery() {

@@ -20,13 +20,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 // build. Both rules are therefore exercised through the package-private
 // statics the instance methods delegate to:
 //
-//   - readEntry(ConfigurationSection root, String key, int barMax), returning
+//   - readEntry(ConfigurationSection root, String key, int barMax, int dailyMax), returning
 //     null for a missing section or a key that is not a UUID
 //   - snapshot(Map<UUID, PlayerData>)
 // ====================================
 class PlayerStoreTest {
 
     private static final int BAR_MAX = 20;
+    private static final int DAILY_MAX = 10;
 
     @Test
     void pointsAreFlooredAtZeroAndCappedAtBarMax() {
@@ -36,14 +37,14 @@ class PlayerStoreTest {
         entry.set("points", 999);
         entry.set("claimed-points", 0);
 
-        PlayerData data = PlayerStore.readEntry(root, id.toString(), BAR_MAX);
+        PlayerData data = PlayerStore.readEntry(root, id.toString(), BAR_MAX, DAILY_MAX);
         assertEquals(BAR_MAX, data.points());
 
         UUID negativeId = UUID.randomUUID();
         ConfigurationSection negative = root.createSection(negativeId.toString());
         negative.set("points", -5);
         negative.set("claimed-points", 0);
-        PlayerData negativeData = PlayerStore.readEntry(root, negativeId.toString(), BAR_MAX);
+        PlayerData negativeData = PlayerStore.readEntry(root, negativeId.toString(), BAR_MAX, DAILY_MAX);
         assertEquals(0, negativeData.points());
     }
 
@@ -55,14 +56,14 @@ class PlayerStoreTest {
         entry.set("points", 10);
         entry.set("claimed-points", 999);
 
-        PlayerData data = PlayerStore.readEntry(root, id.toString(), BAR_MAX);
+        PlayerData data = PlayerStore.readEntry(root, id.toString(), BAR_MAX, DAILY_MAX);
         assertEquals(10, data.claimedPoints());
 
         UUID negId = UUID.randomUUID();
         ConfigurationSection negEntry = root.createSection(negId.toString());
         negEntry.set("points", 10);
         negEntry.set("claimed-points", -5);
-        PlayerData negData = PlayerStore.readEntry(root, negId.toString(), BAR_MAX);
+        PlayerData negData = PlayerStore.readEntry(root, negId.toString(), BAR_MAX, DAILY_MAX);
         assertEquals(0, negData.claimedPoints());
     }
 
@@ -76,7 +77,7 @@ class PlayerStoreTest {
         entry.set("daily.vote", -3);
         entry.set("daily.quest", 2);
 
-        PlayerData data = PlayerStore.readEntry(root, id.toString(), BAR_MAX);
+        PlayerData data = PlayerStore.readEntry(root, id.toString(), BAR_MAX, DAILY_MAX);
         assertEquals(0, data.count("vote"));
         assertEquals(2, data.count("quest"));
     }
@@ -87,7 +88,7 @@ class PlayerStoreTest {
         ConfigurationSection entry = root.createSection("not-a-uuid");
         entry.set("points", 5);
 
-        PlayerData data = PlayerStore.readEntry(root, "not-a-uuid", BAR_MAX);
+        PlayerData data = PlayerStore.readEntry(root, "not-a-uuid", BAR_MAX, DAILY_MAX);
         assertNull(data);
     }
 
@@ -95,7 +96,7 @@ class PlayerStoreTest {
     void aMissingSectionIsSkipped() {
         ConfigurationSection root = new YamlConfiguration().createSection("players");
 
-        assertNull(PlayerStore.readEntry(root, UUID.randomUUID().toString(), BAR_MAX));
+        assertNull(PlayerStore.readEntry(root, UUID.randomUUID().toString(), BAR_MAX, DAILY_MAX));
     }
 
     @Test
@@ -110,7 +111,7 @@ class PlayerStoreTest {
     @Test
     void nonZeroEntryIsWrittenWithAllExpectedKeys() {
         UUID id = UUID.randomUUID();
-        PlayerData data = new PlayerData(5, "2026-09-07", "2026-09-09", 0, Map.of("vote", 1));
+        PlayerData data = new PlayerData(5, 0, "2026-09-07", "2026-09-09", 0, Map.of("vote", 1));
 
         YamlConfiguration yaml = PlayerStore.snapshot(Map.of(id, data));
         String path = "players." + id;
@@ -118,6 +119,7 @@ class PlayerStoreTest {
         assertTrue(yaml.isSet(path + ".week"));
         assertTrue(yaml.isSet(path + ".day"));
         assertTrue(yaml.isSet(path + ".claimed-points"));
+        assertTrue(yaml.isSet(path + ".daily-points"));
         assertTrue(yaml.isSet(path + ".daily"));
     }
 }

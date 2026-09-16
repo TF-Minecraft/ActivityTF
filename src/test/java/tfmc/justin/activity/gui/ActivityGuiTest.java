@@ -59,7 +59,7 @@ class ActivityGuiTest {
 
     @Test
     void theGridAvoidsTheFixedControls() throws ReflectiveOperationException {
-        for (String name : new String[] {"BAR_SLOT", "REWARD_SLOT", "BACK_SLOT"}) {
+        for (String name : new String[] {"DAILY_BAR_SLOT", "BAR_SLOT", "REWARD_SLOT", "BACK_SLOT"}) {
             int control = slot(name);
             assertTrue(Arrays.stream(grid()).noneMatch(value -> value == control),
                 name + " (" + control + ") is also a grid slot");

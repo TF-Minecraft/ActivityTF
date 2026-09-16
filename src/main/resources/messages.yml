@@ -6,6 +6,7 @@ reward-failed: "&cYour rewards could not be handed over - tell an admin."
 reward-unconfigured: "&cRewards are not configured - tell an admin."
 gui:
   bar-name: "#e6ca40&lWeekly Activity&e: #50d990%points%&7/&f%max%"
+  daily-bar-name: "#e6ca40&lDaily Activity&e: #50d990%points%&7/&f%max%"
   reward-name: "#e6ca40&lRewards"
   reward-lore-header: "#af97bdEvery&e: #50d990%every% #b8906epoints"
   reward-lore-claimed: "#d97b66Claimed&e: &6%claimed%&7/&f%total%"
