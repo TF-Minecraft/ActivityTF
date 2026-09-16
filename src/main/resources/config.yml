@@ -18,6 +18,9 @@ groups:
   crafting:
     display: "#e6ca40&lCrafting"
     material: CRAFTING_TABLE
+  stations:
+    display: "#e6ca40&lStations"
+    material: BLAST_FURNACE
   roleplay:
     display: "#e6ca40&lRoleplay"
     material: NAME_TAG
@@ -75,6 +78,20 @@ groups:
 #   rather than lost. Two activities naming the same profession is a config
 #   error and only the last one is fed. Always set a daily-cap on these:
 #   profession XP is unbounded, unlike the one-per-action activities.
+# station: optional, MMOItems only. Counts crafts made at an MMOItems
+#   crafting station, written as either
+#     ingot-station        any recipe crafted at that station
+#     ingot-station/flint  only recipe 'flint' at that station
+#   Station and recipe ids are the ones in plugins/MMOItems/crafting-stations
+#   (case and surrounding spaces do not matter). One craft feeds exactly one
+#   activity: a '<station>/<recipe>' activity wins over one claiming the whole
+#   station. Two activities naming the same station/recipe is a config error
+#   and only the last one is fed. An activity is only counted when MMOItems
+#   actually hands the item over - instantly, or when a queued craft is
+#   claimed - so queueing and cancelling count nothing, and one craft counts
+#   as one action however big the output stack is. An activity with both
+#   'station' and 'craft'/'profession' is a config error: the extra 'station'
+#   is reported at load and ignored.
 activities:
   vote:
     group: server
@@ -241,6 +258,210 @@ activities:
     points: 1
     daily-cap: 2
     profession: herborist
+  # Ingot station
+  ingot_flint:
+    group: stations
+    display: "#e6ca40&lExtract Flint"
+    material: FLINT
+    every: 3
+    points: 1
+    daily-cap: 1
+    station: ingot-station/flint
+  ingot_coal:
+    group: stations
+    display: "#e6ca40&lMake Coal"
+    material: COAL
+    every: 3
+    points: 1
+    daily-cap: 1
+    station: ingot-station/coal
+  # Tool station
+  tool_iron_pickaxe:
+    group: stations
+    display: "#e6ca40&lForge Iron Pickaxes"
+    material: IRON_PICKAXE
+    every: 1
+    points: 1
+    daily-cap: 1
+    station: tool-station/iron-pickaxe
+  tool_iron_axe:
+    group: stations
+    display: "#e6ca40&lForge Iron Axes"
+    material: IRON_AXE
+    every: 1
+    points: 1
+    daily-cap: 1
+    station: tool-station/iron-axe
+  # Block station
+  block_andesite:
+    group: stations
+    display: "#e6ca40&lCut Andesite"
+    material: ANDESITE
+    every: 2
+    points: 1
+    daily-cap: 1
+    station: block-station/andesite
+  block_clay:
+    group: stations
+    display: "#e6ca40&lCut Clay"
+    material: CLAY
+    every: 2
+    points: 1
+    daily-cap: 1
+    station: block-station/clay
+  # Forester station
+  forester_arrow:
+    group: stations
+    display: "#e6ca40&lFletch Arrows"
+    material: ARROW
+    every: 2
+    points: 1
+    daily-cap: 1
+    station: forester-station/arrow
+  forester_string:
+    group: stations
+    display: "#e6ca40&lSpin String"
+    material: STRING
+    every: 2
+    points: 1
+    daily-cap: 1
+    station: forester-station/string
+  # Alchemy station
+  alchemy_minor_health:
+    group: stations
+    display: "#e6ca40&lBrew Minor Health"
+    material: POTION
+    every: 2
+    points: 1
+    daily-cap: 1
+    station: alchemy-station/minor-health
+  alchemy_powder:
+    group: stations
+    display: "#e6ca40&lGrind Alchemy Powder"
+    material: GLOWSTONE_DUST
+    every: 2
+    points: 1
+    daily-cap: 1
+    station: alchemy-station/alchemy-powder
+  # Instrument station
+  instrument_iron_lute:
+    group: stations
+    display: "#e6ca40&lBuild Iron Lutes"
+    material: NOTE_BLOCK
+    every: 1
+    points: 1
+    daily-cap: 1
+    station: instrument-station/iron-lute
+  instrument_steel_lute:
+    group: stations
+    display: "#e6ca40&lBuild Steel Lutes"
+    material: JUKEBOX
+    every: 1
+    points: 1
+    daily-cap: 1
+    station: instrument-station/steel-lute
+  # Research station
+  research_scribe_paper:
+    group: stations
+    display: "#e6ca40&lScribe Paper"
+    material: PAPER
+    every: 2
+    points: 1
+    daily-cap: 1
+    station: research-station/scribe-paper
+  research_bronze:
+    group: stations
+    display: "#e6ca40&lResearch Bronze"
+    material: COPPER_INGOT
+    every: 1
+    points: 1
+    daily-cap: 1
+    station: research-station/r-bronze
+  # Medicine station
+  medicine_herb_mixture:
+    group: stations
+    display: "#e6ca40&lMix Herbs"
+    material: FERN
+    every: 2
+    points: 1
+    daily-cap: 1
+    station: medicine-station/herb-mixture
+  medicine_splint:
+    group: stations
+    display: "#e6ca40&lMake Splints"
+    material: STICK
+    every: 1
+    points: 1
+    daily-cap: 1
+    station: medicine-station/splint
+  # Engineer station
+  engineer_bullet_box:
+    group: stations
+    display: "#e6ca40&lPack Bullet Boxes"
+    material: IRON_NUGGET
+    every: 1
+    points: 1
+    daily-cap: 1
+    station: engineer-station/bullet-box
+  engineer_fuel:
+    group: stations
+    display: "#e6ca40&lRefine Fuel"
+    material: COAL_BLOCK
+    every: 2
+    points: 1
+    daily-cap: 1
+    station: engineer-station/fuel
+  # Fishing station
+  fishing_rod:
+    group: stations
+    display: "#e6ca40&lMake Fishing Rods"
+    material: FISHING_ROD
+    every: 1
+    points: 1
+    daily-cap: 1
+    station: fishing-station/fishing-rod
+  fishing_iron_hook:
+    group: stations
+    display: "#e6ca40&lForge Iron Hooks"
+    material: TRIPWIRE_HOOK
+    every: 2
+    points: 1
+    daily-cap: 1
+    station: fishing-station/iron-hook
+  # Magic station
+  magic_basic_handle:
+    group: stations
+    display: "#e6ca40&lCarve Basic Handles"
+    material: STICK
+    every: 1
+    points: 1
+    daily-cap: 1
+    station: magic-station/basic-handle
+  magic_iron_core:
+    group: stations
+    display: "#e6ca40&lCast Iron Cores"
+    material: IRON_INGOT
+    every: 1
+    points: 1
+    daily-cap: 1
+    station: magic-station/iron-core
+  # Animal station
+  animal_universal_feed:
+    group: stations
+    display: "#e6ca40&lMix Universal Feed"
+    material: WHEAT
+    every: 2
+    points: 1
+    daily-cap: 1
+    station: animal-station/universal-feed
+  animal_whistle:
+    group: stations
+    display: "#e6ca40&lCraft Animal Whistles"
+    material: GOAT_HORN
+    every: 1
+    points: 1
+    daily-cap: 1
+    station: animal-station/animal-whistle
 
 # Console commands run once per milestone (every bar.reward-every points)
 # when the player clicks the reward chest in /activity.

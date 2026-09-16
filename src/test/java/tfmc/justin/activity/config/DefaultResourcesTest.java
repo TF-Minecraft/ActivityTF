@@ -186,6 +186,13 @@ class DefaultResourcesTest {
         assertEquals(List.of("geiger", "archaeology_find", "instrument", "ic_chat", "injured", "furniture_place", "vehicle_build"),
                 inGroup(activities, "roleplay"));
         assertEquals(List.of("battle_joined"), inGroup(activities, "factions"));
+        assertEquals(List.of("ingot_flint", "ingot_coal", "tool_iron_pickaxe", "tool_iron_axe",
+                        "block_andesite", "block_clay", "forester_arrow", "forester_string",
+                        "alchemy_minor_health", "alchemy_powder", "instrument_iron_lute", "instrument_steel_lute",
+                        "research_scribe_paper", "research_bronze", "medicine_herb_mixture", "medicine_splint",
+                        "engineer_bullet_box", "engineer_fuel", "fishing_rod", "fishing_iron_hook",
+                        "magic_basic_handle", "magic_iron_core", "animal_universal_feed", "animal_whistle"),
+                inGroup(activities, "stations"));
     }
 
     private static List<String> inGroup(ConfigurationSection activities, String group) {

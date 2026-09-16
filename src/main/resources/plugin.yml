@@ -3,7 +3,7 @@ version: 1.0
 name: activity
 author: Justin
 api-version: 1.21
-softdepend: [VotingPlugin, MusicalInstruments, geiger_counter, MMOCore, PlaceholderAPI,
+softdepend: [VotingPlugin, MusicalInstruments, geiger_counter, MMOCore, MMOItems, PlaceholderAPI,
              VFBuilders, RPCharacters, InteractibleFurniture, SimpleFactions, AdvancedCrafting, TLibs, Archaeo,
              MarketBlock, Games, Cooking]
 commands:

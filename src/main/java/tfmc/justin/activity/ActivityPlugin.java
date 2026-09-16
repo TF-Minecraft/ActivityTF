@@ -18,6 +18,7 @@ import tfmc.justin.activity.listeners.InjuryListener;
 import tfmc.justin.activity.listeners.InstrumentListener;
 import tfmc.justin.activity.listeners.JoinListener;
 import tfmc.justin.activity.listeners.MarketSaleListener;
+import tfmc.justin.activity.listeners.MmoItemsStationListener;
 import tfmc.justin.activity.listeners.ProfessionUpgradeListener;
 import tfmc.justin.activity.listeners.ProfessionXpListener;
 import tfmc.justin.activity.listeners.VehicleBuildListener;
@@ -101,6 +102,12 @@ public class ActivityPlugin extends JavaPlugin {
             getServer().getPluginManager().registerEvents(
                 new ProfessionXpListener(ActivityManager.getInstance()), this);
             getLogger().info("Hooked into MMOCore.");
+        }
+
+        if (Bukkit.getPluginManager().isPluginEnabled("MMOItems")) {
+            getServer().getPluginManager().registerEvents(
+                new MmoItemsStationListener(ActivityManager.getInstance()), this);
+            getLogger().info("Hooked into MMOItems.");
         }
 
         if (Bukkit.getPluginManager().isPluginEnabled("VFBuilders")) {

@@ -23,6 +23,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Predicate;
 
 // ====================================
@@ -93,6 +94,14 @@ public class ActivityConfiguration {
     // Replaced wholesale alongside 'activities' for the same reason.
     // ====================================
     private volatile Map<String, String> professionActivities = Map.of();
+
+    // ====================================
+    // MMOItems crafting stations. Key is either '<station>' (any recipe at
+    // that station) or '<station>/<recipe>', both normalized the same way as
+    // the 'station:' values they came from, so MmoItemsStationListener only
+    // has to hand over the two ids it got from the event.
+    // ====================================
+    private volatile Map<String, String> stationActivities = Map.of();
 
     // ====================================
     // volatile: read from PlaceholderAPI's own threads after /activity reload
@@ -245,6 +254,7 @@ public class ActivityConfiguration {
             craftActivities = new HashMap<>();
             craftPaths = List.of();
             professionActivities = Map.of();
+            stationActivities = Map.of();
             return;
         }
 
@@ -252,6 +262,7 @@ public class ActivityConfiguration {
         Map<Material, String> crafts = new HashMap<>();
         List<Map.Entry<String, String>> paths = new ArrayList<>();
         Map<String, String> professions = new LinkedHashMap<>();
+        Map<String, String> stations = new LinkedHashMap<>();
         for (String id : section.getKeys(false)) {
             ConfigurationSection entry = section.getConfigurationSection(id);
             if (entry == null) {
@@ -332,6 +343,8 @@ public class ActivityConfiguration {
                         + " fill the bar on its own.");
                 }
             }
+
+            loadStation(stations, entry, id);
         }
 
         // ====================================
@@ -352,6 +365,65 @@ public class ActivityConfiguration {
         craftActivities = crafts;
         craftPaths = List.copyOf(paths);
         professionActivities = professions;
+        stationActivities = stations;
+    }
+
+    // ====================================
+    // Optional 'station: <station>' or 'station: <station>/<recipe>'. An
+    // activity already fed by 'craft:' or 'profession:' would be fed by two
+    // unrelated sources at once, so the extra 'station:' is reported and
+    // dropped and the first-declared feed is what stays.
+    // ====================================
+    private void loadStation(Map<String, String> stations, ConfigurationSection entry, String id) {
+        String station = entry.getString("station");
+        if (station == null || station.isBlank()) {
+            return;
+        }
+
+        String other = null;
+        for (String key : List.of("craft", "profession")) {
+            String value = entry.getString(key);
+            if (value != null && !value.isBlank()) {
+                other = key;
+                break;
+            }
+        }
+        if (other != null) {
+            plugin.getLogger().warning("Activity '" + id + "' has both '" + other + "' and 'station' - an"
+                + " activity can only be fed by one source, so 'station' is ignored and '" + other
+                + "' is kept.");
+            return;
+        }
+
+        String stationKey = stationKey(station);
+        if (stationKey.isEmpty() || stationKey.startsWith("/") || stationKey.endsWith("/")) {
+            plugin.getLogger().warning("Activity '" + id + "' has a malformed 'station': "
+                + Utils.safeForLog(station) + " - expected <station> or <station>/<recipe> - nothing will"
+                + " ever feed that activity.");
+            return;
+        }
+
+        String previous = stations.put(stationKey, id);
+        if (previous != null) {
+            plugin.getLogger().warning("Activities '" + previous + "' and '" + id
+                + "' both track station '" + stationKey + "' - only '" + id + "' will be fed.");
+        }
+    }
+
+    // Station and recipe ids are matched case-insensitively and trimmed, on
+    // both sides, so 'Ingot-Station / Flint' and 'ingot-station/flint' are
+    // the same key
+    private static String stationKey(String station) {
+        int slash = station.indexOf('/');
+        if (slash < 0) {
+            return normalizeStationPart(station);
+        }
+        return normalizeStationPart(station.substring(0, slash))
+            + "/" + normalizeStationPart(station.substring(slash + 1));
+    }
+
+    private static String normalizeStationPart(String part) {
+        return part.trim().toLowerCase(Locale.ROOT);
     }
 
     // ====================================
@@ -598,6 +670,25 @@ public class ActivityConfiguration {
             return id;
         }
         return TLibsItems.match(crafted, craftPaths);
+    }
+
+    // ====================================
+    // The activity fed by crafting <recipeId> at MMOItems station
+    // <stationId>, if any. A '<station>/<recipe>' activity wins over a
+    // whole-station one, so a craft only ever feeds a single activity.
+    // ====================================
+    public Optional<String> stationActivity(String stationId, String recipeId) {
+        if (stationId == null || stationId.isBlank()) {
+            return Optional.empty();
+        }
+        String station = normalizeStationPart(stationId);
+        if (recipeId != null && !recipeId.isBlank()) {
+            String specific = stationActivities.get(station + "/" + normalizeStationPart(recipeId));
+            if (specific != null) {
+                return Optional.of(specific);
+            }
+        }
+        return Optional.ofNullable(stationActivities.get(station));
     }
 
     // The activity fed by an MMOCore profession, or null if none tracks it

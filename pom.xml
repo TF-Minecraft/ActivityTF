@@ -81,6 +81,16 @@
             <systemPath>${project.basedir}/libs/MMOCore-1.13.1.jar</systemPath>
         </dependency>
 
+        <!-- MMOItems: jar-only release, compiled against for
+             PlayerUseCraftingStationEvent -->
+        <dependency>
+            <groupId>local</groupId>
+            <artifactId>MMOItems</artifactId>
+            <version>6.10.1</version>
+            <scope>system</scope>
+            <systemPath>${project.basedir}/libs/MMOItems-6.10.1.jar</systemPath>
+        </dependency>
+
         <!-- MythicLib: MMOCore's own hard dependency. Not used directly, but
              MMOCore's Profession implements one of its interfaces, so javac
              needs it on the classpath to resolve Profession at all. -->

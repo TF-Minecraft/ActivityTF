@@ -38,6 +38,27 @@ class Tier1HooksTest {
             "casino_win", "cook_dish"
     );
 
+    // ====================================
+    // The MMOItems station activities are fed through
+    // ActivityConfiguration.stationActivity(), so the listener never names
+    // them as literals - they are checked for sane config, not for a
+    // recordAction literal.
+    // ====================================
+    private static final List<String> STATION_ACTIVITY_IDS = List.of(
+            "ingot_flint", "ingot_coal",
+            "tool_iron_pickaxe", "tool_iron_axe",
+            "block_andesite", "block_clay",
+            "forester_arrow", "forester_string",
+            "alchemy_minor_health", "alchemy_powder",
+            "instrument_iron_lute", "instrument_steel_lute",
+            "research_scribe_paper", "research_bronze",
+            "medicine_herb_mixture", "medicine_splint",
+            "engineer_bullet_box", "engineer_fuel",
+            "fishing_rod", "fishing_iron_hook",
+            "magic_basic_handle", "magic_iron_core",
+            "animal_universal_feed", "animal_whistle"
+    );
+
     private static YamlConfiguration loadConfig() {
         File file = new File("src/main/resources/config.yml");
         assertTrue(file.exists(), "config.yml should exist");
@@ -50,7 +71,7 @@ class Tier1HooksTest {
         ConfigurationSection activities = config.getConfigurationSection("activities");
         assertTrue(activities != null, "activities section should exist");
 
-        for (String id : NEW_ACTIVITY_IDS) {
+        for (String id : Stream.concat(NEW_ACTIVITY_IDS.stream(), STATION_ACTIVITY_IDS.stream()).toList()) {
             ConfigurationSection section = activities.getConfigurationSection(id);
             assertTrue(section != null, "activities." + id + " should exist");
 
@@ -64,6 +85,28 @@ class Tier1HooksTest {
         }
     }
 
+    // Each station activity must carry the 'station:' key that feeds it, and
+    // no two may claim the same station/recipe - a duplicate silently drops
+    // one of them at load
+    @Test
+    void everyStationActivityDeclaresAUniqueStationRecipe() {
+        YamlConfiguration config = loadConfig();
+        ConfigurationSection activities = config.getConfigurationSection("activities");
+        assertTrue(activities != null, "activities section should exist");
+
+        Set<String> claimed = new HashSet<>();
+        for (String id : STATION_ACTIVITY_IDS) {
+            String station = activities.getString(id + ".station");
+            assertFalse(station == null || station.isBlank(), "activities." + id + ".station should not be blank");
+            assertTrue(station.matches("[a-z0-9-]+/[a-z0-9-]+"),
+                    "activities." + id + ".station should be '<station>/<recipe>', was: " + station);
+            assertTrue(claimed.add(station),
+                    "two station activities claim '" + station + "' - only the last one would be fed");
+            assertEquals("stations", activities.getString(id + ".group"),
+                    "activities." + id + ".group should be 'stations'");
+        }
+    }
+
     @Test
     void pluginYmlSoftdependsOnAllTier1Plugins() {
         File file = new File("src/main/resources/plugin.yml");
@@ -74,7 +117,7 @@ class Tier1HooksTest {
         List<String> required = List.of(
                 "VFBuilders", "RPCharacters", "InteractibleFurniture",
                 "SimpleFactions", "AdvancedCrafting", "MMOCore",
-                "MarketBlock", "Archaeo", "Games", "Cooking"
+                "MarketBlock", "Archaeo", "Games", "Cooking", "MMOItems"
         );
         for (String plugin1 : required) {
             assertTrue(softdepend.contains(plugin1), "softdepend should contain " + plugin1 + ", was: " + softdepend);
