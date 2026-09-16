@@ -8,8 +8,10 @@ import tfmc.justin.activity.hooks.PlaceholderHook;
 import tfmc.justin.activity.listeners.AdvancedCraftListener;
 import tfmc.justin.activity.listeners.ArchaeologyListener;
 import tfmc.justin.activity.listeners.BattleListener;
+import tfmc.justin.activity.listeners.CasinoWinListener;
 import tfmc.justin.activity.listeners.CharacterChatListener;
 import tfmc.justin.activity.listeners.CraftListener;
+import tfmc.justin.activity.listeners.DishCookedListener;
 import tfmc.justin.activity.listeners.FurnitureListener;
 import tfmc.justin.activity.listeners.GeigerListener;
 import tfmc.justin.activity.listeners.InjuryListener;
@@ -145,6 +147,18 @@ public class ActivityPlugin extends JavaPlugin {
             getServer().getPluginManager().registerEvents(
                 new MarketSaleListener(ActivityManager.getInstance()), this);
             getLogger().info("Hooked into MarketBlock.");
+        }
+
+        if (Bukkit.getPluginManager().isPluginEnabled("Games")) {
+            getServer().getPluginManager().registerEvents(
+                new CasinoWinListener(ActivityManager.getInstance()), this);
+            getLogger().info("Hooked into Games.");
+        }
+
+        if (Bukkit.getPluginManager().isPluginEnabled("Cooking")) {
+            getServer().getPluginManager().registerEvents(
+                new DishCookedListener(ActivityManager.getInstance()), this);
+            getLogger().info("Hooked into Cooking.");
         }
 
         if (Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI")) {

@@ -127,6 +127,14 @@ activities:
     every: 25          # 25 denar earned => 1 point
     points: 1
     daily-cap: 2
+  # Games: denar won at the card tables ('every' is denar, net of stake, before tax)
+  casino_win:
+    group: server
+    display: "#e6ca40&lCasino Winnings"
+    material: GOLD_NUGGET
+    every: 25
+    points: 1
+    daily-cap: 2
   craft_diamond_block:
     group: crafting
     display: "#e6ca40&lCraft Diamond Blocks"
@@ -196,6 +204,14 @@ activities:
     group: crafting
     display: "#e6ca40&lAdvanced Crafting"
     material: SMITHING_TABLE
+    every: 5
+    points: 1
+    daily-cap: 2
+  # Cooking: dishes finished at pots, stations and crafting boards
+  cook_dish:
+    group: crafting
+    display: "#e6ca40&lCook Dishes"
+    material: COOKED_BEEF
     every: 5
     points: 1
     daily-cap: 2

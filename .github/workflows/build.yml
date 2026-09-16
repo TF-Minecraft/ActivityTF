@@ -48,7 +48,9 @@ jobs:
             --pattern 'simplefactions-2.8.7.jar' \
             --pattern 'advancedcrafting-1.1.7.jar' \
             --pattern 'archeology-plugin-1.0.1.jar' \
-            --pattern 'marketblock-0.0.2.jar'
+            --pattern 'marketblock-0.0.2.jar' \
+            --pattern 'games-0.1.1-api.jar' \
+            --pattern 'cooking-0.1.5-ALPHA-api.jar'
 
       - name: Verify private dependencies
         run: sha256sum -c libs/SHA256SUMS

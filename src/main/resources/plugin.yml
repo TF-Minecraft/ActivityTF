@@ -5,7 +5,7 @@ author: Justin
 api-version: 1.21
 softdepend: [VotingPlugin, MusicalInstruments, geiger_counter, MMOCore, PlaceholderAPI,
              VFBuilders, RPCharacters, InteractibleFurniture, SimpleFactions, AdvancedCrafting, TLibs, Archaeo,
-             MarketBlock]
+             MarketBlock, Games, Cooking]
 commands:
   activity:
     description: Open the weekly activity bar, or run admin subcommands
