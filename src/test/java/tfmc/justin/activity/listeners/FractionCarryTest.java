@@ -139,4 +139,34 @@ class FractionCarryTest {
             org.junit.jupiter.api.Assertions.assertTrue(carry >= 0 && carry < 1, "carry out of range: " + carry);
         }
     }
+
+    // Cent-denominated sales must not drift: summed as doubles, 250 additions
+    // of 0.10 fall short of 25 and the player never reaches the goal
+    @Test
+    void centSizedSalesAccumulateExactly() {
+        FractionCarry carry = new FractionCarry();
+        java.util.UUID player = java.util.UUID.randomUUID();
+
+        int total = 0;
+        for (int i = 0; i < 250; i++) {
+            total += carry.add(player, "market_sale", 0.10);
+        }
+        assertEquals(25, total);
+
+        // ...and nothing is left over: a 0.9 sale on a zero carry credits
+        // nothing, where a drifted 0.999... carry would credit a point
+        assertEquals(0, carry.add(player, "market_sale", 0.9));
+        assertEquals(1, carry.add(player, "market_sale", 0.1));
+    }
+
+    @Test
+    void tenthsSumToAWholePointWithoutDrift() {
+        FractionCarry carry = new FractionCarry();
+        java.util.UUID player = java.util.UUID.randomUUID();
+
+        assertEquals(0, carry.add(player, "market_sale", 0.1));
+        assertEquals(0, carry.add(player, "market_sale", 0.1));
+        assertEquals(0, carry.add(player, "market_sale", 0.1));
+        assertEquals(1, carry.add(player, "market_sale", 0.7));
+    }
 }
