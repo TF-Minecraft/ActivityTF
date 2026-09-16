@@ -12,6 +12,7 @@ class PlayerDataTest {
     private static final String WEEK = "2026-09-07";
     private static final String DAY = "2026-09-09";
     private static final int MAX = 20;
+    private static final int DAILY_MAX = 1000;
     private static final int EVERY = 10;
 
     private static final ActivityDef VOTE = new ActivityDef("vote", "Vote", Material.PAPER, null, 1, 1, 5, null);
@@ -25,7 +26,7 @@ class PlayerDataTest {
     }
 
     private RecordResult record(PlayerData data, ActivityDef def, int amount) {
-        return data.record(amount, def, MAX, EVERY);
+        return data.record(amount, def, MAX, DAILY_MAX, EVERY);
     }
 
     @Test
@@ -166,7 +167,7 @@ class PlayerDataTest {
 
     @Test
     void clampPullsLegacyPointsDownToTheBar() {
-        PlayerData data = new PlayerData(100, WEEK, DAY, 0, java.util.Map.of());
+        PlayerData data = new PlayerData(100, 0, WEEK, DAY, 0, java.util.Map.of());
 
         assertTrue(data.clamp(MAX));
         assertEquals(MAX, data.points());
@@ -273,7 +274,7 @@ class PlayerDataTest {
     // ====================================
     @Test
     void partlyClaimedPointsOnlyOweTheRemainder() {
-        PlayerData data = new PlayerData(20, WEEK, DAY, 10, java.util.Map.of());
+        PlayerData data = new PlayerData(20, 0, WEEK, DAY, 10, java.util.Map.of());
 
         // 20 / 5 - 10 / 5 = 4 - 2 = 2, not 20 / 5 = 4 and not 3
         assertEquals(2, data.claimable(5));
@@ -281,7 +282,7 @@ class PlayerDataTest {
 
     @Test
     void pointsShortOfAThresholdDoNotOweIt() {
-        PlayerData data = new PlayerData(45, WEEK, DAY, 0, java.util.Map.of());
+        PlayerData data = new PlayerData(45, 0, WEEK, DAY, 0, java.util.Map.of());
 
         // 45 / 20 - 0 / 20 = 2: the last 5 points have not reached the third
         assertEquals(2, data.claimable(20));
@@ -295,5 +296,156 @@ class PlayerDataTest {
         data.setClaimedPoints(100);
 
         assertEquals(0, data.claimable(EVERY));
+    }
+
+    // Points past the daily max are lost: they must not reach the weekly bar
+    // today, nor leak into it once the day rolls over.
+    @Test
+    void pointsPastTheDailyMaxAreLost() {
+        PlayerData data = data();
+
+        assertEquals(3, data.record(36, UNCAPPED, MAX, 3, EVERY).pointsAwarded());
+        assertEquals(3, data.dailyPoints());
+        assertEquals(3, data.points());
+
+        assertEquals(0, data.record(10, UNCAPPED, MAX, 3, EVERY).pointsAwarded());
+        assertEquals(3, data.points());
+
+        data.roll(WEEK, "2026-09-10");
+        assertEquals(0, data.dailyPoints());
+        assertEquals(3, data.record(25, UNCAPPED, MAX, 3, EVERY).pointsAwarded());
+        assertEquals(6, data.points());
+    }
+
+    // Product-owner example: dailyMax 10, barMax large enough to never bind.
+    // Earning "36 points" worth on day one and "25 points" worth on day two
+    // must land on weekly points 20 (10 + 10) and dailyPoints 10 (today only).
+    @Test
+    void productOwnerExampleTwoDaysOfThirtySixAndTwentyFive() {
+        PlayerData data = data();
+        int hugeMax = 1_000_000;
+        int dailyMax = 10;
+
+        RecordResult day1 = data.record(36, UNCAPPED, hugeMax, dailyMax, EVERY);
+        assertEquals(10, day1.pointsAwarded());
+        assertEquals(10, data.points());
+        assertEquals(10, data.dailyPoints());
+
+        data.roll(WEEK, "2026-09-10");
+
+        RecordResult day2 = data.record(25, UNCAPPED, hugeMax, dailyMax, EVERY);
+        assertEquals(10, day2.pointsAwarded());
+        assertEquals(20, data.points());
+        assertEquals(10, data.dailyPoints());
+    }
+
+    @Test
+    void partiallyRemainingBudgetTrimsTheAward() {
+        PlayerData data = data();
+        int dailyMax = 10;
+
+        data.record(8, UNCAPPED, MAX, dailyMax, EVERY);
+        RecordResult result = data.record(5, UNCAPPED, MAX, dailyMax, EVERY);
+
+        assertEquals(2, result.pointsAwarded());
+        assertEquals(10, data.dailyPoints());
+    }
+
+    @Test
+    void exhaustedBudgetAwardsNothingAndNoMilestone() {
+        PlayerData data = data();
+        int dailyMax = 10;
+
+        data.record(10, UNCAPPED, MAX, dailyMax, EVERY);
+        RecordResult result = data.record(5, UNCAPPED, MAX, dailyMax, EVERY);
+
+        assertEquals(0, result.pointsAwarded());
+        assertEquals(0, result.milestonesReached());
+        assertEquals(10, data.dailyPoints());
+    }
+
+    @Test
+    void dayRollResetsDailyPointsButKeepsWeeklyPoints() {
+        PlayerData data = data();
+        data.record(10, UNCAPPED, MAX, 10, EVERY);
+
+        data.roll(WEEK, "2026-09-10");
+
+        assertEquals(0, data.dailyPoints());
+        assertEquals(10, data.points());
+    }
+
+    @Test
+    void weekRollResetsBothWeeklyAndDailyPoints() {
+        PlayerData data = data();
+        data.record(10, UNCAPPED, MAX, 10, EVERY);
+
+        data.roll("2026-09-14", "2026-09-14");
+
+        assertEquals(0, data.dailyPoints());
+        assertEquals(0, data.points());
+    }
+
+    // Milestones must reflect what actually reached the weekly bar, not the
+    // raw earned amount before the daily clamp trims it: a raw 20 would cross
+    // two thresholds at EVERY=10, but a dailyMax of 5 trims it to 5.
+    @Test
+    void milestonesAreComputedFromTheDailyClampedAmount() {
+        PlayerData data = data();
+
+        RecordResult result = data.record(20, UNCAPPED, 1_000_000, 5, EVERY);
+
+        assertEquals(5, result.pointsAwarded());
+        assertEquals(0, result.milestonesReached());
+    }
+
+    @Test
+    void dailyMaxLargerThanBarMaxStillClampsWeeklyAtBarMax() {
+        PlayerData data = data();
+        int barMax = 5;
+
+        RecordResult result = data.record(20, UNCAPPED, barMax, 1000, EVERY);
+
+        assertEquals(barMax, data.points());
+        assertEquals(barMax, result.pointsAwarded());
+    }
+
+    // Pinning documented behaviour: dailyPoints tracks only the amount that
+    // actually landed on the weekly total, not the (possibly larger) amount
+    // earned before the weekly bar clamped it. A weekly-clamped award only
+    // consumes as much daily budget as reached the bar.
+    @Test
+    void weeklyClampedAwardConsumesOnlyWhatReachedTheBar() {
+        PlayerData data = data();
+        int barMax = 5;
+
+        RecordResult result = data.record(20, UNCAPPED, barMax, 1000, EVERY);
+
+        assertEquals(barMax, data.points());
+        assertEquals(barMax, result.pointsAwarded());
+        assertEquals(5, data.dailyPoints());
+    }
+
+    @Test
+    void zeroDailyBudgetAwardsNothing() {
+        PlayerData data = data();
+
+        RecordResult result = data.record(5, UNCAPPED, MAX, 0, EVERY);
+
+        assertEquals(0, result.pointsAwarded());
+        assertEquals(0, data.dailyPoints());
+    }
+
+    // dailyPoints already past dailyMax (e.g. read off disk after dailyMax was
+    // lowered) must not drive the remaining budget negative and give an award
+    // out of thin air.
+    @Test
+    void dailyPointsAlreadyOverTheLoweredMaxNeverGoesNegativeOrAwards() {
+        PlayerData data = new PlayerData(0, 15, WEEK, DAY, 0, java.util.Map.of());
+
+        RecordResult result = data.record(5, UNCAPPED, MAX, 10, EVERY);
+
+        assertEquals(0, result.pointsAwarded());
+        assertEquals(15, data.dailyPoints());
     }
 }

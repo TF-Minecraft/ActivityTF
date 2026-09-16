@@ -163,7 +163,7 @@ public class ActivityManager {
         }
 
         PlayerData data = store.get(uuid);
-        RecordResult result = data.record(amount, def, config.barMax(), config.rewardEvery());
+        RecordResult result = data.record(amount, def, config.barMax(), config.dailyMax(), config.rewardEvery());
         store.markDirty();
 
         // A full bar or a met daily cap awards nothing, and "+0" is worse

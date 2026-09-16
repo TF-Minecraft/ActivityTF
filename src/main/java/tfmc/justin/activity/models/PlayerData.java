@@ -18,6 +18,9 @@ public class PlayerData {
     private final Map<String, Integer> daily = new ConcurrentHashMap<>();
 
     private volatile int points;
+    // Points accepted today across all activities; anything past dailyMax is
+    // dropped and never reaches the weekly total
+    private volatile int dailyPoints;
     private volatile String weekKey;
     private volatile String dayKey;
     // ====================================
@@ -32,8 +35,10 @@ public class PlayerData {
         this.dayKey = dayKey;
     }
 
-    public PlayerData(int points, String weekKey, String dayKey, int claimedPoints, Map<String, Integer> daily) {
+    public PlayerData(int points, int dailyPoints, String weekKey, String dayKey, int claimedPoints,
+                      Map<String, Integer> daily) {
         this.points = points;
+        this.dailyPoints = dailyPoints;
         this.weekKey = weekKey;
         this.dayKey = dayKey;
         this.claimedPoints = claimedPoints;
@@ -51,12 +56,14 @@ public class PlayerData {
         if (!this.weekKey.equals(weekKey)) {
             points = 0;
             claimedPoints = 0;
+            dailyPoints = 0;
             daily.clear();
             this.weekKey = weekKey;
             changed = true;
         }
 
         if (!this.dayKey.equals(dayKey)) {
+            dailyPoints = 0;
             daily.clear();
             this.dayKey = dayKey;
             changed = true;
@@ -71,7 +78,7 @@ public class PlayerData {
     // ponytail: changing every/dailyCap mid-day can under- or over-award that
     // day by the difference; acceptable
     // ====================================
-    public RecordResult record(int amount, ActivityDef def, int max, int rewardEvery) {
+    public RecordResult record(int amount, ActivityDef def, int max, int dailyMax, int rewardEvery) {
         int before = daily.getOrDefault(def.id(), 0);
         // Saturate: a bogus /activity add 2000000000 twice must not wrap the
         // counter negative and hand out awards all over again
@@ -79,12 +86,15 @@ public class PlayerData {
         daily.put(def.id(), after);
 
         int earned = def.worth(after) - def.worth(before);
+        // Everything past today's budget is lost outright - it must not reach
+        // the weekly bar, today or later
+        earned = Math.min(earned, Math.max(0, dailyMax - dailyPoints));
         if (earned <= 0) {
             return new RecordResult(0, 0);
         }
-
         int pointsBefore = points;
         addPoints(earned, max);
+        dailyPoints += points - pointsBefore;
 
         return new RecordResult(points - pointsBefore, points / rewardEvery - pointsBefore / rewardEvery);
     }
@@ -110,6 +120,7 @@ public class PlayerData {
     public void reset(String weekKey, String dayKey) {
         points = 0;
         claimedPoints = 0;
+        dailyPoints = 0;
         daily.clear();
         this.weekKey = weekKey;
         this.dayKey = dayKey;
@@ -117,6 +128,10 @@ public class PlayerData {
 
     public int points() {
         return points;
+    }
+
+    public int dailyPoints() {
+        return dailyPoints;
     }
 
     public int count(String id) {

@@ -39,7 +39,8 @@ import java.util.List;
 public class ActivityGui implements Listener {
 
     private static final int SIZE = 54;
-    private static final int BAR_SLOT = 4;
+    private static final int DAILY_BAR_SLOT = 3;
+    private static final int BAR_SLOT = 5;
     private static final int REWARD_SLOT = 49;
     private static final int BACK_SLOT = 53;
 
@@ -94,6 +95,7 @@ public class ActivityGui implements Listener {
         PlayerData data = manager.getStore().get(player.getUniqueId());
 
         Inventory inventory = window(View.MAIN, Utils.colorize(config.guiTitle()));
+        inventory.setItem(DAILY_BAR_SLOT, dailyBarItem(config, messages, data));
         inventory.setItem(BAR_SLOT, barItem(config, messages, data));
 
         // ====================================
@@ -127,6 +129,7 @@ public class ActivityGui implements Listener {
         PlayerData data = manager.getStore().get(player.getUniqueId());
 
         Inventory inventory = window(View.GROUP, Utils.colorize(group.display()));
+        inventory.setItem(DAILY_BAR_SLOT, dailyBarItem(config, messages, data));
         inventory.setItem(BAR_SLOT, barItem(config, messages, data));
 
         List<ActivityDef> page = pageOf(config.activities(), group.id());
@@ -185,6 +188,15 @@ public class ActivityGui implements Listener {
 
         return item(Material.EXPERIENCE_BOTTLE,
             messages.get("gui.bar-name", "%points%", data.points(), "%max%", config.barMax()),
+            List.of(Utils.colorize(bar)));
+    }
+
+    private ItemStack dailyBarItem(ActivityConfiguration config, Messages messages, PlayerData data) {
+        int dailyPoints = Math.min(data.dailyPoints(), config.dailyMax());
+        String bar = Bar.render(dailyPoints, config.dailyMax(), config.barLength());
+
+        return item(Material.CLOCK,
+            messages.get("gui.daily-bar-name", "%points%", dailyPoints, "%max%", config.dailyMax()),
             List.of(Utils.colorize(bar)));
     }
 

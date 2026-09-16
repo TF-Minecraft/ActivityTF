@@ -138,7 +138,7 @@ public class PlayerStore {
             return;
         }
 
-        players.put(uuid, parse(entry, config.barMax()));
+        players.put(uuid, parse(entry, config.barMax(), config.dailyMax()));
     }
 
     // ====================================
@@ -146,7 +146,7 @@ public class PlayerStore {
     // a missing section or a key that is not a UUID - reported as null rather
     // than as a warning, so they can be exercised without a JavaPlugin.
     // ====================================
-    static PlayerData readEntry(ConfigurationSection root, String key, int barMax) {
+    static PlayerData readEntry(ConfigurationSection root, String key, int barMax, int dailyMax) {
         ConfigurationSection entry = root.getConfigurationSection(key);
         if (entry == null) {
             return null;
@@ -158,13 +158,13 @@ public class PlayerStore {
             return null;
         }
 
-        return parse(entry, barMax);
+        return parse(entry, barMax, dailyMax);
     }
 
     // ====================================
     // One entry's values, with the key already dealt with by the caller.
     // ====================================
-    private static PlayerData parse(ConfigurationSection entry, int barMax) {
+    private static PlayerData parse(ConfigurationSection entry, int barMax, int dailyMax) {
         Map<String, Integer> daily = new HashMap<>();
         ConfigurationSection dailySection = entry.getConfigurationSection("daily");
         if (dailySection != null) {
@@ -181,8 +181,9 @@ public class PlayerStore {
         // ====================================
         int points = Math.max(0, Math.min(entry.getInt("points"), barMax));
         int claimedPoints = Math.max(0, Math.min(entry.getInt("claimed-points"), points));
+        int dailyPoints = Math.max(0, Math.min(entry.getInt("daily-points"), dailyMax));
 
-        return new PlayerData(points, entry.getString("week", ""), entry.getString("day", ""),
+        return new PlayerData(points, dailyPoints, entry.getString("week", ""), entry.getString("day", ""),
             claimedPoints, daily);
     }
 
@@ -351,8 +352,11 @@ public class PlayerStore {
         for (Map.Entry<UUID, PlayerData> entry : players.entrySet()) {
             PlayerData data = entry.getValue();
             // A player who has nothing is the same as a player with no entry,
-            // and writing one per joiner grows the file for no reason
-            if (data.points() == 0 && data.claimedPoints() == 0 && data.daily().isEmpty()) {
+            // and writing one per joiner grows the file for no reason.
+            // dailyPoints() == 0 is implied by daily().isEmpty() (and vice
+            // versa) but is checked explicitly too - belt and braces.
+            if (data.points() == 0 && data.claimedPoints() == 0 && data.dailyPoints() == 0
+                && data.daily().isEmpty()) {
                 continue;
             }
 
@@ -362,6 +366,7 @@ public class PlayerStore {
             yaml.set(path + ".week", data.weekKey());
             yaml.set(path + ".day", data.dayKey());
             yaml.set(path + ".claimed-points", data.claimedPoints());
+            yaml.set(path + ".daily-points", data.dailyPoints());
             yaml.set(path + ".daily", new LinkedHashMap<>(data.daily()));
         }
         return yaml;
