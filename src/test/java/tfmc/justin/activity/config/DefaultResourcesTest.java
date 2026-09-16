@@ -179,7 +179,7 @@ class DefaultResourcesTest {
         ConfigurationSection activities = config.getConfigurationSection("activities");
         assertTrue(activities != null);
 
-        assertEquals(List.of("vote", "quest", "playtime", "market_sale", "casino_win"), inGroup(activities, "server"));
+        assertEquals(List.of("vote", "playtime", "market_sale", "casino_win"), inGroup(activities, "server"));
         assertEquals(List.of("craft_diamond_block", "craft_golden_carrot", "craft_anvil", "advcraft_item", "cook_dish",
                         "profession_upgrade", "profession_crafter", "profession_forager", "profession_herborist"),
                 inGroup(activities, "crafting"));
