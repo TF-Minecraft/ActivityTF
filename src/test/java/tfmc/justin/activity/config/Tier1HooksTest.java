@@ -34,7 +34,7 @@ class Tier1HooksTest {
 
     private static final List<String> NEW_ACTIVITY_IDS = List.of(
             "vehicle_build", "ic_chat", "furniture_place",
-            "battle_joined", "advcraft_item"
+            "battle_joined", "advcraft_item", "market_sale"
     );
 
     private static YamlConfiguration loadConfig() {
@@ -72,7 +72,8 @@ class Tier1HooksTest {
         List<String> softdepend = plugin.getStringList("softdepend");
         List<String> required = List.of(
                 "VFBuilders", "RPCharacters", "InteractibleFurniture",
-                "SimpleFactions", "AdvancedCrafting", "MMOCore"
+                "SimpleFactions", "AdvancedCrafting", "MMOCore",
+                "MarketBlock", "Archaeo"
         );
         for (String plugin1 : required) {
             assertTrue(softdepend.contains(plugin1), "softdepend should contain " + plugin1 + ", was: " + softdepend);

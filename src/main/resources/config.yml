@@ -119,6 +119,14 @@ activities:
     every: 60          # 60 counted minutes => 1 point
     points: 1
     daily-cap: 3
+  # MarketBlock: denar earned selling to the market block ('every' is denar)
+  market_sale:
+    group: server
+    display: "#e6ca40&lMarket Sales"
+    material: EMERALD
+    every: 25          # 25 denar earned => 1 point
+    points: 1
+    daily-cap: 2
   craft_diamond_block:
     group: crafting
     display: "#e6ca40&lCraft Diamond Blocks"
@@ -199,32 +207,32 @@ activities:
     every: 1
     points: 1
     daily-cap: 2
-  # MMOCore professions - uncomment to enable. They need MMOCore installed;
-  # without it they show in /activity but can never be filled.
-  #profession_crafter:
-  #  group: crafting
-  #  display: "#e6ca40&lCrafter XP"
-  #  material: CRAFTING_TABLE
-  #  every: 500       # 500 profession XP → 1 point
-  #  points: 1
-  #  daily-cap: 2
-  #  profession: crafter
-  #profession_forager:
-  #  group: crafting
-  #  display: "#e6ca40&lForager XP"
-  #  material: WHEAT
-  #  every: 500
-  #  points: 1
-  #  daily-cap: 2
-  #  profession: forager
-  #profession_herborist:
-  #  group: crafting
-  #  display: "#e6ca40&lHerborist XP"
-  #  material: FERN
-  #  every: 500
-  #  points: 1
-  #  daily-cap: 2
-  #  profession: herborist
+  # MMOCore professions - these need MMOCore installed to be fed; without it
+  # they show in /activity but can never be filled.
+  profession_crafter:
+    group: crafting
+    display: "#e6ca40&lCrafter XP"
+    material: CRAFTING_TABLE
+    every: 500       # 500 profession XP → 1 point
+    points: 1
+    daily-cap: 2
+    profession: crafter
+  profession_forager:
+    group: crafting
+    display: "#e6ca40&lForager XP"
+    material: WHEAT
+    every: 500
+    points: 1
+    daily-cap: 2
+    profession: forager
+  profession_herborist:
+    group: crafting
+    display: "#e6ca40&lHerborist XP"
+    material: FERN
+    every: 500
+    points: 1
+    daily-cap: 2
+    profession: herborist
 
 # Console commands run once per milestone (every bar.reward-every points)
 # when the player clicks the reward chest in /activity.

@@ -167,6 +167,15 @@
             <systemPath>${project.basedir}/libs/archeology-plugin-1.0.1.jar</systemPath>
         </dependency>
 
+        <!-- MarketBlock: jar-only release, compiled against for MarketSaleEvent -->
+        <dependency>
+            <groupId>local</groupId>
+            <artifactId>marketblock</artifactId>
+            <version>0.0.2</version>
+            <scope>system</scope>
+            <systemPath>${project.basedir}/libs/marketblock-0.0.2.jar</systemPath>
+        </dependency>
+
         <!-- Tests -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
