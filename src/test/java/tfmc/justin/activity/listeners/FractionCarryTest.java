@@ -1,0 +1,98 @@
+package tfmc.justin.activity.listeners;
+
+import org.junit.jupiter.api.Test;
+import tfmc.justin.activity.listeners.FractionCarry.Credit;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+// Only the fraction arithmetic: the listeners themselves need a running server
+class FractionCarryTest {
+
+    @Test
+    void wholeAndFractionalXpFloors() {
+        assertEquals(1, FractionCarry.credit(0, 1.0).amount());
+        assertEquals(1, FractionCarry.credit(0, 1.9).amount());
+        assertEquals(500, FractionCarry.credit(0, 500.4).amount());
+    }
+
+    @Test
+    void nothingWorthRecordingIsZero() {
+        assertEquals(0, FractionCarry.credit(0, 0.9).amount());
+        assertEquals(0, FractionCarry.credit(0, 0).amount());
+        assertEquals(0, FractionCarry.credit(0, -50).amount());
+        assertEquals(0, FractionCarry.credit(0, Double.NaN).amount());
+        assertEquals(0, FractionCarry.credit(0, Double.NEGATIVE_INFINITY).amount());
+    }
+
+    @Test
+    void absurdValuesClampInsteadOfOverflowing() {
+        assertEquals(Integer.MAX_VALUE, FractionCarry.credit(0, 1e18).amount());
+        assertEquals(Integer.MAX_VALUE, FractionCarry.credit(0, Double.POSITIVE_INFINITY).amount());
+        assertEquals(0, FractionCarry.credit(0.5, Double.POSITIVE_INFINITY).carry());
+    }
+
+    @Test
+    void theFractionIsCarriedNotDiscarded() {
+        Credit first = FractionCarry.credit(0, 5.5);
+        assertEquals(5, first.amount());
+        assertEquals(0.5, first.carry(), 1e-9);
+
+        Credit second = FractionCarry.credit(first.carry(), 5.5);
+        assertEquals(6, second.amount());
+        assertEquals(0.0, second.carry(), 1e-9);
+    }
+
+    // A profession tuned below 1 xp per action must still credit eventually
+    @Test
+    void repeatedSubOneGainsEventuallyCredit() {
+        double carry = 0;
+        int total = 0;
+        for (int i = 0; i < 10; i++) {
+            Credit credit = FractionCarry.credit(carry, 0.5);
+            carry = credit.carry();
+            total += credit.amount();
+        }
+        assertEquals(5, total);
+    }
+
+    // What the market listener relies on: sub-denar sales accumulate per
+    // player per activity instead of being rounded away
+    @Test
+    void carryAccumulatesPerPlayerAndActivity() {
+        FractionCarry carry = new FractionCarry();
+        java.util.UUID one = java.util.UUID.randomUUID();
+        java.util.UUID two = java.util.UUID.randomUUID();
+
+        assertEquals(0, carry.add(one, "market_sale", 0.5));
+        assertEquals(1, carry.add(one, "market_sale", 0.5));
+
+        // A different activity keeps its own leftover
+        assertEquals(0, carry.add(one, "other", 0.5));
+        // ...and so does a different player
+        assertEquals(0, carry.add(two, "market_sale", 0.5));
+
+        // Forgetting a player drops only their leftover
+        assertEquals(0, carry.add(one, "market_sale", 0.5));
+        carry.forget(one);
+        assertEquals(0, carry.add(one, "market_sale", 0.5));
+        assertEquals(1, carry.add(two, "market_sale", 0.5));
+    }
+
+    // A poisoned value contributes nothing and leaves the carry intact
+    @Test
+    void poisonedValuesCannotCorruptTheCarry() {
+        assertEquals(0.5, FractionCarry.credit(0.5, Double.NaN).carry(), 1e-9);
+        assertEquals(0.5, FractionCarry.credit(0.5, -1e9).carry(), 1e-9);
+        assertEquals(0, FractionCarry.credit(0.5, Double.NaN).amount());
+    }
+
+    @Test
+    void carryNeverReachesAWholePoint() {
+        double carry = 0;
+        for (int i = 0; i < 50; i++) {
+            Credit credit = FractionCarry.credit(carry, 0.7);
+            carry = credit.carry();
+            org.junit.jupiter.api.Assertions.assertTrue(carry >= 0 && carry < 1, "carry out of range: " + carry);
+        }
+    }
+}

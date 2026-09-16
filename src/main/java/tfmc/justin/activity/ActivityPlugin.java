@@ -15,6 +15,7 @@ import tfmc.justin.activity.listeners.GeigerListener;
 import tfmc.justin.activity.listeners.InjuryListener;
 import tfmc.justin.activity.listeners.InstrumentListener;
 import tfmc.justin.activity.listeners.JoinListener;
+import tfmc.justin.activity.listeners.MarketSaleListener;
 import tfmc.justin.activity.listeners.ProfessionUpgradeListener;
 import tfmc.justin.activity.listeners.ProfessionXpListener;
 import tfmc.justin.activity.listeners.VehicleBuildListener;
@@ -138,6 +139,12 @@ public class ActivityPlugin extends JavaPlugin {
             getServer().getPluginManager().registerEvents(
                 new ArchaeologyListener(ActivityManager.getInstance()), this);
             getLogger().info("Hooked into Archaeo.");
+        }
+
+        if (Bukkit.getPluginManager().isPluginEnabled("MarketBlock")) {
+            getServer().getPluginManager().registerEvents(
+                new MarketSaleListener(ActivityManager.getInstance()), this);
+            getLogger().info("Hooked into MarketBlock.");
         }
 
         if (Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI")) {
