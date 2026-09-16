@@ -196,19 +196,18 @@ class ActivityConfigurationStationTest {
         assertEquals(Optional.empty(), config.stationActivity("ingot-station", ""));
     }
 
-    // A second '/' in the value is not rejected as malformed (it neither
-    // starts nor ends with '/' nor is empty) - it is folded whole into the
-    // key as one string, "a/b/c". Documented here rather than left a
-    // surprise: because the key is just station + "/" + recipe concatenated,
-    // any split of that same string reproduces it, so both a query that
-    // splits it the way the config value was written and one that splits it
-    // differently match the same entry.
+    // Multiple slashes in a station: value are rejected as malformed and
+    // register nothing - so no split can ever match the activity they were
+    // meant for.
     @Test
-    void aSecondSlashIsNotRejectedAndAnySplitOfItMatches() {
-        ActivityConfiguration config = configFor(entry("c", "a/b/c"));
+    void multipleSlashesRegisterNothingAndDoNotThrow() {
+        ActivityConfiguration config = assertDoesNotThrowConfig(
+            entry("multi", "a/b/c") + entry("double", "ingot-station//flint"));
 
-        assertEquals(Optional.of("c"), config.stationActivity("a", "b/c"));
-        assertEquals(Optional.of("c"), config.stationActivity("a/b", "c"));
+        assertEquals(Optional.empty(), config.stationActivity("a", "b/c"));
+        assertEquals(Optional.empty(), config.stationActivity("a/b", "c"));
+        assertEquals(Optional.empty(), config.stationActivity("ingot-station", "flint"));
+        assertEquals(Optional.empty(), config.stationActivity("ingot-station", ""));
     }
 
     private static ActivityConfiguration assertDoesNotThrowConfig(String activitiesYaml) {

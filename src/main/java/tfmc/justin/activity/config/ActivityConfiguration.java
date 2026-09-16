@@ -376,7 +376,13 @@ public class ActivityConfiguration {
     // ====================================
     private void loadStation(Map<String, String> stations, ConfigurationSection entry, String id) {
         String station = entry.getString("station");
-        if (station == null || station.isBlank()) {
+        if (station == null) {
+            return;
+        }
+        if (station.isBlank()) {
+            plugin.getLogger().warning("Activity '" + id + "' has a malformed 'station': "
+                + Utils.safeForLog(station) + " - expected <station> or <station>/<recipe> - nothing will"
+                + " ever feed that activity.");
             return;
         }
 
@@ -412,11 +418,15 @@ public class ActivityConfiguration {
 
     // Station and recipe ids are matched case-insensitively and trimmed, on
     // both sides, so 'Ingot-Station / Flint' and 'ingot-station/flint' are
-    // the same key
+    // the same key. More than one slash is rejected as malformed.
     private static String stationKey(String station) {
         int slash = station.indexOf('/');
         if (slash < 0) {
             return normalizeStationPart(station);
+        }
+        // Reject values with more than one slash
+        if (station.indexOf('/', slash + 1) >= 0) {
+            return "";
         }
         return normalizeStationPart(station.substring(0, slash))
             + "/" + normalizeStationPart(station.substring(slash + 1));
