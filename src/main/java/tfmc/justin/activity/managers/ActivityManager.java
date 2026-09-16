@@ -352,7 +352,7 @@ public class ActivityManager {
 
     // The pool entries at least one of whose commands can be run for this
     // player's name - see canRunRewardCommand.
-    private static List<RewardEntry> runnableEntries(List<RewardEntry> pool, String name) {
+    static List<RewardEntry> runnableEntries(List<RewardEntry> pool, String name) {
         List<RewardEntry> runnable = new ArrayList<>();
         for (RewardEntry entry : pool) {
             for (String command : entry.commands()) {

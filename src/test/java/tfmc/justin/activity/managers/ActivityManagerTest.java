@@ -75,6 +75,38 @@ class ActivityManagerTest {
     }
 
     // ====================================
+    // runnableEntries: the pool narrowed to what this player's name can
+    // actually be paid from. An entry survives if at least one of its
+    // commands can run, even if the rest of its commands cannot.
+    // ====================================
+    @Test
+    void unsafeNameKeepsOnlyEntriesWithAUuidOrNoPlaceholderCommand() {
+        RewardEntry playerOnly = new RewardEntry(1, "player-only", List.of("give %player% diamond 3"));
+        RewardEntry uuidOnly = new RewardEntry(1, "uuid-only", List.of("lp user %uuid% parent add vip"));
+        RewardEntry mixed = new RewardEntry(1, "mixed", List.of("give %player% diamond 3", "say done"));
+        List<RewardEntry> pool = List.of(playerOnly, uuidOnly, mixed);
+
+        assertEquals(List.of(uuidOnly, mixed),
+            ActivityManager.runnableEntries(pool, "Bedrock Player"));
+    }
+
+    @Test
+    void safeNameKeepsEveryEntry() {
+        RewardEntry playerOnly = new RewardEntry(1, "player-only", List.of("give %player% diamond 3"));
+        RewardEntry uuidOnly = new RewardEntry(1, "uuid-only", List.of("lp user %uuid% parent add vip"));
+        RewardEntry mixed = new RewardEntry(1, "mixed", List.of("give %player% diamond 3", "say done"));
+        List<RewardEntry> pool = List.of(playerOnly, uuidOnly, mixed);
+
+        assertEquals(pool, ActivityManager.runnableEntries(pool, "Notch"));
+    }
+
+    @Test
+    void anEmptyPoolStaysEmpty() {
+        assertEquals(List.of(), ActivityManager.runnableEntries(List.of(), "Notch"));
+        assertEquals(List.of(), ActivityManager.runnableEntries(List.of(), "Bedrock Player"));
+    }
+
+    // ====================================
     // The claim arithmetic. A full claim burns every milestone the bar has
     // reached; a partial one gives back only what never went out.
     // ====================================

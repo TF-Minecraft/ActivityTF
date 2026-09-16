@@ -27,7 +27,7 @@ public record RewardEntry(int weight, String display, List<String> commands) {
         if (pool.isEmpty()) {
             return null;
         }
-        int cursor = 0;
+        long cursor = 0;
         for (RewardEntry entry : pool) {
             cursor += entry.weight();
             if (roll < cursor) {

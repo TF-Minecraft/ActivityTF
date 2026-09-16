@@ -465,6 +465,13 @@ class PlayerDataTest {
         assertEquals(List.of(20), PlayerData.due(20, 10, MILESTONES));
     }
 
+    // Config order is not guaranteed ascending; due() must sort its own
+    // output regardless of the order milestones are given in.
+    @Test
+    void dueReturnsAscendingEvenWhenMilestonesAreUnsorted() {
+        assertEquals(List.of(10, 20), PlayerData.due(30, 0, List.of(20, 10)));
+    }
+
     @Test
     void everythingClaimedOwesNothingEvenWithPointsToSpare() {
         assertEquals(List.of(), PlayerData.due(50, 20, MILESTONES));
