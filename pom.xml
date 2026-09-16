@@ -176,6 +176,24 @@
             <systemPath>${project.basedir}/libs/marketblock-0.0.2.jar</systemPath>
         </dependency>
 
+        <!-- Games: API-only stub jar, the full plugin cannot be built here -->
+        <dependency>
+            <groupId>local</groupId>
+            <artifactId>games</artifactId>
+            <version>0.1.1</version>
+            <scope>system</scope>
+            <systemPath>${project.basedir}/libs/games-0.1.1-api.jar</systemPath>
+        </dependency>
+
+        <!-- Cooking: API-only stub jar, the full plugin cannot be built here -->
+        <dependency>
+            <groupId>local</groupId>
+            <artifactId>cooking</artifactId>
+            <version>0.1.5-ALPHA</version>
+            <scope>system</scope>
+            <systemPath>${project.basedir}/libs/cooking-0.1.5-ALPHA-api.jar</systemPath>
+        </dependency>
+
         <!-- Tests -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
