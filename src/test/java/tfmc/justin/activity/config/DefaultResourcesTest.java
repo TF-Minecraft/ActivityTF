@@ -58,8 +58,8 @@ class DefaultResourcesTest {
         assertTrue(messages.getString("gui.activity-lore-today").contains("%today%"));
         assertTrue(messages.getString("gui.activity-lore-today-capped").contains("%today%"));
         assertTrue(messages.getString("gui.activity-lore-today-capped").contains("%cap%"));
-        assertTrue(messages.getString("gui.reward-lore-claimed").contains("%claimed%"));
-        assertTrue(messages.getString("gui.reward-lore-claimed").contains("%total%"));
+        assertTrue(messages.getString("gui.bar-lore-milestones").contains("%milestones%"));
+        assertTrue(messages.getString("gui.bar-lore-next").contains("%points%"));
     }
 
     private static final Pattern HEX_MARKER = Pattern.compile("#[0-9a-fA-F]{6}");
@@ -96,9 +96,13 @@ class DefaultResourcesTest {
             }
         }
 
-        List<String> rewardDisplay = config.getStringList("rewards.display");
-        for (int i = 0; i < rewardDisplay.size(); i++) {
-            assertEveryHexMarkerIsValid(rewardDisplay.get(i), "rewards.display[" + i + "]");
+        List<Map<?, ?>> pool = config.getMapList("rewards.pool");
+        assertFalse(pool.isEmpty(), "rewards.pool should ship at least one entry");
+        for (int i = 0; i < pool.size(); i++) {
+            Object display = pool.get(i).get("display");
+            assertFalse(display == null || String.valueOf(display).isBlank(),
+                "rewards.pool[" + i + "].display should not be blank");
+            assertEveryHexMarkerIsValid(String.valueOf(display), "rewards.pool[" + i + "].display");
         }
     }
 
@@ -222,14 +226,38 @@ class DefaultResourcesTest {
         }
     }
 
+    // The shipped milestones must parse as a list of ints: written inline with
+    // a trailing comment, a typo here reads as an empty list and silently
+    // falls back to the hardcoded defaults.
     @Test
-    void everyRewardDisplayLineIsNonEmpty() {
+    void theShippedMilestonesParseAsNumbers() {
         YamlConfiguration config = load("config.yml");
-        var display = config.getStringList("rewards.display");
 
-        assertFalse(display.isEmpty());
-        for (String line : display) {
-            assertFalse(line == null || line.isBlank(), "rewards.display entries should not be blank");
+        assertEquals(List.of(10, 20), config.getIntegerList("bar.milestones"));
+    }
+
+    // Every shipped pool entry must be drawable: a weight above 0, something
+    // to say in chat and at least one command to run.
+    @Test
+    void everyRewardPoolEntryIsUsable() {
+        YamlConfiguration config = load("config.yml");
+        List<Map<?, ?>> pool = config.getMapList("rewards.pool");
+
+        assertFalse(pool.isEmpty());
+        for (int i = 0; i < pool.size(); i++) {
+            Map<?, ?> entry = pool.get(i);
+            String where = "rewards.pool[" + i + "]";
+
+            Object weight = entry.get("weight");
+            assertTrue(weight instanceof Number number && number.intValue() > 0,
+                    where + ".weight should be above 0");
+
+            Object display = entry.get("display");
+            assertFalse(display == null || String.valueOf(display).isBlank(),
+                    where + ".display should not be blank");
+
+            assertTrue(entry.get("commands") instanceof List<?> commands && !commands.isEmpty(),
+                    where + ".commands should list at least one command");
         }
     }
 

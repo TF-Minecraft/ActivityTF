@@ -1,8 +1,11 @@
 package tfmc.justin.activity.managers;
 
 import org.junit.jupiter.api.Test;
+import tfmc.justin.activity.models.PlayerData;
+import tfmc.justin.activity.models.RewardEntry;
 
 import java.time.Duration;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -72,41 +75,75 @@ class ActivityManagerTest {
     }
 
     // ====================================
-    // The claim arithmetic. A full claim burns every threshold the bar has
-    // reached; a partial one gives back only what never went out.
+    // runnableEntries: the pool narrowed to what this player's name can
+    // actually be paid from. An entry survives if at least one of its
+    // commands can run, even if the rest of its commands cannot.
     // ====================================
     @Test
-    void aFullClaimBurnsEveryReachedThreshold() {
-        assertEquals(20, ActivityManager.nextClaimedPoints(20, 10));
-        // Points between thresholds do not pay for the next one
-        assertEquals(20, ActivityManager.nextClaimedPoints(27, 10));
-        assertEquals(0, ActivityManager.nextClaimedPoints(9, 10));
+    void unsafeNameKeepsOnlyEntriesWithAUuidOrNoPlaceholderCommand() {
+        RewardEntry playerOnly = new RewardEntry(1, "player-only", List.of("give %player% diamond 3"));
+        RewardEntry uuidOnly = new RewardEntry(1, "uuid-only", List.of("lp user %uuid% parent add vip"));
+        RewardEntry mixed = new RewardEntry(1, "mixed", List.of("give %player% diamond 3", "say done"));
+        List<RewardEntry> pool = List.of(playerOnly, uuidOnly, mixed);
+
+        assertEquals(List.of(uuidOnly, mixed),
+            ActivityManager.runnableEntries(pool, "Bedrock Player"));
     }
 
     @Test
-    void aPartialRollbackKeepsOnlyWhatWasPaid() {
-        // Claimed 10 before, 3 milestones were due, 1 went out: 10 + 1 * 10
-        assertEquals(20, ActivityManager.rollbackClaimedPoints(10, 1, 10));
-        assertEquals(30, ActivityManager.rollbackClaimedPoints(10, 2, 10));
+    void safeNameKeepsEveryEntry() {
+        RewardEntry playerOnly = new RewardEntry(1, "player-only", List.of("give %player% diamond 3"));
+        RewardEntry uuidOnly = new RewardEntry(1, "uuid-only", List.of("lp user %uuid% parent add vip"));
+        RewardEntry mixed = new RewardEntry(1, "mixed", List.of("give %player% diamond 3", "say done"));
+        List<RewardEntry> pool = List.of(playerOnly, uuidOnly, mixed);
+
+        assertEquals(pool, ActivityManager.runnableEntries(pool, "Notch"));
+    }
+
+    @Test
+    void anEmptyPoolStaysEmpty() {
+        assertEquals(List.of(), ActivityManager.runnableEntries(List.of(), "Notch"));
+        assertEquals(List.of(), ActivityManager.runnableEntries(List.of(), "Bedrock Player"));
+    }
+
+    // ====================================
+    // The claim arithmetic. A full claim burns every milestone the bar has
+    // reached; a partial one gives back only what never went out.
+    // ====================================
+    @Test
+    void aPartialRollbackKeepsOnlyTheMilestonesThatPaid() {
+        List<Integer> due = List.of(20, 30, 40);
+
+        // Claimed 10 before, 3 milestones were due, 1 went out
+        assertEquals(20, ActivityManager.rollbackClaimedPoints(10, 1, due));
+        assertEquals(30, ActivityManager.rollbackClaimedPoints(10, 2, due));
     }
 
     @Test
     void aRollbackNeverGoesBelowWhereItStarted() {
+        List<Integer> due = List.of(20, 30, 40);
         for (int paid = 0; paid <= 3; paid++) {
-            assertTrue(ActivityManager.rollbackClaimedPoints(10, paid, 10) >= 10);
+            assertTrue(ActivityManager.rollbackClaimedPoints(10, paid, due) >= 10);
         }
     }
 
     @Test
     void payingNothingRollsBackToExactlyWhereItStarted() {
-        assertEquals(10, ActivityManager.rollbackClaimedPoints(10, 0, 10));
-        assertEquals(0, ActivityManager.rollbackClaimedPoints(0, 0, 10));
+        assertEquals(10, ActivityManager.rollbackClaimedPoints(10, 0, List.of(20, 30)));
+        assertEquals(0, ActivityManager.rollbackClaimedPoints(0, 0, List.of(10)));
+    }
+
+    @Test
+    void payingEverythingRollsForwardToTheLastDueMilestone() {
+        List<Integer> due = List.of(20, 30, 40);
+
+        assertEquals(40, ActivityManager.rollbackClaimedPoints(10, 3, due));
+        assertEquals(40, ActivityManager.rollbackClaimedPoints(10, due.size(), due));
     }
 
     // ====================================
     // The two bounds that make a partial payout safe, over every shape the
-    // numbers can take - including a claimedBefore that is not a multiple of
-    // every, which is what a reward-every change mid-week leaves behind:
+    // numbers can take:
     //
     //   never below claimedBefore  - a failure cannot hand back a milestone
     //                                that was paid before this click
@@ -115,17 +152,17 @@ class ActivityManagerTest {
     @Test
     void aPartialRollbackStaysBetweenWhereItStartedAndAFullClaim() {
         for (int points : new int[] {0, 7, 10, 19, 20, 45}) {
-            for (int every : new int[] {5, 10, 20}) {
+            for (List<Integer> milestones : List.of(List.of(5, 10, 15, 20), List.of(10, 20), List.of(20, 40))) {
                 for (int claimedBefore : new int[] {0, 7, 10}) {
-                    int due = points / every - claimedBefore / every;
-                    if (due <= 0) {
+                    List<Integer> due = PlayerData.due(points, claimedBefore, milestones);
+                    if (due.isEmpty()) {
                         continue;
                     }
 
-                    int full = ActivityManager.nextClaimedPoints(points, every);
-                    for (int paid = 0; paid < due; paid++) {
-                        int rolledBack = ActivityManager.rollbackClaimedPoints(claimedBefore, paid, every);
-                        String shape = "points=" + points + " every=" + every
+                    int full = due.get(due.size() - 1);
+                    for (int paid = 0; paid < due.size(); paid++) {
+                        int rolledBack = ActivityManager.rollbackClaimedPoints(claimedBefore, paid, due);
+                        String shape = "points=" + points + " milestones=" + milestones
                             + " claimedBefore=" + claimedBefore + " paid=" + paid;
 
                         assertTrue(rolledBack >= claimedBefore, shape);
@@ -134,6 +171,28 @@ class ActivityManagerTest {
                 }
             }
         }
+    }
+
+    // ====================================
+    // The weighted draw. A roll is an index into the cumulative weights, so
+    // the boundaries are what matter: the last roll of one entry and the first
+    // of the next.
+    // ====================================
+    @Test
+    void aWeightedDrawWalksTheCumulativeWeights() {
+        RewardEntry common = new RewardEntry(3, "common", List.of("give %player% diamond 3"));
+        RewardEntry rare = new RewardEntry(1, "rare", List.of("give %player% netherite_ingot 1"));
+        List<RewardEntry> pool = List.of(common, rare);
+
+        assertEquals(4, RewardEntry.totalWeight(pool));
+        assertEquals(common, RewardEntry.pick(pool, 0));
+        assertEquals(common, RewardEntry.pick(pool, 2));
+        assertEquals(rare, RewardEntry.pick(pool, 3));
+    }
+
+    @Test
+    void anEmptyPoolDrawsNothing() {
+        assertNull(RewardEntry.pick(List.of(), 0));
     }
 
     // ====================================

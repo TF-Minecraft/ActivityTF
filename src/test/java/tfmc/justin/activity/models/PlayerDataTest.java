@@ -3,6 +3,8 @@ package tfmc.justin.activity.models;
 import org.bukkit.Material;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -13,7 +15,7 @@ class PlayerDataTest {
     private static final String DAY = "2026-09-09";
     private static final int MAX = 20;
     private static final int DAILY_MAX = 1000;
-    private static final int EVERY = 10;
+    private static final List<Integer> MILESTONES = List.of(10, 20);
 
     private static final ActivityDef VOTE = new ActivityDef("vote", "Vote", Material.PAPER, null, 1, 1, 5, null);
     private static final ActivityDef QUEST = new ActivityDef("quest", "Quest", Material.BOOK, null, 1, 1, 5, null);
@@ -26,7 +28,7 @@ class PlayerDataTest {
     }
 
     private RecordResult record(PlayerData data, ActivityDef def, int amount) {
-        return data.record(amount, def, MAX, DAILY_MAX, EVERY);
+        return data.record(amount, def, MAX, DAILY_MAX, MILESTONES);
     }
 
     @Test
@@ -81,7 +83,7 @@ class PlayerDataTest {
         record(data, QUEST, 5);
 
         assertEquals(MAX, data.points());
-        assertEquals(2, data.claimable(EVERY));
+        assertEquals(2, data.claimable(MILESTONES));
     }
 
     @Test
@@ -99,7 +101,7 @@ class PlayerDataTest {
         PlayerData data = data();
 
         assertEquals(2, record(data, UNCAPPED, 20).milestonesReached());
-        assertEquals(2, data.claimable(EVERY));
+        assertEquals(2, data.claimable(MILESTONES));
     }
 
     @Test
@@ -121,20 +123,20 @@ class PlayerDataTest {
 
         data.setClaimedPoints(10);
 
-        assertEquals(0, data.claimable(EVERY));
+        assertEquals(0, data.claimable(MILESTONES));
         record(data, UNCAPPED, 10);
-        assertEquals(1, data.claimable(EVERY));
+        assertEquals(1, data.claimable(MILESTONES));
     }
 
-    // A paid threshold stays paid: with a milestone counter, halving
-    // reward-every used to make every already-claimed milestone claimable again
+    // A paid milestone stays paid: adding milestones below it must not make
+    // what was already handed over claimable again
     @Test
-    void loweringRewardEveryDoesNotReviveAPaidClaim() {
+    void addingLowerMilestonesDoesNotReviveAPaidClaim() {
         PlayerData data = data();
         record(data, UNCAPPED, 10);
         data.setClaimedPoints(10);
 
-        assertEquals(0, data.claimable(EVERY / 2));
+        assertEquals(0, data.claimable(List.of(5, 10, 15, 20)));
     }
 
     @Test
@@ -171,7 +173,7 @@ class PlayerDataTest {
 
         assertTrue(data.clamp(MAX));
         assertEquals(MAX, data.points());
-        assertEquals(2, data.claimable(EVERY));
+        assertEquals(2, data.claimable(MILESTONES));
         assertFalse(data.clamp(MAX));
     }
 
@@ -227,65 +229,65 @@ class PlayerDataTest {
     }
 
     @Test
-    void claimableFollowsTheDivisionFormulaDirectly() {
+    void claimableCountsOnlyTheMilestonesReachedAndNotYetPaid() {
         PlayerData data = data();
         record(data, UNCAPPED, 15);
         data.setClaimedPoints(10);
 
-        // 15 / 5 - 10 / 5 = 3 - 2 = 1
-        assertEquals(1, data.claimable(5));
+        // 15 has reached 5, 10 and 15; 5 and 10 are already paid for
+        assertEquals(1, data.claimable(List.of(5, 10, 15, 20)));
     }
 
     @Test
-    void doublingRewardEveryAfterAFullClaimDoesNotReviveIt() {
+    void droppingMilestonesAfterAFullClaimDoesNotReviveIt() {
         PlayerData data = data();
         record(data, UNCAPPED, MAX);
-        // Claimed everything at EVERY (10): claimedPoints = (20/10)*10 = 20
-        data.setClaimedPoints((data.points() / EVERY) * EVERY);
+        // Claimed everything: the highest milestone on the bar is burned
+        data.setClaimedPoints(MAX);
 
-        assertEquals(0, data.claimable(EVERY * 2));
+        assertEquals(0, data.claimable(List.of(20)));
     }
 
     @Test
-    void nonDivisorRewardEveryAfterAFullClaimDoesNotReviveIt() {
+    void milestonesBelowAFullClaimAreNotReviveable() {
         PlayerData data = data();
         record(data, UNCAPPED, MAX);
-        data.setClaimedPoints((data.points() / EVERY) * EVERY);
+        data.setClaimedPoints(MAX);
 
-        // 7 does not evenly divide bar.max (20)
-        assertEquals(0, data.claimable(7));
+        // Every one of them is at or under what was already paid for
+        assertEquals(0, data.claimable(List.of(7, 14)));
     }
 
     @Test
-    void changingRewardEveryStillExposesAReachableUnclaimedMilestone() {
+    void changingMilestonesStillExposesAReachableUnclaimedOne() {
         PlayerData data = data();
         record(data, UNCAPPED, 10);
-        data.setClaimedPoints((data.points() / EVERY) * EVERY);
+        data.setClaimedPoints(10);
         record(data, UNCAPPED, 7);
 
-        // points=17, claimed=10. Under every=7: 17/7 - 10/7 = 2 - 1 = 1
-        assertEquals(1, data.claimable(7));
+        // points=17, claimed=10: 14 has been reached and never paid for
+        assertEquals(1, data.claimable(List.of(7, 14)));
     }
 
     // ====================================
-    // claimable() is the gap between two thresholds, not points/every: a
-    // player who has already been paid for part of the bar must be owed only
-    // what is left, or every claim would hand out the whole bar again.
+    // claimable() is what is left unpaid, not everything the bar has reached:
+    // a player who has already been paid for part of the bar must be owed only
+    // the rest, or every claim would hand out the whole bar again.
     // ====================================
     @Test
     void partlyClaimedPointsOnlyOweTheRemainder() {
         PlayerData data = new PlayerData(20, 0, WEEK, DAY, 10, java.util.Map.of());
 
-        // 20 / 5 - 10 / 5 = 4 - 2 = 2, not 20 / 5 = 4 and not 3
-        assertEquals(2, data.claimable(5));
+        // 15 and 20 are left; 5 and 10 were paid for
+        assertEquals(2, data.claimable(List.of(5, 10, 15, 20)));
     }
 
     @Test
-    void pointsShortOfAThresholdDoNotOweIt() {
+    void pointsShortOfAMilestoneDoNotOweIt() {
         PlayerData data = new PlayerData(45, 0, WEEK, DAY, 0, java.util.Map.of());
 
-        // 45 / 20 - 0 / 20 = 2: the last 5 points have not reached the third
-        assertEquals(2, data.claimable(20));
+        // 20 and 40 are reached; the last 5 points fall short of 60
+        assertEquals(2, data.claimable(List.of(20, 40, 60)));
     }
 
     @Test
@@ -295,7 +297,7 @@ class PlayerDataTest {
 
         data.setClaimedPoints(100);
 
-        assertEquals(0, data.claimable(EVERY));
+        assertEquals(0, data.claimable(MILESTONES));
     }
 
     // Points past the daily max are lost: they must not reach the weekly bar
@@ -304,16 +306,16 @@ class PlayerDataTest {
     void pointsPastTheDailyMaxAreLost() {
         PlayerData data = data();
 
-        assertEquals(3, data.record(36, UNCAPPED, MAX, 3, EVERY).pointsAwarded());
+        assertEquals(3, data.record(36, UNCAPPED, MAX, 3, MILESTONES).pointsAwarded());
         assertEquals(3, data.dailyPoints());
         assertEquals(3, data.points());
 
-        assertEquals(0, data.record(10, UNCAPPED, MAX, 3, EVERY).pointsAwarded());
+        assertEquals(0, data.record(10, UNCAPPED, MAX, 3, MILESTONES).pointsAwarded());
         assertEquals(3, data.points());
 
         data.roll(WEEK, "2026-09-10");
         assertEquals(0, data.dailyPoints());
-        assertEquals(3, data.record(25, UNCAPPED, MAX, 3, EVERY).pointsAwarded());
+        assertEquals(3, data.record(25, UNCAPPED, MAX, 3, MILESTONES).pointsAwarded());
         assertEquals(6, data.points());
     }
 
@@ -326,14 +328,14 @@ class PlayerDataTest {
         int hugeMax = 1_000_000;
         int dailyMax = 10;
 
-        RecordResult day1 = data.record(36, UNCAPPED, hugeMax, dailyMax, EVERY);
+        RecordResult day1 = data.record(36, UNCAPPED, hugeMax, dailyMax, MILESTONES);
         assertEquals(10, day1.pointsAwarded());
         assertEquals(10, data.points());
         assertEquals(10, data.dailyPoints());
 
         data.roll(WEEK, "2026-09-10");
 
-        RecordResult day2 = data.record(25, UNCAPPED, hugeMax, dailyMax, EVERY);
+        RecordResult day2 = data.record(25, UNCAPPED, hugeMax, dailyMax, MILESTONES);
         assertEquals(10, day2.pointsAwarded());
         assertEquals(20, data.points());
         assertEquals(10, data.dailyPoints());
@@ -344,8 +346,8 @@ class PlayerDataTest {
         PlayerData data = data();
         int dailyMax = 10;
 
-        data.record(8, UNCAPPED, MAX, dailyMax, EVERY);
-        RecordResult result = data.record(5, UNCAPPED, MAX, dailyMax, EVERY);
+        data.record(8, UNCAPPED, MAX, dailyMax, MILESTONES);
+        RecordResult result = data.record(5, UNCAPPED, MAX, dailyMax, MILESTONES);
 
         assertEquals(2, result.pointsAwarded());
         assertEquals(10, data.dailyPoints());
@@ -356,8 +358,8 @@ class PlayerDataTest {
         PlayerData data = data();
         int dailyMax = 10;
 
-        data.record(10, UNCAPPED, MAX, dailyMax, EVERY);
-        RecordResult result = data.record(5, UNCAPPED, MAX, dailyMax, EVERY);
+        data.record(10, UNCAPPED, MAX, dailyMax, MILESTONES);
+        RecordResult result = data.record(5, UNCAPPED, MAX, dailyMax, MILESTONES);
 
         assertEquals(0, result.pointsAwarded());
         assertEquals(0, result.milestonesReached());
@@ -367,7 +369,7 @@ class PlayerDataTest {
     @Test
     void dayRollResetsDailyPointsButKeepsWeeklyPoints() {
         PlayerData data = data();
-        data.record(10, UNCAPPED, MAX, 10, EVERY);
+        data.record(10, UNCAPPED, MAX, 10, MILESTONES);
 
         data.roll(WEEK, "2026-09-10");
 
@@ -378,7 +380,7 @@ class PlayerDataTest {
     @Test
     void weekRollResetsBothWeeklyAndDailyPoints() {
         PlayerData data = data();
-        data.record(10, UNCAPPED, MAX, 10, EVERY);
+        data.record(10, UNCAPPED, MAX, 10, MILESTONES);
 
         data.roll("2026-09-14", "2026-09-14");
 
@@ -388,12 +390,12 @@ class PlayerDataTest {
 
     // Milestones must reflect what actually reached the weekly bar, not the
     // raw earned amount before the daily clamp trims it: a raw 20 would cross
-    // two thresholds at EVERY=10, but a dailyMax of 5 trims it to 5.
+    // two milestones (10 and 20), but a dailyMax of 5 trims it to 5.
     @Test
     void milestonesAreComputedFromTheDailyClampedAmount() {
         PlayerData data = data();
 
-        RecordResult result = data.record(20, UNCAPPED, 1_000_000, 5, EVERY);
+        RecordResult result = data.record(20, UNCAPPED, 1_000_000, 5, MILESTONES);
 
         assertEquals(5, result.pointsAwarded());
         assertEquals(0, result.milestonesReached());
@@ -404,7 +406,7 @@ class PlayerDataTest {
         PlayerData data = data();
         int barMax = 5;
 
-        RecordResult result = data.record(20, UNCAPPED, barMax, 1000, EVERY);
+        RecordResult result = data.record(20, UNCAPPED, barMax, 1000, MILESTONES);
 
         assertEquals(barMax, data.points());
         assertEquals(barMax, result.pointsAwarded());
@@ -419,7 +421,7 @@ class PlayerDataTest {
         PlayerData data = data();
         int barMax = 5;
 
-        RecordResult result = data.record(20, UNCAPPED, barMax, 1000, EVERY);
+        RecordResult result = data.record(20, UNCAPPED, barMax, 1000, MILESTONES);
 
         assertEquals(barMax, data.points());
         assertEquals(barMax, result.pointsAwarded());
@@ -430,7 +432,7 @@ class PlayerDataTest {
     void zeroDailyBudgetAwardsNothing() {
         PlayerData data = data();
 
-        RecordResult result = data.record(5, UNCAPPED, MAX, 0, EVERY);
+        RecordResult result = data.record(5, UNCAPPED, MAX, 0, MILESTONES);
 
         assertEquals(0, result.pointsAwarded());
         assertEquals(0, data.dailyPoints());
@@ -443,9 +445,84 @@ class PlayerDataTest {
     void dailyPointsAlreadyOverTheLoweredMaxNeverGoesNegativeOrAwards() {
         PlayerData data = new PlayerData(0, 15, WEEK, DAY, 0, java.util.Map.of());
 
-        RecordResult result = data.record(5, UNCAPPED, MAX, 10, EVERY);
+        RecordResult result = data.record(5, UNCAPPED, MAX, 10, MILESTONES);
 
         assertEquals(0, result.pointsAwarded());
         assertEquals(15, data.dailyPoints());
+    }
+
+    // ====================================
+    // PlayerData.due: the static helper claim() and claimable() both go
+    // through. Milestones [10, 20] throughout.
+    // ====================================
+    @Test
+    void pointsExactlyOnAMilestoneOwesIt() {
+        assertEquals(List.of(10), PlayerData.due(10, 0, MILESTONES));
+    }
+
+    @Test
+    void reachingTheSecondMilestoneOwesOnlyWhatWasNotYetClaimed() {
+        assertEquals(List.of(20), PlayerData.due(20, 10, MILESTONES));
+    }
+
+    // Config order is not guaranteed ascending; due() must sort its own
+    // output regardless of the order milestones are given in.
+    @Test
+    void dueReturnsAscendingEvenWhenMilestonesAreUnsorted() {
+        assertEquals(List.of(10, 20), PlayerData.due(30, 0, List.of(20, 10)));
+    }
+
+    @Test
+    void everythingClaimedOwesNothingEvenWithPointsToSpare() {
+        assertEquals(List.of(), PlayerData.due(50, 20, MILESTONES));
+    }
+
+    // A stale claimedPoints above the current points (e.g. milestones edited
+    // down after a claim) must owe nothing, not a negative count
+    @Test
+    void claimedAboveCurrentPointsOwesNothingAndNeverGoesNegative() {
+        assertEquals(List.of(), PlayerData.due(5, 100, MILESTONES));
+    }
+
+    @Test
+    void anEmptyMilestoneListIsNeverDueAndNeverCountsAsReached() {
+        PlayerData data = data();
+
+        assertEquals(List.of(), PlayerData.due(100, 0, List.of()));
+        assertEquals(0, data.claimable(List.of()));
+        assertEquals(0, data.record(25, UNCAPPED, MAX, DAILY_MAX, List.of()).milestonesReached());
+    }
+
+    @Test
+    void oneRecordCallJumpingPastBothMilestonesCountsBothAsReached() {
+        PlayerData data = data();
+
+        RecordResult result = data.record(25, UNCAPPED, 1_000_000, 1_000_000, MILESTONES);
+
+        assertEquals(2, result.milestonesReached());
+    }
+
+    // The same two milestones must come due regardless of how the points were
+    // earned: 10 in one day then 10 the next, versus 5 a day for four days.
+    @Test
+    void theSameTwoMilestonesComeDueRegardlessOfPace() {
+        PlayerData playerA = new PlayerData(WEEK, DAY);
+        record(playerA, UNCAPPED, 10);
+        playerA.roll(WEEK, "2026-09-10");
+        record(playerA, UNCAPPED, 10);
+
+        PlayerData playerB = new PlayerData(WEEK, DAY);
+        record(playerB, UNCAPPED, 5);
+        playerB.roll(WEEK, "2026-09-10");
+        record(playerB, UNCAPPED, 5);
+        playerB.roll(WEEK, "2026-09-11");
+        record(playerB, UNCAPPED, 5);
+        playerB.roll(WEEK, "2026-09-12");
+        record(playerB, UNCAPPED, 5);
+
+        assertEquals(20, playerA.points());
+        assertEquals(20, playerB.points());
+        assertEquals(List.of(10, 20), PlayerData.due(playerA.points(), playerA.claimedPoints(), MILESTONES));
+        assertEquals(List.of(10, 20), PlayerData.due(playerB.points(), playerB.claimedPoints(), MILESTONES));
     }
 }

@@ -9,6 +9,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import tfmc.justin.activity.hooks.TLibsItems;
 import tfmc.justin.activity.models.ActivityDef;
 import tfmc.justin.activity.models.GroupDef;
+import tfmc.justin.activity.models.RewardEntry;
 
 import tfmc.justin.activity.utils.ItemPath;
 import tfmc.justin.activity.utils.Utils;
@@ -24,6 +25,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.TreeSet;
 import java.util.function.Predicate;
 
 // ====================================
@@ -110,15 +112,17 @@ public class ActivityConfiguration {
     private volatile DayOfWeek resetDay;
     private volatile int resetHour;
 
-    private List<String> rewardCommands;
-    private List<String> rewardDisplay;
+    // Replaced wholesale on reload and read on the main thread only, but kept
+    // immutable so a reward command that reloads mid-claim cannot change the
+    // list the claim is paying out of
+    private volatile List<RewardEntry> rewardPool = List.of();
 
     private String guiTitle;
-    private Material rewardMaterial;
 
     private volatile int barMax;
     private volatile int dailyMax;
-    private volatile int rewardEvery;
+    // Ascending, deduped, every value inside 1..barMax. Never empty.
+    private volatile List<Integer> milestones = List.of();
     private volatile int barLength;
 
     private String goalCompleteSound;
@@ -167,19 +171,14 @@ public class ActivityConfiguration {
                 + " fall back to PAPER and those crafts are never credited.");
         }
 
-        rewardCommands = config.getStringList("rewards.commands");
-        if (rewardCommands.isEmpty()) {
-            plugin.getLogger().warning("rewards.commands is empty - a full bar can be reached but nothing"
-                + " can ever be claimed.");
-        }
-        rewardDisplay = config.getStringList("rewards.display");
+        rewardPool = loadRewardPool(config);
 
         guiTitle = config.getString("gui.title", "&8Weekly Activity");
-        rewardMaterial = bareMaterial(config.getString("gui.reward-material", "CHEST"), "gui.reward-material");
 
         barMax = Math.max(1, config.getInt("bar.max", 50));
         dailyMax = Math.max(1, config.getInt("bar.daily-max", 10));
-        rewardEvery = Math.max(1, Math.min(barMax, config.getInt("bar.reward-every", 10)));
+        // After barMax: every milestone is validated against it
+        milestones = loadMilestones(config.getIntegerList("bar.milestones"));
         barLength = barLength(config.getInt("bar.length", 40));
 
         goalCompleteSound = soundKey(config.getString("sounds.goal-complete", ""));
@@ -559,6 +558,84 @@ public class ActivityConfiguration {
     }
 
     // ====================================
+    // The reward pool. Every entry is validated on its own: a bad weight or an
+    // entry with nothing to run is dropped with a warning rather than taking
+    // the rest of the pool down with it. Weights are clamped so a pool of
+    // absurd numbers cannot overflow the cumulative total the draw walks.
+    // ====================================
+    private List<RewardEntry> loadRewardPool(FileConfiguration config) {
+        List<RewardEntry> pool = new ArrayList<>();
+        int index = 0;
+        for (Map<?, ?> entry : config.getMapList("rewards.pool")) {
+            String where = "rewards.pool[" + index++ + "]";
+
+            int weight = entry.get("weight") instanceof Number number ? number.intValue() : 1;
+            if (weight <= 0) {
+                plugin.getLogger().warning(where + " has weight " + weight + " - a weight must be above 0,"
+                    + " so this reward is skipped and can never be drawn.");
+                continue;
+            }
+
+            List<String> commands = new ArrayList<>();
+            if (entry.get("commands") instanceof List<?> raw) {
+                for (Object command : raw) {
+                    if (command != null) {
+                        commands.add(String.valueOf(command));
+                    }
+                }
+            }
+            if (commands.isEmpty()) {
+                plugin.getLogger().warning(where + " has no commands - skipped, since drawing it would pay"
+                    + " the player nothing.");
+                continue;
+            }
+
+            Object display = entry.get("display");
+            pool.add(new RewardEntry(Math.min(weight, 1_000_000),
+                display == null ? "" : String.valueOf(display), List.copyOf(commands)));
+        }
+
+        if (pool.isEmpty()) {
+            plugin.getLogger().warning("rewards.pool is empty or every entry in it was dropped - a milestone"
+                + " can be reached but nothing can ever be claimed.");
+        }
+        return List.copyOf(pool);
+    }
+
+    // ====================================
+    // The point totals a reward can be claimed at. Sorted and deduped, since
+    // claim() walks them in order and pays each one once; anything outside the
+    // bar is dropped, because a milestone past bar.max can never be reached
+    // and one at 0 would be claimable before anything was done.
+    // ====================================
+    private List<Integer> loadMilestones(List<Integer> raw) {
+        TreeSet<Integer> milestones = new TreeSet<>();
+        for (Integer milestone : raw) {
+            if (milestone == null || milestone < 1 || milestone > barMax) {
+                plugin.getLogger().warning("bar.milestones value " + milestone + " is outside 1-" + barMax
+                    + " - ignored.");
+                continue;
+            }
+            milestones.add(milestone);
+        }
+
+        if (milestones.isEmpty()) {
+            plugin.getLogger().warning("bar.milestones is missing or has no usable value - falling back to"
+                + " 10 and 20, clipped to bar.max (" + barMax + ").");
+            for (int fallback : new int[] {10, 20}) {
+                if (fallback <= barMax) {
+                    milestones.add(fallback);
+                }
+            }
+            // A bar too small for either default still needs one reward on it
+            if (milestones.isEmpty()) {
+                milestones.add(barMax);
+            }
+        }
+        return List.copyOf(milestones);
+    }
+
+    // ====================================
     // Seven days of every capped activity, itself capped by bar.daily-max, is
     // the ceiling - if that is under the first milestone nothing can ever be
     // claimed. bar.daily-max alone bounds every day even when an activity is
@@ -579,10 +656,11 @@ public class ActivityConfiguration {
         long weekly = dailyCeiling * 7;
         String boundBy = allCapped && dailyCapSum <= dailyMax ? "per-activity daily-caps" : "bar.daily-max";
 
-        if (weekly < rewardEvery) {
+        int first = milestones.get(0);
+        if (weekly < first) {
             plugin.getLogger().warning("All activities together are capped at " + weekly
                 + " points a week (bound by " + boundBy + ") - nobody can reach the first reward at "
-                + rewardEvery + ".");
+                + first + ".");
         }
     }
 
@@ -605,20 +683,6 @@ public class ActivityConfiguration {
         // whole file, instead of once per icon.
         pluginPathConfigured = true;
         return itemPathsUsable ? resolved : null;
-    }
-
-    // ====================================
-    // gui.reward-material is the one item-valued key that is not an item path:
-    // it is the chest in the GUI, not an activity's icon or tracked craft, so
-    // it reads bare Material names only, exactly as before.
-    // ====================================
-    private Material bareMaterial(String name, String path) {
-        Material material = name == null ? null : Material.matchMaterial(name);
-        if (material == null) {
-            plugin.getLogger().warning("Unknown material '" + name + "' at " + path + " - using PAPER.");
-            return Material.PAPER;
-        }
-        return material;
     }
 
     private Material material(String name, String path) {
@@ -760,20 +824,12 @@ public class ActivityConfiguration {
         return resetHour;
     }
 
-    public List<String> rewardCommands() {
-        return Collections.unmodifiableList(rewardCommands);
-    }
-
-    public List<String> rewardDisplay() {
-        return Collections.unmodifiableList(rewardDisplay);
+    public List<RewardEntry> rewardPool() {
+        return rewardPool;
     }
 
     public String guiTitle() {
         return guiTitle;
-    }
-
-    public Material rewardMaterial() {
-        return rewardMaterial;
     }
 
     public int barMax() {
@@ -784,8 +840,8 @@ public class ActivityConfiguration {
         return dailyMax;
     }
 
-    public int rewardEvery() {
-        return rewardEvery;
+    public List<Integer> milestones() {
+        return milestones;
     }
 
     public int barLength() {
