@@ -9,12 +9,14 @@ import tfmc.justin.activity.config.Messages;
 import tfmc.justin.activity.models.ActivityDef;
 import tfmc.justin.activity.models.PlayerData;
 import tfmc.justin.activity.models.RecordResult;
+import tfmc.justin.activity.models.RewardEntry;
 import tfmc.justin.activity.store.PlayerStore;
 import tfmc.justin.activity.utils.Utils;
 
 import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.regex.Pattern;
 
 // ====================================
@@ -44,6 +46,10 @@ public class ActivityManager {
     // A store that never loaded refuses every save for the rest of the
     // session, so saying so once per session is enough
     private boolean warnedStoreNotLoaded;
+
+    // Same idea for an empty reward pool, which a player can hit at click rate
+    // - said once per load rather than once per click
+    private boolean warnedEmptyPool;
 
     // One tick a minute crediting online, non-idle players. Cancelled by
     // shutdown; reload leaves it running, since it reads the AFK threshold
@@ -163,7 +169,7 @@ public class ActivityManager {
         }
 
         PlayerData data = store.get(uuid);
-        RecordResult result = data.record(amount, def, config.barMax(), config.dailyMax(), config.rewardEvery());
+        RecordResult result = data.record(amount, def, config.barMax(), config.dailyMax(), config.milestones());
         store.markDirty();
 
         // A full bar or a met daily cap awards nothing, and "+0" is worse
@@ -193,18 +199,19 @@ public class ActivityManager {
     }
 
     // ====================================
-    // Hands over every milestone the player has reached but not yet claimed.
-    // Only ever called for an online player (a GUI click), so %player% always
-    // resolves. Returns how many milestones were actually paid: 0 covers both
-    // "nothing was due" and every refusal below, all of which leave the
-    // thresholds there to claim once an operator has fixed what broke.
+    // Hands over every milestone the player has reached but not yet claimed,
+    // one draw from the reward pool per milestone. Only ever called for an
+    // online player (a GUI click), so %player% always resolves. Returns how
+    // many milestones were actually paid: 0 covers both "nothing was due" and
+    // every refusal below, all of which leave the milestones there to claim
+    // once an operator has fixed what broke.
     //
     // The order is the whole point, because a reward has real in-game value:
     //
     //   1. Every reason to refuse is checked before anything is touched. The
     //      unsafe-name case especially - that is what a Bedrock player clicking
-    //      the chest over and over hits, and it must not cost a disk write.
-    //   2. The thresholds are burned and written to disk BEFORE the first
+    //      the bar over and over hits, and it must not cost a disk write.
+    //   2. The milestones are burned and written to disk BEFORE the first
     //      command runs: a crash between the give and the next autosave would
     //      otherwise hand the whole lot out again on restart, and a reward
     //      command that loops back in here must find them already paid.
@@ -215,7 +222,7 @@ public class ActivityManager {
     //      went out stays burned; the rest goes back, never below where it
     //      started.
     //
-    // The command list is snapshotted once, so a reward command that runs
+    // The pool is snapshotted once, so a reward command that runs
     // /activity reload cannot change what the rest of the loop hands out.
     // ====================================
     public int claim(Player player) {
@@ -235,24 +242,30 @@ public class ActivityManager {
         }
 
         PlayerData data = store.get(player.getUniqueId());
-        int every = config.rewardEvery();
-        int due = data.claimable(every);
-        if (due == 0) {
+        List<Integer> due = PlayerData.due(data.points(), data.claimedPoints(), config.milestones());
+        if (due.isEmpty()) {
             return 0;
         }
 
-        List<String> commands = List.copyOf(config.rewardCommands());
+        List<RewardEntry> pool = config.rewardPool();
 
-        // Nothing configured to hand over: burning the thresholds here would
-        // pay the player in silence. Load already warned about this.
-        if (commands.isEmpty()) {
+        // Nothing configured to hand over: burning the milestones here would
+        // pay the player in silence. Load already warned about this, but a
+        // claim is the moment an operator can tie the warning to a player.
+        if (pool.isEmpty()) {
+            if (!warnedEmptyPool) {
+                warnedEmptyPool = true;
+                plugin.getLogger().warning("Handed nothing to " + player.getUniqueId()
+                    + ": rewards.pool has no usable entry, so the milestone stays claimable.");
+            }
             return 0;
         }
 
-        // A name no command can take is a failure the player should hear
-        // about, and it is answered here - before any mutation or save -
-        // because it is the one refusal a player can trigger at click rate
-        if (!canRunAnyRewardCommand(commands, player.getName())) {
+        // A name no command in the pool can take is a failure the player
+        // should hear about, and it is answered here - before any mutation or
+        // save - because it is the one refusal a player can trigger at click
+        // rate
+        if (!canRunAnyRewardCommand(pool, player.getName())) {
             plugin.getLogger().warning("No reward command could be run for '"
                 + Utils.safeForLog(player.getName()) + "': the name cannot be safely pasted into a console"
                 + " command. Use %uuid%-based reward commands to support Bedrock/unsafe names.");
@@ -261,7 +274,7 @@ public class ActivityManager {
         }
 
         int claimedBefore = data.claimedPoints();
-        int claimedAfter = nextClaimedPoints(data.points(), every);
+        int claimedAfter = due.get(due.size() - 1);
         data.setClaimedPoints(claimedAfter);
         store.markDirty();
 
@@ -276,11 +289,13 @@ public class ActivityManager {
         }
 
         int paid = 0;
-        for (int i = 0; i < due; i++) {
-            if (!dispatchRewards(player, commands)) {
+        for (int i = 0; i < due.size(); i++) {
+            RewardEntry drawn = draw(pool);
+            if (drawn == null || !dispatchRewards(player, drawn.commands())) {
                 break;
             }
             paid++;
+            player.sendMessage(messages.get("reward-claimed", "%reward%", Utils.colorize(drawn.display())));
         }
 
         // ====================================
@@ -289,40 +304,47 @@ public class ActivityManager {
         // thing to do about it is to say exactly what each holds so an
         // operator can put the file right by hand.
         // ====================================
-        if (paid < due) {
-            int rolledBack = rollbackClaimedPoints(claimedBefore, paid, every);
+        if (paid < due.size()) {
+            int rolledBack = rollbackClaimedPoints(claimedBefore, paid, due);
             data.setClaimedPoints(rolledBack);
             store.markDirty();
             if (!store.saveNow()) {
                 plugin.getLogger().severe("Reward payout for " + player.getUniqueId() + " is out of sync:"
-                    + " paid " + paid + " of " + due + " milestones, claimed-points is " + rolledBack
+                    + " paid " + paid + " of " + due.size() + " milestones, claimed-points is " + rolledBack
                     + " in memory but " + claimedAfter + " on disk. Repair " + PlayerStore.FILE + " by hand.");
             }
             player.sendMessage(messages.get("reward-failed"));
             return paid;
         }
 
-        player.sendMessage(messages.get("reward-claimed", "%count%", paid));
         playSound(player, config.barCompleteSound());
         return paid;
     }
 
-    // The threshold that every point on the bar has now been paid for
-    static int nextClaimedPoints(int points, int every) {
-        return points / every * every;
+    // One weighted draw from the pool. Null only on an empty pool.
+    private static RewardEntry draw(List<RewardEntry> pool) {
+        int total = RewardEntry.totalWeight(pool);
+        if (total <= 0) {
+            return null;
+        }
+        return RewardEntry.pick(pool, ThreadLocalRandom.current().nextInt(total));
     }
 
-    // What stays burned when only part of the payout went out. Built up from
-    // claimedBefore rather than down from the new threshold, so a failure can
-    // never hand back a milestone that was paid before this click.
-    static int rollbackClaimedPoints(int claimedBefore, int paid, int every) {
-        return claimedBefore + paid * every;
+    // ====================================
+    // What stays burned when only part of the payout went out: the last
+    // milestone that actually paid, or where this click started when none
+    // did. Never hands back a milestone paid before this click.
+    // ====================================
+    static int rollbackClaimedPoints(int claimedBefore, int paid, List<Integer> due) {
+        return paid <= 0 ? claimedBefore : due.get(Math.min(paid, due.size()) - 1);
     }
 
-    private static boolean canRunAnyRewardCommand(List<String> commands, String name) {
-        for (String command : commands) {
-            if (canRunRewardCommand(command, name)) {
-                return true;
+    private static boolean canRunAnyRewardCommand(List<RewardEntry> pool, String name) {
+        for (RewardEntry entry : pool) {
+            for (String command : entry.commands()) {
+                if (canRunRewardCommand(command, name)) {
+                    return true;
+                }
             }
         }
         return false;
@@ -331,8 +353,8 @@ public class ActivityManager {
     // ====================================
     // True only if at least one command actually ran. The name check is per
     // command rather than per player: an unsafe name skips the ones that paste
-    // it and leaves the %uuid%-only ones working. The list is handed in so
-    // every milestone of one claim pays out of the same snapshot.
+    // it and leaves the %uuid%-only ones working. A drawn entry none of whose
+    // commands could run counts as unpaid, so that milestone stays claimable.
     // ====================================
     private boolean dispatchRewards(Player player, List<String> commands) {
         String name = player.getName();
@@ -372,13 +394,16 @@ public class ActivityManager {
     // logged in
     public void onJoin(Player player) {
         PlayerData data = store.rolled(player.getUniqueId());
-        if (data != null && data.claimable(config.rewardEvery()) > 0) {
+        if (data != null && data.claimable(config.milestones()) > 0) {
             player.sendMessage(config.messages().get("reward-ready"));
         }
     }
 
     public void reload() {
         config.load();
+        // An operator who fixed rewards.pool deserves to hear about it again
+        // if they got it wrong twice
+        warnedEmptyPool = false;
     }
 
     private void playSound(Player player, String soundKey) {

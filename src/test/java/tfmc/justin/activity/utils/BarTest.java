@@ -2,6 +2,8 @@ package tfmc.justin.activity.utils;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -82,5 +84,36 @@ class BarTest {
 
         assertFalse(colorized.contains("#"), "no raw '#' should remain: " + colorized);
         assertTrue(colorized.contains("§x"), "expected bungee hex color sequences: " + colorized);
+    }
+
+    // ====================================
+    // The milestone markers: one segment each, at round(milestone / max *
+    // length), keeping the colour of the run they land in.
+    // ====================================
+    @Test
+    void milestonesMarkTheirSegment() {
+        // max 20, length 10: 10 points marks segment index 5, 20 points lands
+        // on index 10 - off the end, so it marks the last segment instead
+        String bar = Bar.render(0, 20, 10, List.of(10, 20));
+
+        assertEquals("|||||┃|||┃", segments(bar));
+    }
+
+    @Test
+    void aMarkerKeepsTheColourOfItsPosition() {
+        // Half full: both markers sit in the unfilled run and keep its colour
+        assertEquals("#aaaaaa[#558000" + "|".repeat(5) + "#1c2a00┃|||┃#aaaaaa]",
+            Bar.render(10, 20, 10, List.of(10, 20)));
+    }
+
+    @Test
+    void milestonesOutsideTheBarAreIgnored() {
+        assertEquals(render(0), Bar.render(0, 20, 10, List.of(0, -5)));
+        assertEquals("#aaaaaa[#aaaaaa]", Bar.render(10, 20, 0, List.of(10)));
+    }
+
+    @Test
+    void theSegmentCountIsUnchangedByMarkers() {
+        assertEquals(10, segments(Bar.render(7, 20, 10, List.of(5, 10, 15, 20))).length());
     }
 }

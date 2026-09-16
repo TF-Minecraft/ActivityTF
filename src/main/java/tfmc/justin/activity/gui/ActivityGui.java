@@ -29,19 +29,18 @@ import java.util.List;
 
 // ====================================
 // Two double-chest views of the week. The main one - what /activity opens -
-// holds the bar on top, one item per group in the grid, and the reward chest
-// at the bottom, clicking which claims whatever milestones are due. Clicking
-// a group opens the second view: the same bar, that group's activities in the
-// same grid, and a Back button. Also the click listener - a marker holder is
-// the cheapest way to tell our inventories apart from every other one, and it
-// carries which of the two views was clicked.
+// holds the bar on top and one item per group in the grid. The weekly bar is
+// also the claim button: clicking it hands over whatever milestones are due.
+// Clicking a group opens the second view: the same bar, that group's
+// activities in the same grid, and a Back button. Also the click listener -
+// a marker holder is the cheapest way to tell our inventories apart from every
+// other one, and it carries which of the two views was clicked.
 // ====================================
 public class ActivityGui implements Listener {
 
     private static final int SIZE = 54;
     private static final int DAILY_BAR_SLOT = 3;
     private static final int BAR_SLOT = 5;
-    private static final int REWARD_SLOT = 49;
     private static final int BACK_SLOT = 53;
 
     // ====================================
@@ -111,17 +110,15 @@ public class ActivityGui implements Listener {
             slot++;
         }
 
-        inventory.setItem(REWARD_SLOT, rewardItem(config, messages, data));
-
         fillEmptySlots(inventory, messages);
 
         return inventory;
     }
 
     // ====================================
-    // The second level: one group's activities, in config order, and nothing
-    // else live but the Back button. No reward chest here - claiming stays on
-    // the main view, which Back is the only way out to.
+    // The second level: one group's activities, in config order, plus the
+    // Back button. The bar claims here too, so a player deep in a group does
+    // not have to walk back out to take a reward.
     // ====================================
     public Inventory buildGroup(Player player, GroupDef group) {
         ActivityConfiguration config = manager.getConfiguration();
@@ -183,12 +180,53 @@ public class ActivityGui implements Listener {
         }
     }
 
+    // ====================================
+    // The weekly bar, which is also the claim button: the marked-up bar, where
+    // the rewards sit, and then what the player can do about it right now.
+    // ====================================
     private ItemStack barItem(ActivityConfiguration config, Messages messages, PlayerData data) {
-        String bar = Bar.render(data.points(), config.barMax(), config.barLength());
+        List<Integer> milestones = config.milestones();
+        String bar = Bar.render(data.points(), config.barMax(), config.barLength(), milestones);
+        int due = data.claimable(milestones);
+        Integer next = nextMilestone(data, milestones);
+
+        List<String> lore = new ArrayList<>();
+        lore.add(Utils.colorize(bar));
+        lore.add(messages.get("gui.bar-lore-milestones", "%milestones%", join(milestones)));
+        lore.add(" ");
+        if (due > 0) {
+            lore.add(messages.get("gui.reward-click", "%count%", due));
+        } else if (next != null) {
+            lore.add(messages.get("gui.bar-lore-next", "%points%", next));
+        } else {
+            lore.add(messages.get("gui.bar-lore-done"));
+        }
 
         return item(Material.EXPERIENCE_BOTTLE,
             messages.get("gui.bar-name", "%points%", data.points(), "%max%", config.barMax()),
-            List.of(Utils.colorize(bar)));
+            lore);
+    }
+
+    // The lowest milestone still ahead of what has been paid for, or null once
+    // every one of them has been claimed this week
+    private static Integer nextMilestone(PlayerData data, List<Integer> milestones) {
+        for (Integer milestone : milestones) {
+            if (milestone > data.claimedPoints()) {
+                return milestone;
+            }
+        }
+        return null;
+    }
+
+    private static String join(List<Integer> milestones) {
+        StringBuilder joined = new StringBuilder();
+        for (int i = 0; i < milestones.size(); i++) {
+            if (i > 0) {
+                joined.append(i == milestones.size() - 1 ? " and " : ", ");
+            }
+            joined.append(milestones.get(i));
+        }
+        return joined.toString();
     }
 
     private ItemStack dailyBarItem(ActivityConfiguration config, Messages messages, PlayerData data) {
@@ -246,22 +284,6 @@ public class ActivityGui implements Listener {
             : messages.get("gui.activity-lore-today", "%today%", today));
 
         return item(iconStack(config, def.icon(), def.iconPath()), Utils.colorize(def.display()), lore);
-    }
-
-    private ItemStack rewardItem(ActivityConfiguration config, Messages messages, PlayerData data) {
-        int due = data.claimable(config.rewardEvery());
-
-        List<String> lore = new ArrayList<>();
-        lore.add(messages.get("gui.reward-lore-header", "%every%", config.rewardEvery()));
-        lore.addAll(Messages.colorize(config.rewardDisplay()));
-        lore.add(messages.get("gui.reward-lore-claimed", "%claimed%", data.claimedPoints() / config.rewardEvery(),
-            "%total%", config.barMax() / config.rewardEvery()));
-        lore.add(" ");
-        lore.add(due > 0
-            ? messages.get("gui.reward-click", "%count%", due)
-            : messages.get("gui.reward-nothing"));
-
-        return item(config.rewardMaterial(), messages.get("gui.reward-name"), lore);
     }
 
     // ====================================
@@ -328,7 +350,7 @@ public class ActivityGui implements Listener {
     }
 
     // ====================================
-    // The main view's two live controls: the reward chest claims, and a group
+    // The main view's two live controls: the weekly bar claims, and a group
     // item opens that group. The item is what is asked for the group id - a
     // config reloaded between opening and clicking can leave a tile naming a
     // group that is gone, and that click is simply ignored.
@@ -342,20 +364,25 @@ public class ActivityGui implements Listener {
             return;
         }
 
-        if (event.getRawSlot() != REWARD_SLOT) {
-            GroupDef group = clickedGroup(event.getCurrentItem());
-            if (group != null) {
-                player.openInventory(buildGroup(player, group));
-            }
+        if (event.getRawSlot() == BAR_SLOT) {
+            claim(player, event);
             return;
         }
 
-        claim(player, event);
+        GroupDef group = clickedGroup(event.getCurrentItem());
+        if (group != null) {
+            player.openInventory(buildGroup(player, group));
+        }
     }
 
-    // Back is the only thing that does anything here
+    // The bar claims here too; Back is the only other live control
     private void groupClick(Player player, InventoryClickEvent event) {
-        if (event.getRawSlot() == BACK_SLOT && player.hasPermission("activity.use")) {
+        if (!player.hasPermission("activity.use")) {
+            return;
+        }
+        if (event.getRawSlot() == BAR_SLOT) {
+            claim(player, event);
+        } else if (event.getRawSlot() == BACK_SLOT) {
             player.openInventory(build(player));
         }
     }
@@ -377,33 +404,18 @@ public class ActivityGui implements Listener {
         if (manager.claim(player) == 0) {
             // ====================================
             // A claim of 0 is either "nothing was due" or a refusal, and every
-            // refusal has already told the player why - saying "nothing to
-            // claim yet" on top of that contradicts it. So the only two lines
-            // sent here are the ones claim() cannot send itself: the missing
-            // reward commands, which it leaves silent on purpose, and the
-            // genuinely empty claim, which still owes the player an answer.
+            // refusal has already told the player why. Nothing was due needs
+            // no line either - the bar's own lore says when the next reward
+            // lands. The one thing claim() stays silent about and the player
+            // cannot read off the bar is a pool with nothing in it.
             // ====================================
-            // A store that never loaded refuses every claim and has already
-            // said so - what is or is not configured is beside the point
-            if (!manager.getStore().isLoaded()) {
-                return;
-            }
-
-            if (config.rewardCommands().isEmpty()) {
+            if (manager.getStore().isLoaded() && config.rewardPool().isEmpty()) {
                 player.sendMessage(config.messages().get("reward-unconfigured"));
-                return;
-            }
-
-            // peek, not get: deciding which line to send must not create an
-            // entry or dirty the store
-            PlayerData data = manager.getStore().peek(player.getUniqueId());
-            if (data == null || data.claimable(config.rewardEvery()) == 0) {
-                player.sendMessage(config.messages().get("reward-nothing"));
             }
             return;
         }
-        event.getView().getTopInventory().setItem(REWARD_SLOT,
-            rewardItem(config, config.messages(), manager.getStore().get(player.getUniqueId())));
+        event.getView().getTopInventory().setItem(BAR_SLOT,
+            barItem(config, config.messages(), manager.getStore().get(player.getUniqueId())));
     }
 
     // ====================================

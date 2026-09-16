@@ -1,5 +1,7 @@
 package tfmc.justin.activity.models;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -24,9 +26,9 @@ public class PlayerData {
     private volatile String weekKey;
     private volatile String dayKey;
     // ====================================
-    // The highest point threshold already paid out, not a milestone count:
-    // lowering bar.reward-every and reloading must not make thresholds that
-    // were already handed over claimable a second time.
+    // The highest milestone already paid out, not a milestone count: editing
+    // bar.milestones and reloading must not make a milestone that was already
+    // handed over claimable a second time.
     // ====================================
     private volatile int claimedPoints;
 
@@ -78,7 +80,7 @@ public class PlayerData {
     // ponytail: changing every/dailyCap mid-day can under- or over-award that
     // day by the difference; acceptable
     // ====================================
-    public RecordResult record(int amount, ActivityDef def, int max, int dailyMax, int rewardEvery) {
+    public RecordResult record(int amount, ActivityDef def, int max, int dailyMax, List<Integer> milestones) {
         int before = daily.getOrDefault(def.id(), 0);
         // Saturate: a bogus /activity add 2000000000 twice must not wrap the
         // counter negative and hand out awards all over again
@@ -96,7 +98,7 @@ public class PlayerData {
         addPoints(earned, max);
         dailyPoints += points - pointsBefore;
 
-        return new RecordResult(points - pointsBefore, points / rewardEvery - pointsBefore / rewardEvery);
+        return new RecordResult(points - pointsBefore, due(points, pointsBefore, milestones).size());
     }
 
     public void addPoints(int p, int max) {
@@ -113,8 +115,23 @@ public class PlayerData {
         return true;
     }
 
-    public int claimable(int rewardEvery) {
-        return Math.max(0, points / rewardEvery - claimedPoints / rewardEvery);
+    // ====================================
+    // The milestones this bar has reached and not yet been paid for, lowest
+    // first - the order claim() hands them over in. Static and pure so the
+    // manager can walk the same list it counts.
+    // ====================================
+    public static List<Integer> due(int points, int claimedPoints, List<Integer> milestones) {
+        List<Integer> due = new ArrayList<>();
+        for (Integer milestone : milestones) {
+            if (milestone != null && milestone <= points && milestone > claimedPoints) {
+                due.add(milestone);
+            }
+        }
+        return due;
+    }
+
+    public int claimable(List<Integer> milestones) {
+        return due(points, claimedPoints, milestones).size();
     }
 
     public void reset(String weekKey, String dayKey) {
