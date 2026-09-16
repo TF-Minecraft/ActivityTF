@@ -86,6 +86,50 @@ class FractionCarryTest {
         assertEquals(0, FractionCarry.credit(0.5, Double.NaN).amount());
     }
 
+    // A market sale worth several denar and change: the whole part is
+    // credited immediately and the change keeps accumulating
+    @Test
+    void aMultiDenarSaleCreditsItsWholePartAndKeepsTheChange() {
+        FractionCarry carry = new FractionCarry();
+        java.util.UUID player = java.util.UUID.randomUUID();
+
+        assertEquals(2, carry.add(player, "market_sale", 2.75));
+        assertEquals(1, carry.add(player, "market_sale", 0.25));
+    }
+
+    // A poisoned market sale (free, refunded, or a bad double from the
+    // source plugin) must not eat into or fabricate the player's carry
+    @Test
+    void aWorthlessMarketSaleLeavesLaterSalesUnaffected() {
+        FractionCarry carry = new FractionCarry();
+        java.util.UUID player = java.util.UUID.randomUUID();
+
+        assertEquals(0, carry.add(player, "market_sale", 0.0));
+        assertEquals(0, carry.add(player, "market_sale", -10.0));
+        assertEquals(0, carry.add(player, "market_sale", Double.NaN));
+
+        // The carry is still exactly what a fresh player would have: two
+        // ordinary half-denar sales still take two sales to earn one point
+        assertEquals(0, carry.add(player, "market_sale", 0.5));
+        assertEquals(1, carry.add(player, "market_sale", 0.5));
+    }
+
+    // +Infinity is not worthless - it is clamped to Integer.MAX_VALUE rather
+    // than credited as nothing (see absurdValuesClampInsteadOfOverflowing) -
+    // but it must still leave a clean 0 carry behind for whatever the player
+    // sells next, not some unrepresentable fractional remainder
+    @Test
+    void anInfiniteMarketSaleClampsAndLeavesACleanCarryBehind() {
+        FractionCarry carry = new FractionCarry();
+        java.util.UUID player = java.util.UUID.randomUUID();
+
+        assertEquals(Integer.MAX_VALUE, carry.add(player, "market_sale", Double.POSITIVE_INFINITY));
+
+        // A fresh-looking pair of half sales still takes two to earn one point
+        assertEquals(0, carry.add(player, "market_sale", 0.5));
+        assertEquals(1, carry.add(player, "market_sale", 0.5));
+    }
+
     @Test
     void carryNeverReachesAWholePoint() {
         double carry = 0;
