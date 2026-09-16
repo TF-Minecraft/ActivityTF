@@ -316,4 +316,136 @@ class PlayerDataTest {
         assertEquals(3, data.record(25, UNCAPPED, MAX, 3, EVERY).pointsAwarded());
         assertEquals(6, data.points());
     }
+
+    // Product-owner example: dailyMax 10, barMax large enough to never bind.
+    // Earning "36 points" worth on day one and "25 points" worth on day two
+    // must land on weekly points 20 (10 + 10) and dailyPoints 10 (today only).
+    @Test
+    void productOwnerExampleTwoDaysOfThirtySixAndTwentyFive() {
+        PlayerData data = data();
+        int hugeMax = 1_000_000;
+        int dailyMax = 10;
+
+        RecordResult day1 = data.record(36, UNCAPPED, hugeMax, dailyMax, EVERY);
+        assertEquals(10, day1.pointsAwarded());
+        assertEquals(10, data.points());
+        assertEquals(10, data.dailyPoints());
+
+        data.roll(WEEK, "2026-09-10");
+
+        RecordResult day2 = data.record(25, UNCAPPED, hugeMax, dailyMax, EVERY);
+        assertEquals(10, day2.pointsAwarded());
+        assertEquals(20, data.points());
+        assertEquals(10, data.dailyPoints());
+    }
+
+    @Test
+    void partiallyRemainingBudgetTrimsTheAward() {
+        PlayerData data = data();
+        int dailyMax = 10;
+
+        data.record(8, UNCAPPED, MAX, dailyMax, EVERY);
+        RecordResult result = data.record(5, UNCAPPED, MAX, dailyMax, EVERY);
+
+        assertEquals(2, result.pointsAwarded());
+        assertEquals(10, data.dailyPoints());
+    }
+
+    @Test
+    void exhaustedBudgetAwardsNothingAndNoMilestone() {
+        PlayerData data = data();
+        int dailyMax = 10;
+
+        data.record(10, UNCAPPED, MAX, dailyMax, EVERY);
+        RecordResult result = data.record(5, UNCAPPED, MAX, dailyMax, EVERY);
+
+        assertEquals(0, result.pointsAwarded());
+        assertEquals(0, result.milestonesReached());
+        assertEquals(10, data.dailyPoints());
+    }
+
+    @Test
+    void dayRollResetsDailyPointsButKeepsWeeklyPoints() {
+        PlayerData data = data();
+        data.record(10, UNCAPPED, MAX, 10, EVERY);
+
+        data.roll(WEEK, "2026-09-10");
+
+        assertEquals(0, data.dailyPoints());
+        assertEquals(10, data.points());
+    }
+
+    @Test
+    void weekRollResetsBothWeeklyAndDailyPoints() {
+        PlayerData data = data();
+        data.record(10, UNCAPPED, MAX, 10, EVERY);
+
+        data.roll("2026-09-14", "2026-09-14");
+
+        assertEquals(0, data.dailyPoints());
+        assertEquals(0, data.points());
+    }
+
+    // Milestones must reflect what actually reached the weekly bar, not the
+    // raw earned amount before the daily clamp trims it: a raw 20 would cross
+    // two thresholds at EVERY=10, but a dailyMax of 5 trims it to 5.
+    @Test
+    void milestonesAreComputedFromTheDailyClampedAmount() {
+        PlayerData data = data();
+
+        RecordResult result = data.record(20, UNCAPPED, 1_000_000, 5, EVERY);
+
+        assertEquals(5, result.pointsAwarded());
+        assertEquals(0, result.milestonesReached());
+    }
+
+    @Test
+    void dailyMaxLargerThanBarMaxStillClampsWeeklyAtBarMax() {
+        PlayerData data = data();
+        int barMax = 5;
+
+        RecordResult result = data.record(20, UNCAPPED, barMax, 1000, EVERY);
+
+        assertEquals(barMax, data.points());
+        assertEquals(barMax, result.pointsAwarded());
+    }
+
+    // Pinning documented behaviour: dailyPoints tracks the full amount earned
+    // before the weekly bar clamps it, not the (possibly smaller) amount that
+    // actually landed on the weekly total. A weekly-clamped award still burns
+    // its full daily budget.
+    @Test
+    void weeklyClampedAwardStillConsumesItsFullDailyBudget() {
+        PlayerData data = data();
+        int barMax = 5;
+
+        RecordResult result = data.record(20, UNCAPPED, barMax, 1000, EVERY);
+
+        assertEquals(barMax, data.points());
+        assertEquals(barMax, result.pointsAwarded());
+        assertEquals(20, data.dailyPoints());
+    }
+
+    @Test
+    void zeroDailyBudgetAwardsNothing() {
+        PlayerData data = data();
+
+        RecordResult result = data.record(5, UNCAPPED, MAX, 0, EVERY);
+
+        assertEquals(0, result.pointsAwarded());
+        assertEquals(0, data.dailyPoints());
+    }
+
+    // dailyPoints already past dailyMax (e.g. read off disk after dailyMax was
+    // lowered) must not drive the remaining budget negative and give an award
+    // out of thin air.
+    @Test
+    void dailyPointsAlreadyOverTheLoweredMaxNeverGoesNegativeOrAwards() {
+        PlayerData data = new PlayerData(0, 15, WEEK, DAY, 0, java.util.Map.of());
+
+        RecordResult result = data.record(5, UNCAPPED, MAX, 10, EVERY);
+
+        assertEquals(0, result.pointsAwarded());
+        assertEquals(15, data.dailyPoints());
+    }
 }

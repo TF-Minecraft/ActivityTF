@@ -109,6 +109,68 @@ class PlayerStoreTest {
     }
 
     @Test
+    void dailyPointsRoundTripsThroughSnapshotAndReadEntry() {
+        UUID id = UUID.randomUUID();
+        PlayerData data = new PlayerData(5, 7, "2026-09-07", "2026-09-09", 0, Map.of());
+
+        YamlConfiguration yaml = PlayerStore.snapshot(Map.of(id, data));
+        ConfigurationSection players = yaml.getConfigurationSection("players");
+        PlayerData parsed = PlayerStore.readEntry(players, id.toString(), BAR_MAX, DAILY_MAX);
+
+        assertEquals(7, parsed.dailyPoints());
+    }
+
+    @Test
+    void dailyPointsIsFlooredAtZeroAndCappedAtDailyMax() {
+        ConfigurationSection root = new YamlConfiguration().createSection("players");
+        UUID id = UUID.randomUUID();
+        ConfigurationSection entry = root.createSection(id.toString());
+        entry.set("points", 5);
+        entry.set("claimed-points", 0);
+        entry.set("daily-points", 999);
+
+        PlayerData data = PlayerStore.readEntry(root, id.toString(), BAR_MAX, DAILY_MAX);
+        assertEquals(DAILY_MAX, data.dailyPoints());
+
+        UUID negId = UUID.randomUUID();
+        ConfigurationSection negEntry = root.createSection(negId.toString());
+        negEntry.set("points", 5);
+        negEntry.set("claimed-points", 0);
+        negEntry.set("daily-points", -3);
+        PlayerData negData = PlayerStore.readEntry(root, negId.toString(), BAR_MAX, DAILY_MAX);
+        assertEquals(0, negData.dailyPoints());
+    }
+
+    @Test
+    void missingOrNonIntegerDailyPointsDefaultsToZero() {
+        ConfigurationSection root = new YamlConfiguration().createSection("players");
+
+        UUID missingId = UUID.randomUUID();
+        ConfigurationSection missingEntry = root.createSection(missingId.toString());
+        missingEntry.set("points", 5);
+        PlayerData missingData = PlayerStore.readEntry(root, missingId.toString(), BAR_MAX, DAILY_MAX);
+        assertEquals(0, missingData.dailyPoints());
+
+        UUID badId = UUID.randomUUID();
+        ConfigurationSection badEntry = root.createSection(badId.toString());
+        badEntry.set("points", 5);
+        badEntry.set("daily-points", "not-a-number");
+        PlayerData badData = PlayerStore.readEntry(root, badId.toString(), BAR_MAX, DAILY_MAX);
+        assertEquals(0, badData.dailyPoints());
+    }
+
+    @Test
+    void aPlayerWithOnlyDailyPointsSetIsStillWritten() {
+        UUID id = UUID.randomUUID();
+        PlayerData data = new PlayerData(0, 5, "2026-09-07", "2026-09-09", 0, Map.of());
+
+        YamlConfiguration yaml = PlayerStore.snapshot(Map.of(id, data));
+
+        assertTrue(yaml.contains("players." + id));
+        assertEquals(5, yaml.getInt("players." + id + ".daily-points"));
+    }
+
+    @Test
     void nonZeroEntryIsWrittenWithAllExpectedKeys() {
         UUID id = UUID.randomUUID();
         PlayerData data = new PlayerData(5, 0, "2026-09-07", "2026-09-09", 0, Map.of("vote", 1));

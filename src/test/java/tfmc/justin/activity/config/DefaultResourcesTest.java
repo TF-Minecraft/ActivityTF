@@ -274,6 +274,22 @@ class DefaultResourcesTest {
     }
 
     @Test
+    void shippedConfigSetsTheBarAndDailyMaxDefaults() {
+        YamlConfiguration config = load("config.yml");
+
+        assertEquals(10, config.getInt("bar.daily-max"));
+        assertEquals(50, config.getInt("bar.max"));
+    }
+
+    @Test
+    void shippedMessagesHasTheDailyBarName() {
+        YamlConfiguration messages = load("messages.yml");
+
+        String value = messages.getString("gui.daily-bar-name");
+        assertFalse(value == null || value.isBlank(), "gui.daily-bar-name should not be blank");
+    }
+
+    @Test
     void colorizeStripsHexAndLegacyCodes() {
         String result = Utils.colorize("#e6ca40&lX");
 
