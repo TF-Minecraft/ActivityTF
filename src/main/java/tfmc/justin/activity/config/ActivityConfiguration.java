@@ -246,6 +246,10 @@ public class ActivityConfiguration {
     // for the same reason as the ones above: DefaultResourcesTest asserts the
     // shipped file against this exact string.
     static final String CLICK_COMMANDS_KEY = "click-commands";
+
+    // The optional per-activity blurb, a constant for the same reason:
+    // DefaultResourcesTest asserts the shipped file against this exact string.
+    static final String DESCRIPTION_KEY = "description";
     static final String CLICK_COMMAND_COOLDOWN_PATH = "click-command-cooldown-millis";
 
     // ====================================
@@ -340,7 +344,8 @@ public class ActivityConfiguration {
                 Math.max(1, wholeNumber(entry, id, "every", 1)),
                 points,
                 dailyCap,
-                clickCommands(entry, id)
+                clickCommands(entry, id),
+                description(entry, id)
             ));
 
             loadCraft(crafts, paths, entry.getString("craft"), id);
@@ -602,13 +607,42 @@ public class ActivityConfiguration {
                 + " for this activity.");
             return List.of();
         }
-        List<String> commands = new ArrayList<>();
-        for (Object command : list) {
-            if (command != null && !String.valueOf(command).isBlank()) {
-                commands.add(String.valueOf(command));
+        return nonBlank(list);
+    }
+
+    // ====================================
+    // Optional per-activity blurb, shown at the top of the task's lore once
+    // the task is revealed. A two-line description wants a list and a one-line
+    // one wants a plain string, so both are accepted; anything else (a number,
+    // a nested section) is named and ignored rather than silently dropped.
+    // ====================================
+    private List<String> description(ConfigurationSection entry, String id) {
+        Object raw = entry.get(DESCRIPTION_KEY);
+        if (raw == null) {
+            return List.of();
+        }
+        if (raw instanceof List<?> list) {
+            return nonBlank(list);
+        }
+        if (raw instanceof String text) {
+            return text.isBlank() ? List.of() : List.of(text);
+        }
+        plugin.getLogger().warning("activities." + id + "." + DESCRIPTION_KEY + " is neither a string nor a"
+            + " list of lines ('" + Utils.safeForLog(String.valueOf(raw)) + "') - this activity shows no"
+            + " description.");
+        return List.of();
+    }
+
+    // Every blank or missing entry dropped, so neither a stray '- ""' nor a
+    // null from YAML reaches the GUI or the dispatcher
+    private static List<String> nonBlank(List<?> list) {
+        List<String> kept = new ArrayList<>();
+        for (Object value : list) {
+            if (value != null && !String.valueOf(value).isBlank()) {
+                kept.add(String.valueOf(value));
             }
         }
-        return List.copyOf(commands);
+        return List.copyOf(kept);
     }
 
     // A bar of 0 glyphs is invisible and one of 5000 does not fit in a lore

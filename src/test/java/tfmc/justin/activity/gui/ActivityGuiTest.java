@@ -3,11 +3,13 @@ package tfmc.justin.activity.gui;
 import org.bukkit.Material;
 import org.junit.jupiter.api.Test;
 import tfmc.justin.activity.config.ActivityConfiguration;
+import tfmc.justin.activity.config.Messages;
 import tfmc.justin.activity.managers.ActivityManager;
 import tfmc.justin.activity.managers.TestManagers;
 import tfmc.justin.activity.models.ActivityDef;
 import tfmc.justin.activity.models.PlayerData;
 import tfmc.justin.activity.utils.Bar;
+import tfmc.justin.activity.utils.Utils;
 
 import java.lang.reflect.Field;
 import java.util.Arrays;
@@ -15,6 +17,7 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -233,5 +236,58 @@ class ActivityGuiTest {
     @Test
     void theRerollSlotRoutesToNoTask() throws ReflectiveOperationException {
         assertEquals(-1, ActivityGui.taskSlot(slot("REROLL_SLOT")));
+    }
+
+    // ====================================
+    // The revealed task's lore. activityItem() itself builds an ItemStack and
+    // needs a live registry, so it is unreachable here; activityLore() is the
+    // whole of what it assembles and is pure.
+    // ====================================
+    private static Messages shippedMessages() {
+        ActivityManager manager = TestManagers.manager(
+            new ActivityDef("a", "&aA", Material.PAPER, null, 1, 1, 0));
+        TestManagers.messages(manager);
+        return manager.getConfiguration().messages();
+    }
+
+    private static ActivityDef described(List<String> description) {
+        return new ActivityDef("a", "&aA", Material.PAPER, null, 25, 1, 5, List.of(), description);
+    }
+
+    @Test
+    void theDescriptionSitsAboveTheProgressAndTodayLines() {
+        Messages messages = shippedMessages();
+        ActivityDef def = described(List.of("&7first", "&7second"));
+
+        List<String> lore = ActivityGui.activityLore(messages, def, 22);
+
+        assertEquals(List.of(
+            Utils.colorize("&7first"),
+            Utils.colorize("&7second"),
+            messages.get("gui.activity-lore-progress", "%bar%", Utils.colorize(Bar.render(22, 25, 20))),
+            messages.get("gui.activity-lore-today-capped", "%today%", 0, "%cap%", 5)), lore);
+    }
+
+    // No description configured - the lore is exactly what it has always been
+    @Test
+    void anActivityWithoutADescriptionRendersTheSameTwoLines() {
+        Messages messages = shippedMessages();
+        ActivityDef def = described(List.of());
+
+        List<String> lore = ActivityGui.activityLore(messages, def, 22);
+
+        assertEquals(List.of(
+            messages.get("gui.activity-lore-progress", "%bar%", Utils.colorize(Bar.render(22, 25, 20))),
+            messages.get("gui.activity-lore-today-capped", "%today%", 0, "%cap%", 5)), lore);
+    }
+
+    // A description line is operator text, so it goes through colorize the
+    // way display() does rather than reaching the lore raw
+    @Test
+    void descriptionLinesAreColorized() {
+        List<String> lore = ActivityGui.activityLore(shippedMessages(), described(List.of("#e6ca40&lX")), 0);
+
+        assertFalse(lore.get(0).contains("#e6ca40"), lore.toString());
+        assertFalse(lore.get(0).contains("&l"), lore.toString());
     }
 }

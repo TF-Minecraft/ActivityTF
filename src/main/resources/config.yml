@@ -85,9 +85,19 @@ reset:
 #   The menu closes when they run, so the command can open one of its own.
 #   One player can only set these off once every 'click-command-cooldown-millis'
 #   however fast he clicks.
+# description: optional. A short blurb shown at the top of the task's lore,
+#   above the progress bar. Write it as a single string for one line or as a
+#   list for several; the same #rrggbb and &-codes 'display' takes work here.
+#   It is only shown once the player has revealed the task - a hidden task
+#   stays a blank grey dye, so a description never gives away what it is.
+#   Anything that is neither a string nor a list is reported at load and the
+#   activity simply shows no description.
 activities:
   vote:
     display: "#e6ca40&lVoting"
+    description:
+      - "&7Vote for the server on any listed site."
+      - "&7Links: &f/vote"
     material: v.paper
     every: 1
     points: 1
@@ -103,6 +113,7 @@ activities:
     daily-cap: 1
   archaeology_find:
     display: "#e6ca40&lArchaeology"
+    description: "&7Brush suspicious sand and gravel for finds."
     material: BRUSH
     every: 3
     points: 1
@@ -115,6 +126,7 @@ activities:
     daily-cap: 1
   playtime:
     display: "#e6ca40&lTime Played"
+    description: "&7Simply stay online and active."
     material: CLOCK
     every: 60          # 60 counted minutes => 1 point
     points: 1
@@ -122,6 +134,7 @@ activities:
   # MarketBlock: denar earned selling to the market block ('every' is denar)
   market_sale:
     display: "#e6ca40&lMarket Sales"
+    description: "&7Earn denar selling goods to a market block."
     material: EMERALD
     every: 25          # 25 denar earned => 1 point
     points: 1
@@ -199,6 +212,7 @@ activities:
   # Cooking: dishes finished at pots, stations and crafting boards
   cook_dish:
     display: "#e6ca40&lCook Dishes"
+    description: "&7Finish dishes at a cooking pot, station or board."
     material: COOKED_BEEF
     every: 5
     points: 1

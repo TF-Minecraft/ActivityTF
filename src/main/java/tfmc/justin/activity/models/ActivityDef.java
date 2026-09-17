@@ -13,21 +13,32 @@ import java.util.List;
 // clickCommands: console commands run when the player clicks this activity's
 // task after it is already revealed. Empty for every activity that does not
 // configure 'click-commands', which is the normal case.
+// description: optional operator text shown at the top of the task's lore,
+// one entry per line. Empty for every activity that does not configure
+// 'description', which is the normal case.
 // ====================================
 public record ActivityDef(String id, String display, Material icon, String iconPath, int every, int points,
-                          int dailyCap, List<String> clickCommands) {
+                          int dailyCap, List<String> clickCommands, List<String> description) {
 
     // Immutable and never null, so neither the GUI nor the dispatcher has to
     // guard what config handed over
     public ActivityDef {
         clickCommands = clickCommands == null ? List.of() : List.copyOf(clickCommands);
+        description = description == null ? List.of() : List.copyOf(description);
     }
 
-    // The overwhelming majority of activities have no click commands; this
-    // keeps every one of those call sites reading the way it always has
+    // The overwhelming majority of activities have no description; this keeps
+    // the click-command call sites reading the way they always have
+    public ActivityDef(String id, String display, Material icon, String iconPath, int every, int points,
+                       int dailyCap, List<String> clickCommands) {
+        this(id, display, icon, iconPath, every, points, dailyCap, clickCommands, List.of());
+    }
+
+    // The overwhelming majority of activities have no click commands either;
+    // this keeps every one of those call sites reading the way it always has
     public ActivityDef(String id, String display, Material icon, String iconPath, int every, int points,
                        int dailyCap) {
-        this(id, display, icon, iconPath, every, points, dailyCap, List.of());
+        this(id, display, icon, iconPath, every, points, dailyCap, List.of(), List.of());
     }
 
     // What a day's action count is worth in points, after every and dailyCap

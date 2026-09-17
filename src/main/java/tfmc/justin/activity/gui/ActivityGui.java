@@ -209,19 +209,33 @@ public class ActivityGui implements Listener {
     }
 
     private ItemStack activityItem(ActivityConfiguration config, Messages messages, ActivityDef def, PlayerData data) {
-        int count = data.count(def.id());
-        int today = def.worth(count);
+        return item(iconStack(config, def.icon(), def.iconPath()), Utils.colorize(def.display()),
+            activityLore(messages, def, data.count(def.id())));
+    }
 
+    // ====================================
+    // A revealed task's lore: the operator's description first, then the
+    // progress bar, then what the day has paid so far. The description is
+    // free-form operator text with no label or placeholder of its own, so it
+    // is emitted as configured rather than through a messages.yml key - the
+    // same treatment def.display() gets, colour codes and all. Only reached
+    // from activityItem, never from the hidden-task branch, so a description
+    // cannot give away an unrevealed task. Package-private and pure so the
+    // ordering can be pinned without a live Bukkit inventory.
+    // ====================================
+    static List<String> activityLore(Messages messages, ActivityDef def, int count) {
         List<String> lore = new ArrayList<>();
+        for (String line : def.description()) {
+            lore.add(Utils.colorize(line));
+        }
         String progress = progressBar(def, count);
         if (progress != null) {
             lore.add(messages.get("gui.activity-lore-progress", "%bar%", Utils.colorize(progress)));
         }
         lore.add(def.dailyCap() > 0
-            ? messages.get("gui.activity-lore-today-capped", "%today%", today, "%cap%", def.dailyCap())
-            : messages.get("gui.activity-lore-today", "%today%", today));
-
-        return item(iconStack(config, def.icon(), def.iconPath()), Utils.colorize(def.display()), lore);
+            ? messages.get("gui.activity-lore-today-capped", "%today%", def.worth(count), "%cap%", def.dailyCap())
+            : messages.get("gui.activity-lore-today", "%today%", def.worth(count)));
+        return lore;
     }
 
     // ====================================
