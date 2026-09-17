@@ -14,6 +14,7 @@ import tfmc.justin.activity.managers.ActivityManager;
 import tfmc.justin.activity.models.ActivityDef;
 import tfmc.justin.activity.models.PlayerData;
 import tfmc.justin.activity.models.Recorded;
+import tfmc.justin.activity.utils.Utils;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -32,7 +33,10 @@ import java.util.UUID;
 // ====================================
 public class ActivityCommand implements CommandExecutor, TabCompleter {
 
-    private static final List<String> SUBCOMMANDS = Arrays.asList("reload", "reset", "add");
+    private static final List<String> SUBCOMMANDS = Arrays.asList("reload", "check", "reset", "reroll", "add");
+
+    // What 'check' alone gets: the read-only half of the command
+    private static final List<String> READ_ONLY_SUBCOMMANDS = List.of("check");
 
     // The one optional trailing argument 'add' takes
     private static final String FORCE = "--force";
@@ -61,18 +65,26 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
             return true;
         }
 
-        if (!sender.hasPermission("activity.admin")) {
+        String sub = args[0].toLowerCase(Locale.ROOT);
+        if (!sender.hasPermission(permissionFor(sub))) {
             sender.sendMessage(messages().get("admin.no-permission"));
             return true;
         }
 
-        switch (args[0].toLowerCase(Locale.ROOT)) {
+        switch (sub) {
             case "reload":
                 manager.reload();
                 sender.sendMessage(messages().get("admin.reloaded"));
+                audit(sender, "action=reload result=done");
+                return true;
+            case "check":
+                handleCheck(sender, args);
                 return true;
             case "reset":
                 handleReset(sender, args);
+                return true;
+            case "reroll":
+                handleReroll(sender, args);
                 return true;
             case "add":
                 handleAdd(sender, args);
@@ -114,6 +126,122 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
         // The resolved name, not what was typed - casing and the cache decide
         // who was actually reset
         sender.sendMessage(messages().get("admin.reset-done", "%player%", name(target, args[1])));
+        audit(sender, "action=reset " + who(target, args[1]) + " result=done");
+    }
+
+    // ====================================
+    // /activity reroll <player> gives one consumed reroll back - it does NOT
+    // reroll anything. rolled() rather than get(): a player with no row has
+    // used no rerolls, and asking about them must not put them in the file.
+    // ====================================
+    private void handleReroll(CommandSender sender, String[] args) {
+        if (args.length < 2) {
+            sender.sendMessage(messages().get("admin.usage"));
+            return;
+        }
+
+        OfflinePlayer target = resolve(sender, args[1]);
+        if (target == null) {
+            return;
+        }
+
+        PlayerData data = manager.getStore().rolled(target.getUniqueId());
+        int before = data == null ? 0 : data.rerolls();
+        boolean given = data != null && data.refundReroll();
+        if (given) {
+            manager.getStore().markDirty();
+        }
+
+        int after = data == null ? 0 : data.rerolls();
+        sender.sendMessage(given
+            ? messages().get("admin.reroll-given", "%before%", before, "%after%", after,
+                "%player%", name(target, args[1]))
+            : messages().get("admin.reroll-none-used", "%player%", name(target, args[1])));
+        audit(sender, "action=reroll " + who(target, args[1]) + " rerolls=" + before + "->" + after
+            + " result=" + (given ? "done" : "noop"));
+    }
+
+    // ====================================
+    // /activity check <player>: everything staff needs to answer "why did I
+    // not get a point", and nothing else. peek() is the read-only lookup - it
+    // neither creates a row for a player who has none nor rolls the one it
+    // finds, so the week and day keys printed are exactly what is on disk (a
+    // stale pair is itself the answer to some reports).
+    // ====================================
+    private void handleCheck(CommandSender sender, String[] args) {
+        if (args.length < 2) {
+            sender.sendMessage(messages().get("admin.usage"));
+            return;
+        }
+
+        OfflinePlayer target = resolve(sender, args[1]);
+        if (target == null) {
+            return;
+        }
+
+        String player = name(target, args[1]);
+        PlayerData data = manager.getStore().peek(target.getUniqueId());
+        if (data == null) {
+            sender.sendMessage(messages().get("admin.check-no-data", "%player%", player));
+            return;
+        }
+
+        ActivityConfiguration config = manager.getConfiguration();
+        sender.sendMessage(messages().get("admin.check-header", "%player%", player));
+        sender.sendMessage(messages().get("admin.check-points", "%points%", data.points(),
+            "%max%", config.barMax(), "%claimed%", data.claimedPoints()));
+        sender.sendMessage(messages().get("admin.check-daily", "%points%", data.dailyPoints(),
+            "%max%", config.dailyMax()));
+        sender.sendMessage(messages().get("admin.check-rerolls", "%used%", data.rerolls(),
+            "%max%", config.rerollsPerDay()));
+        sender.sendMessage(messages().get("admin.check-keys", "%week%", data.weekKey(),
+            "%day%", data.dayKey()));
+
+        List<String> tasks = data.tasks();
+        if (tasks.isEmpty()) {
+            sender.sendMessage(messages().get("admin.check-no-tasks"));
+            return;
+        }
+
+        for (int slot = 0; slot < tasks.size(); slot++) {
+            String id = tasks.get(slot);
+            ActivityDef def = config.activity(id);
+            // An id a reload has dropped still sits in the draw until the
+            // player is next touched, so it is named by its raw id
+            String display = def == null ? id : def.display();
+            int count = data.count(id);
+            // The display name goes in last: it is config text, and
+            // substitution walks the pairs in order, so nothing in it can
+            // stand in for a placeholder that has not been filled yet
+            sender.sendMessage(data.isRevealed(id)
+                ? messages().get("admin.check-task-revealed", "%slot%", slot + 1, "%count%", count,
+                    "%points%", def == null ? 0 : def.worth(count), "%activity%", display)
+                : messages().get("admin.check-task-hidden", "%slot%", slot + 1, "%activity%", display));
+        }
+    }
+
+    // ====================================
+    // One line per admin action that changed something, at INFO, after the
+    // fact and carrying what came of it - a line in the log means it really
+    // happened. 'check' is read-only and writes none; 'reload' does, because
+    // "who swapped the config out from under us" is the same question.
+    // Names are sanitised: they reach here from chat.
+    // ====================================
+    private void audit(CommandSender sender, String what) {
+        manager.logger().info("ACTIVITY-AUDIT sender=" + Utils.safeForLog(sender.getName()) + " " + what);
+    }
+
+    private String who(OfflinePlayer target, String typed) {
+        return "target=" + Utils.safeForLog(name(target, typed)) + " uuid=" + target.getUniqueId();
+    }
+
+    // ====================================
+    // The one read-only subcommand has its own permission; activity.admin
+    // implies it through plugin.yml, so nothing an admin could do before
+    // needs a config change. Package-private for the test.
+    // ====================================
+    static String permissionFor(String sub) {
+        return sub.equals("check") ? "activity.check" : "activity.admin";
     }
 
     private void handleAdd(CommandSender sender, String[] args) {
@@ -150,6 +278,8 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
                 "%activity%", args[2], "%player%", name(target, args[1]));
             case UNKNOWN_ACTIVITY -> messages().get(outcome.messageKey(), "%activity%", args[2]);
         });
+        audit(sender, "action=add " + who(target, args[1]) + " activity=" + Utils.safeForLog(args[2])
+            + " count=" + count + " force=" + forced(args) + " result=" + outcome);
     }
 
     // ====================================
@@ -229,7 +359,7 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
     // invents a UUID - so a typo would create an entry for a player that does
     // not exist and report success.
     // ====================================
-    private OfflinePlayer resolve(CommandSender sender, String name) {
+    OfflinePlayer resolve(CommandSender sender, String name) {
         Player online = Bukkit.getPlayerExact(name);
         if (online != null) {
             return online;
@@ -249,22 +379,25 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
-        if (!sender.hasPermission("activity.admin")) {
+        boolean admin = sender.hasPermission("activity.admin");
+        if (!admin && !sender.hasPermission("activity.check")) {
             return Collections.emptyList();
         }
 
         if (args.length == 1) {
-            return filter(SUBCOMMANDS, args[0]);
+            return filter(admin ? SUBCOMMANDS : READ_ONLY_SUBCOMMANDS, args[0]);
         }
 
         String sub = args[0].toLowerCase(Locale.ROOT);
+        // A check-only sender is completed for 'check' and nothing else, so
+        // the completer never hints at a subcommand it would be refused
+        if (!sender.hasPermission(permissionFor(sub))) {
+            return Collections.emptyList();
+        }
 
-        if (args.length == 2 && (sub.equals("reset") || sub.equals("add"))) {
-            List<String> names = new ArrayList<>();
-            for (Player player : Bukkit.getOnlinePlayers()) {
-                names.add(player.getName());
-            }
-            return filter(names, args[1]);
+        if (args.length == 2
+            && (sub.equals("reset") || sub.equals("add") || sub.equals("check") || sub.equals("reroll"))) {
+            return filter(onlineNames(), args[1]);
         }
 
         if (args.length == 5 && sub.equals("add")) {
@@ -280,6 +413,15 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
         }
 
         return Collections.emptyList();
+    }
+
+    // Package-private so the completer can be driven without a server
+    List<String> onlineNames() {
+        List<String> names = new ArrayList<>();
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            names.add(player.getName());
+        }
+        return names;
     }
 
     private List<String> filter(List<String> options, String prefix) {

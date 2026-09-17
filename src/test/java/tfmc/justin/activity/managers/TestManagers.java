@@ -1,10 +1,12 @@
 package tfmc.justin.activity.managers;
 
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 import sun.reflect.ReflectionFactory;
 import tfmc.justin.activity.config.ActivityConfiguration;
 import tfmc.justin.activity.models.ActivityDef;
 
+import java.io.File;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.time.DayOfWeek;
@@ -140,6 +142,29 @@ public final class TestManagers {
         }
     }
 
+    // ====================================
+    // The shipped messages.yml, installed straight off disk. Messages.reload()
+    // wants a data folder and a running server, and every reply the admin
+    // command sends goes through it - so the text tested here is the text
+    // players actually get.
+    // ====================================
+    public static void messages(ActivityManager manager) {
+        try {
+            set(manager.getConfiguration().messages(), "messages",
+                YamlConfiguration.loadConfiguration(new File("src/main/resources/messages.yml")));
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    // The logger the stub plugin hands out, which is what an audit line lands
+    // in - a test captures it by attaching a Handler here
+    public static Logger logger() {
+        return Logger.getLogger(LOGGER_NAME);
+    }
+
+    private static final String LOGGER_NAME = "TestManagers";
+
     private static JavaPlugin stubPlugin() {
         try {
             ReflectionFactory rf = ReflectionFactory.getReflectionFactory();
@@ -149,7 +174,7 @@ public final class TestManagers {
 
             Field logger = JavaPlugin.class.getDeclaredField("logger");
             logger.setAccessible(true);
-            logger.set(plugin, Logger.getLogger("TestManagers"));
+            logger.set(plugin, Logger.getLogger(LOGGER_NAME));
 
             return plugin;
         } catch (ReflectiveOperationException e) {
