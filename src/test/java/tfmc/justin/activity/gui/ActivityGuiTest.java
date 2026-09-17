@@ -59,16 +59,31 @@ class ActivityGuiTest {
         assertEquals(5, slot("BAR_SLOT"));
     }
 
+    // Between the two bars, so a player is never in doubt which button
+    // affects which of them
+    @Test
+    void theRerollSlotIsBetweenTheTwoBars() throws ReflectiveOperationException {
+        assertEquals(4, slot("REROLL_SLOT"));
+    }
+
     @Test
     void theTaskSlotsAvoidTheBarsAndStayInsideTheWindow() throws ReflectiveOperationException {
         int size = slot("SIZE");
         for (int slot : taskSlots()) {
             assertTrue(slot >= 0 && slot < size, "slot " + slot + " is outside the inventory (" + size + ")");
-            assertTrue(slot != slot("DAILY_BAR_SLOT") && slot != slot("BAR_SLOT"),
-                "slot " + slot + " is also a bar slot");
+            assertTrue(slot != slot("DAILY_BAR_SLOT") && slot != slot("BAR_SLOT")
+                    && slot != slot("REROLL_SLOT"),
+                "slot " + slot + " is also a control slot");
         }
         assertEquals(taskSlots().length, Arrays.stream(taskSlots()).distinct().count(),
             "TASK_SLOTS lists the same slot twice");
+    }
+
+    // The reroll slot does not double as a bar slot either
+    @Test
+    void theRerollSlotIsNotAlsoABarSlot() throws ReflectiveOperationException {
+        assertTrue(slot("REROLL_SLOT") != slot("DAILY_BAR_SLOT"));
+        assertTrue(slot("REROLL_SLOT") != slot("BAR_SLOT"));
     }
 
     private static void assertArrayEqualsInts(int[] expected, int[] actual) {
@@ -211,5 +226,12 @@ class ActivityGuiTest {
         // Slot 0 and slot 26 are always filler in a built view
         assertEquals(-1, ActivityGui.taskSlot(0));
         assertEquals(-1, ActivityGui.taskSlot(26));
+    }
+
+    // The reroll button is a control, not a task - a click there must not be
+    // mistaken for a task-slot click
+    @Test
+    void theRerollSlotRoutesToNoTask() throws ReflectiveOperationException {
+        assertEquals(-1, ActivityGui.taskSlot(slot("REROLL_SLOT")));
     }
 }

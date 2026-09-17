@@ -858,6 +858,57 @@ class PlayerDataTest {
         assertEquals(0, data.rerolls());
     }
 
+    // A week rollover resets the counter too, even when the day key inside it
+    // happens not to change - the counter is not keyed off the day string
+    @Test
+    void aWeekRolloverGivesTheRerollBackEvenWithTheSameDayKey() {
+        PlayerData data = data();
+        data.reroll(List.of("a1"));
+        assertEquals(1, data.rerolls());
+
+        assertTrue(data.roll("2026-W99", DAY));
+        assertEquals(0, data.rerolls());
+    }
+
+    // Below the claimed floor, the ordinary case: dailyPoints fits entirely
+    // inside points - claimedPoints, so the subtraction lands exactly and the
+    // floor never engages
+    @Test
+    void anOrdinaryRerollDropsTheWeeklyTotalByExactlyTodaysPoints() {
+        PlayerData data = new PlayerData(20, 6, "w", "d", 5, Map.of("a1", 3),
+            List.of("a1", "a2"), List.of("a1"));
+
+        data.reroll(List.of("a3"));
+
+        assertEquals(14, data.points());
+        assertEquals(5, data.claimedPoints());
+    }
+
+    // No points earned today means a reroll changes no points at all
+    @Test
+    void aRerollWithNoDailyPointsChangesNoPoints() {
+        PlayerData data = new PlayerData(15, 0, "w", "d", 5, Map.of(),
+            List.of("a1"), List.of());
+
+        data.reroll(List.of("a2"));
+
+        assertEquals(15, data.points());
+        assertEquals(5, data.claimedPoints());
+        assertEquals(0, data.dailyPoints());
+    }
+
+    // The counter keeps counting across multiple rerolls in the same day
+    @Test
+    void aSecondRerollTheSameDayIncrementsTheCounterAgain() {
+        PlayerData data = data();
+
+        data.reroll(List.of("a1"));
+        data.reroll(List.of("a2"));
+
+        assertEquals(2, data.rerolls());
+        assertEquals(List.of("a2"), data.tasks());
+    }
+
     @Test
     void aDrawnListCannotBeMutatedByItsCaller() {
         List<String> drawn = PlayerData.draw(ids(30), List.of(), new Random(7));

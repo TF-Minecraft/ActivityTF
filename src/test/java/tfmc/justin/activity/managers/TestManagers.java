@@ -103,6 +103,16 @@ public final class TestManagers {
         }
     }
 
+    // The reroll budget load() would parse from reroll.per-day - set directly
+    // the same way every other numeric config field here is
+    public static void rerollsPerDay(ActivityManager manager, int perDay) {
+        try {
+            set(manager.getConfiguration(), "rerollsPerDay", perDay);
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     private static JavaPlugin stubPlugin() {
         try {
             ReflectionFactory rf = ReflectionFactory.getReflectionFactory();
