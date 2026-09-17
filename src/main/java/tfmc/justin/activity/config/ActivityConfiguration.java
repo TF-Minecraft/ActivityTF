@@ -164,6 +164,8 @@ public class ActivityConfiguration {
         pluginPathConfigured = false;
         loadActivities(config.getConfigurationSection("activities"));
 
+        rewardPool = loadRewardPool(config);
+
         // ====================================
         // One line for the whole file, and only when config.yml actually asks
         // for an m. path: the icons and the craft keys all fail for the same
@@ -174,8 +176,6 @@ public class ActivityConfiguration {
                 + (missingItemPathPlugins.contains(",") ? " are" : " is") + " not enabled - those icons"
                 + " fall back to PAPER and those crafts are never credited.");
         }
-
-        rewardPool = loadRewardPool(config);
 
         guiTitle = config.getString("gui.title", "&8Weekly Activity");
 
@@ -563,15 +563,17 @@ public class ActivityConfiguration {
                     }
                 }
             }
-            if (commands.isEmpty()) {
-                plugin.getLogger().warning(where + " has no commands - skipped, since drawing it would pay"
-                    + " the player nothing.");
+            List<RewardEntry.Item> items = loadRewardItems(entry.get("items"), where);
+
+            if (commands.isEmpty() && items.isEmpty()) {
+                plugin.getLogger().warning(where + " has no commands and no items - skipped, since drawing it"
+                    + " would pay the player nothing.");
                 continue;
             }
 
             Object display = entry.get("display");
             pool.add(new RewardEntry(Math.min(weight, 1_000_000),
-                display == null ? "" : String.valueOf(display), List.copyOf(commands)));
+                display == null ? "" : String.valueOf(display), List.copyOf(commands), List.copyOf(items)));
         }
 
         if (pool.isEmpty()) {
@@ -579,6 +581,91 @@ public class ActivityConfiguration {
                 + " can be reached but nothing can ever be claimed.");
         }
         return List.copyOf(pool);
+    }
+
+    // ====================================
+    // The items one pool entry hands over. A path that cannot possibly work -
+    // an unknown material, another plugin's path syntax, a malformed
+    // m.<type>.<id> - is dropped here with a warning rather than kept to fail
+    // at payout, because a broken path at payout costs the player a click and
+    // a 'reward-failed'. A well formed m. path is kept even when TLibs is not
+    // enabled right now: nothing here can tell a deleted MMOItems id from one
+    // that resolves fine once the server has all three plugins, so that one is
+    // left to fail loudly at payout instead.
+    // ====================================
+    private List<RewardEntry.Item> loadRewardItems(Object raw, String where) {
+        List<RewardEntry.Item> items = new ArrayList<>();
+        if (!(raw instanceof List<?> list)) {
+            return items;
+        }
+        int index = 0;
+        for (Object element : list) {
+            String at = where + ".items[" + index++ + "]";
+            if (!(element instanceof Map<?, ?> map)) {
+                plugin.getLogger().warning(at + " is not an 'item:'/'amount:' block - ignored.");
+                continue;
+            }
+            Object path = map.get("item");
+            if (path == null || String.valueOf(path).isBlank()) {
+                plugin.getLogger().warning(at + " has no 'item:' path - ignored.");
+                continue;
+            }
+            String value = String.valueOf(path).strip();
+            if (!validItemPath(value, at)) {
+                continue;
+            }
+            items.add(new RewardEntry.Item(value, rewardAmount(map.get("amount"), at)));
+        }
+        return items;
+    }
+
+    // The three forms ItemPath accepts, warned about the way material() and
+    // iconPath() warn - except that a reward item has no safe default, so a
+    // value that is none of them is dropped instead of falling back.
+    private boolean validItemPath(String value, String at) {
+        if (ItemPath.isUnsupportedPath(value)) {
+            plugin.getLogger().warning("Unsupported item path '" + Utils.safeForLog(value) + "' at " + at
+                + " - only bare Material names, v.<material> and m.<type>.<id> are supported - ignored.");
+            return false;
+        }
+        if (ItemPath.isPluginPath(value)) {
+            if (ItemPath.pluginPath(value) == null) {
+                plugin.getLogger().warning("Malformed item path '" + Utils.safeForLog(value) + "' at " + at
+                    + " - expected m.<type>.<id> - ignored.");
+                return false;
+            }
+            // Counts as "the admin asked for item paths", so load() warns once
+            // for the file when TLibs/MMOItems/MythicLib are not all enabled
+            pluginPathConfigured = true;
+            return true;
+        }
+        if (ItemPath.material(value) == null) {
+            plugin.getLogger().warning("Unknown material '" + Utils.safeForLog(value) + "' at " + at
+                + " - ignored.");
+            return false;
+        }
+        return true;
+    }
+
+    // 64 is a vanilla stack and the most one 'items:' line may hand over;
+    // anything else (absent, negative, text) falls back to 1 the way every
+    // other numeric key here clamps rather than skips.
+    private int rewardAmount(Object raw, String at) {
+        if (raw == null) {
+            return 1;
+        }
+        if (!(raw instanceof Number number)) {
+            plugin.getLogger().warning(at + " has a non-numeric amount '" + Utils.safeForLog(String.valueOf(raw))
+                + "' - using 1.");
+            return 1;
+        }
+        int amount = number.intValue();
+        if (amount < 1 || amount > 64) {
+            int clamped = Math.max(1, Math.min(64, amount));
+            plugin.getLogger().warning(at + " amount " + amount + " is outside 1-64 - using " + clamped + ".");
+            return clamped;
+        }
+        return amount;
     }
 
     // ====================================

@@ -157,6 +157,88 @@ class ActivityConfigurationRewardsTest {
     }
 
     // ====================================
+    // rewards.pool[N].items - an entry may hand items over instead of, or as
+    // well as, running commands
+    // ====================================
+
+    @Test
+    void anItemOnlyEntryLoadsWithItsPathAndAmount() {
+        List<RewardEntry> pool = loadRewardPool("rewards:\n  pool:\n    - weight: 2\n      display: 'Steel'\n"
+            + "      items:\n        - item: 'm.material.steel'\n          amount: 3\n");
+
+        assertEquals(1, pool.size());
+        assertEquals(List.of(), pool.get(0).commands());
+        assertEquals(List.of(new RewardEntry.Item("m.material.steel", 3)), pool.get(0).items());
+    }
+
+    @Test
+    void aCommandOnlyEntryStillLoadsWithNoItems() {
+        List<RewardEntry> pool = loadRewardPool(
+            "rewards:\n  pool:\n    - weight: 1\n      commands: ['give %player% diamond 3']\n");
+
+        assertEquals(1, pool.size());
+        assertEquals(List.of("give %player% diamond 3"), pool.get(0).commands());
+        assertEquals(List.of(), pool.get(0).items());
+    }
+
+    @Test
+    void anEntryWithBothCommandsAndItemsKeepsBoth() {
+        List<RewardEntry> pool = loadRewardPool("rewards:\n  pool:\n    - weight: 1\n"
+            + "      commands: ['say hi']\n      items:\n        - item: 'DIAMOND'\n");
+
+        assertEquals(1, pool.size());
+        assertEquals(List.of("say hi"), pool.get(0).commands());
+        assertEquals(List.of(new RewardEntry.Item("DIAMOND", 1)), pool.get(0).items());
+    }
+
+    @Test
+    void anEntryWithNeitherCommandsNorItemsIsSkipped() {
+        assertTrue(loadRewardPool("rewards:\n  pool:\n    - weight: 1\n      display: 'Nothing'\n").isEmpty());
+    }
+
+    @Test
+    void aMissingAmountDefaultsToOneAndTheBoundsAreClamped() {
+        List<RewardEntry> pool = loadRewardPool("rewards:\n  pool:\n    - weight: 1\n      items:\n"
+            + "        - item: 'v.diamond'\n"
+            + "        - item: 'DIAMOND'\n          amount: 999\n"
+            + "        - item: 'DIAMOND'\n          amount: -4\n"
+            + "        - item: 'DIAMOND'\n          amount: 'lots'\n");
+
+        assertEquals(List.of(
+            new RewardEntry.Item("v.diamond", 1),
+            new RewardEntry.Item("DIAMOND", 64),
+            new RewardEntry.Item("DIAMOND", 1),
+            new RewardEntry.Item("DIAMOND", 1)), pool.get(0).items());
+    }
+
+    // ====================================
+    // An unknown material, another plugin's path syntax and a malformed m.
+    // path can never resolve, so they are dropped at load rather than kept to
+    // fail at payout. A well formed m. path is kept: nothing here can tell a
+    // live MMOItems id from a deleted one, and TLibs may not even be enabled
+    // while this runs.
+    // ====================================
+    @Test
+    void unusableItemPathsAreDroppedAndTheRestOfTheEntrySurvives() {
+        List<RewardEntry> pool = loadRewardPool("rewards:\n  pool:\n    - weight: 1\n      items:\n"
+            + "        - item: 'NOT_A_MATERIAL'\n"
+            + "        - item: 'ia.custom.block'\n"
+            + "        - item: 'm.material'\n"
+            + "        - amount: 2\n"
+            + "        - 'DIAMOND'\n"
+            + "        - item: 'm.material.steel'\n");
+
+        assertEquals(1, pool.size());
+        assertEquals(List.of(new RewardEntry.Item("m.material.steel", 1)), pool.get(0).items());
+    }
+
+    @Test
+    void anEntryWhoseOnlyItemPathsAreUnusableIsSkipped() {
+        assertTrue(loadRewardPool("rewards:\n  pool:\n    - weight: 1\n      items:\n"
+            + "        - item: 'NOT_A_MATERIAL'\n").isEmpty());
+    }
+
+    // ====================================
     // bar.milestones
     // ====================================
 

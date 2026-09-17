@@ -3,11 +3,22 @@ package tfmc.justin.activity.models;
 import java.util.List;
 
 // ====================================
-// One entry of the reward pool: the console commands one claim can hand over,
-// what to call them in chat, and how likely they are to be drawn.
-// Plain POJO with no Bukkit in it, so the draw stays unit testable.
+// One entry of the reward pool: the console commands and the items one claim
+// can hand over, what to call them in chat, and how likely it is to be drawn.
+// Plain POJO with no Bukkit in it, so the draw stays unit testable - an item
+// is held as its configured path and amount, not as a resolved ItemStack.
 // ====================================
-public record RewardEntry(int weight, String display, List<String> commands) {
+public record RewardEntry(int weight, String display, List<String> commands, List<Item> items) {
+
+    // One 'items:' line: the item-path form ItemPath understands, and how many
+    // of it to hand over.
+    public record Item(String path, int amount) {
+    }
+
+    // The command-only entry every caller wrote before items existed
+    public RewardEntry(int weight, String display, List<String> commands) {
+        this(weight, display, commands, List.of());
+    }
 
     public static int totalWeight(List<RewardEntry> pool) {
         long total = 0;

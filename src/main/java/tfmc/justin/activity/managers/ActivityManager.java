@@ -1,17 +1,21 @@
 package tfmc.justin.activity.managers;
 
 import org.bukkit.Bukkit;
+import org.bukkit.Material;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
 import tfmc.justin.activity.config.ActivityConfiguration;
 import tfmc.justin.activity.config.Messages;
+import tfmc.justin.activity.hooks.TLibsItems;
 import tfmc.justin.activity.models.ActivityDef;
 import tfmc.justin.activity.models.PlayerData;
 import tfmc.justin.activity.models.RecordResult;
 import tfmc.justin.activity.models.Recorded;
 import tfmc.justin.activity.models.RewardEntry;
 import tfmc.justin.activity.store.PlayerStore;
+import tfmc.justin.activity.utils.ItemPath;
 import tfmc.justin.activity.utils.Utils;
 
 import java.time.Duration;
@@ -19,9 +23,11 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.Function;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
 
@@ -473,7 +479,7 @@ public class ActivityManager {
         int paid = 0;
         for (int i = 0; i < due.size(); i++) {
             RewardEntry drawn = draw(runnablePool);
-            if (drawn == null || !dispatchRewards(player, drawn.commands())) {
+            if (drawn == null || !dispatchRewards(player, drawn)) {
                 break;
             }
             paid++;
@@ -524,11 +530,19 @@ public class ActivityManager {
         return cap <= 0 ? claimedBefore : Collections.max(due.subList(0, cap));
     }
 
-    // The pool entries at least one of whose commands can be run for this
-    // player's name - see canRunRewardCommand.
+    // ====================================
+    // The pool entries that can pay this player at all: one whose commands can
+    // be run for this name (see canRunRewardCommand), or one that hands over
+    // items - an item goes straight into the inventory and never has the name
+    // pasted into it, so it pays a Bedrock/unsafe name like any other.
+    // ====================================
     static List<RewardEntry> runnableEntries(List<RewardEntry> pool, String name) {
         List<RewardEntry> runnable = new ArrayList<>();
         for (RewardEntry entry : pool) {
+            if (!entry.items().isEmpty()) {
+                runnable.add(entry);
+                continue;
+            }
             for (String command : entry.commands()) {
                 if (canRunRewardCommand(command, name)) {
                     runnable.add(entry);
@@ -540,12 +554,93 @@ public class ActivityManager {
     }
 
     // ====================================
+    // One drawn entry handed over: its items, then its commands. True only if
+    // something actually went out - the same rule dispatchCommands has always
+    // used, now spanning both halves. An entry that gave its items but whose
+    // commands all failed counts as paid on purpose: a milestone rolled back
+    // is drawn and paid again on the next click, which would hand those items
+    // over twice. A drawn entry that handed over nothing at all counts as
+    // unpaid, so that milestone stays claimable.
+    //
+    // Both halves always run: the commands are not skipped just because the
+    // items already succeeded.
+    // ====================================
+    private boolean dispatchRewards(Player player, RewardEntry entry) {
+        boolean gaveItems = giveItems(player, entry.items(), this::resolveRewardItem, plugin.getLogger());
+        boolean ranCommands = dispatchCommands(player, entry.commands());
+        return gaveItems || ranCommands;
+    }
+
+    // ====================================
+    // The stack behind one configured reward path, or null when nothing can be
+    // built from it. m. paths go through TLibs exactly as the GUI's icons do,
+    // and only while all of TLibs/MMOItems/MythicLib are enabled - touching
+    // TLibsItems without them would fail on class initialisation, which is not
+    // something resolve() can catch for us.
+    // ====================================
+    private ItemStack resolveRewardItem(String path) {
+        if (ItemPath.isPluginPath(path)) {
+            return config.itemPathsUsable() ? TLibsItems.item(path) : null;
+        }
+        Material material = ItemPath.material(path);
+        return material == null ? null : new ItemStack(material);
+    }
+
+    // ====================================
+    // Hands the items of one entry over, and answers whether anything actually
+    // reached the player - the same "did any of it go out" rule dispatchCommands
+    // uses. A path that no longer resolves (TLibs down, the MMOItems id deleted
+    // since load) is logged and counts as nothing handed over, so an entry made
+    // only of such paths fails its milestone and leaves it claimable.
+    //
+    // What does not fit is dropped at the player's feet rather than lost: a
+    // reward that vanishes into a full inventory is a support ticket. This runs
+    // on the main thread - claim() is only ever reached from the GUI's
+    // InventoryClickEvent handler - so the inventory is touched inline.
+    //
+    // The resolved stack's own amount is whatever built it, so 'amount:' is set
+    // on a clone rather than multiplied: 'amount: 3' means three items. The
+    // clone also keeps a stack TLibs might be holding on to out of reach.
+    // ====================================
+    static boolean giveItems(Player player, List<RewardEntry.Item> items,
+                             Function<String, ItemStack> resolver, Logger logger) {
+        boolean gaveAny = false;
+        for (RewardEntry.Item item : items) {
+            try {
+                ItemStack stack = resolver.apply(item.path());
+                // Compared against AIR rather than through Material#isAir(),
+                // which needs the block registry of a running server
+                if (stack == null || stack.getType() == Material.AIR) {
+                    logger.warning("Reward item '" + Utils.safeForLog(item.path()) + "' could not be resolved"
+                        + " for " + player.getUniqueId() + " - nothing was handed over for it.");
+                    continue;
+                }
+                stack = stack.clone();
+                stack.setAmount(item.amount());
+                Map<Integer, ItemStack> leftovers = player.getInventory().addItem(stack);
+                // Set before the drop: the stack has reached the player either
+                // way, and a throwing drop must not un-pay the milestone
+                gaveAny = true;
+                for (ItemStack leftover : leftovers.values()) {
+                    player.getWorld().dropItem(player.getLocation(), leftover);
+                }
+            } catch (Throwable t) {
+                // Same reason dispatchCommands swallows: claim() has already
+                // burned and saved the milestones and must be able to put them
+                // back rather than unwind through this loop.
+                logger.severe("Reward item '" + Utils.safeForLog(item.path()) + "' threw for "
+                    + player.getUniqueId() + ": " + t);
+            }
+        }
+        return gaveAny;
+    }
+
+    // ====================================
     // True only if at least one command actually ran. The name check is per
     // command rather than per player: an unsafe name skips the ones that paste
-    // it and leaves the %uuid%-only ones working. A drawn entry none of whose
-    // commands could run counts as unpaid, so that milestone stays claimable.
+    // it and leaves the %uuid%-only ones working.
     // ====================================
-    private boolean dispatchRewards(Player player, List<String> commands) {
+    private boolean dispatchCommands(Player player, List<String> commands) {
         String name = player.getName();
         String uuid = player.getUniqueId().toString();
         boolean ranAny = false;

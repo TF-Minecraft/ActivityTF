@@ -438,6 +438,17 @@ rewards:
       display: "#50d990x1 #b8906eNetherite Ingot"
       commands:
         - "give %player% netherite_ingot 1"
+    # An entry can hand items straight to the inventory instead of (or as well
+    # as) running commands. 'item:' takes the same three forms as an activity
+    # icon - IRON_INGOT, v.iron_ingot, m.<type>.<id> - and 'amount:' is 1-64,
+    # defaulting to 1. Anything that does not fit is dropped at the player's
+    # feet. Unlike a 'give %player% ...' command this also pays a Bedrock or
+    # otherwise unsafe player name.
+    # - weight: 2
+    #   display: "#50d990x3 #b8906eSteel"
+    #   items:
+    #     - item: "m.material.steel"
+    #       amount: 3
 
 gui:
   title: "&8Weekly Activity"
