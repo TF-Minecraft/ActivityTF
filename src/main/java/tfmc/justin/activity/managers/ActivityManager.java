@@ -505,11 +505,22 @@ public class ActivityManager {
             store.markDirty();
             // Nothing went out at all - the case a player holding the mouse
             // down on a broken pool hits on every click. The row is back where
-            // this click found it, so the autosave the dirty flag just armed is
-            // enough and the whole store is not serialised a second time per
-            // click. Only a partial payout, which changes what was already
-            // written, is worth blocking the tick on.
-            if (rolledBack != claimedBefore && !store.saveNow()) {
+            // this click found it, so the whole store is not serialised a
+            // second time per click; only a partial payout, which changes what
+            // was already written, is worth blocking the tick on.
+            //
+            // Disk still says claimedAfter until that queued write lands,
+            // though, and a crash in between costs the player every milestone
+            // he reached this week. So the write is queued now rather than
+            // left to the next autosave tick (save-interval-minutes, 5 by
+            // default), and the window is stated in the log so an operator who
+            // finds the file that way knows what it should have held.
+            if (rolledBack == claimedBefore) {
+                store.saveSoon();
+                plugin.getLogger().warning("Reward payout for " + player.getUniqueId() + " paid none of the"
+                    + " milestones " + due + ": claimed-points is back at " + claimedBefore + " in memory but"
+                    + " still " + claimedAfter + " on disk until the queued save lands.");
+            } else if (!store.saveNow()) {
                 plugin.getLogger().severe("Reward payout for " + player.getUniqueId() + " is out of sync:"
                     + " paid " + paid + " of the milestones " + due + ", claimed-points is " + rolledBack
                     + " in memory but " + claimedAfter + " on disk. Repair " + PlayerStore.FILE + " by hand.");
@@ -605,12 +616,30 @@ public class ActivityManager {
             return config.itemPathsUsable() ? TLibsItems.item(path) : null;
         }
         Material material = ItemPath.material(path);
-        // isItem() so a block-only name (CARROTS, WATER, FIRE) is refused here
-        // rather than at addItem, which turns such a stack into nothing and
-        // reports no leftover - the milestone would stay burned and the player
-        // would be told he was paid. Needs a live registry, so it is asked here
-        // at payout rather than at load.
-        return material == null || !material.isItem() ? null : new ItemStack(material);
+        return material == null ? null : new ItemStack(material);
+    }
+
+    // ====================================
+    // Can an inventory actually hold this? A block-only material (CARROTS,
+    // WATER, FIRE, POWDER_SNOW) is turned into nothing by addItem, which then
+    // reports no leftover - the entry would count as paid, the milestone would
+    // stay burned and the player would be told he was paid having received
+    // nothing. Asked of the resolved stack rather than of the bare-Material
+    // branch alone, so an m.<type>.<id> built on such a material is refused by
+    // the same guard.
+    //
+    // Material#isItem() reads the item registry, which only exists on a
+    // running server - headless it throws on class initialisation. There the
+    // stack is taken at face value: this guard exists to catch a payout on a
+    // real server, and refusing every stack without a registry would mean
+    // handing nothing over at all.
+    // ====================================
+    static boolean isItem(ItemStack stack) {
+        try {
+            return stack.getType().isItem();
+        } catch (Throwable t) {
+            return true;
+        }
     }
 
     // ====================================
@@ -635,6 +664,11 @@ public class ActivityManager {
     static boolean giveItems(Player player, RewardEntry entry, int multiplier, int milestone,
                              Function<String, ItemStack> resolver, Logger logger) {
         boolean gaveAny = false;
+        // Apart from gaveAny on purpose: gaveAny is set before addItem, so a
+        // first insert that throws leaves it true having put nothing in the
+        // inventory. Only a returned insert proves part of the entry actually
+        // arrived, which is what the partial-payout warning below claims.
+        boolean insertedAny = false;
         boolean missedAny = false;
         for (RewardEntry.Item item : entry.items()) {
             int total = item.amount() * multiplier;
@@ -642,7 +676,7 @@ public class ActivityManager {
                 ItemStack stack = resolver.apply(item.path());
                 // Compared against AIR rather than through Material#isAir(),
                 // which needs the block registry of a running server
-                if (stack == null || stack.getType() == Material.AIR) {
+                if (stack == null || stack.getType() == Material.AIR || !isItem(stack)) {
                     missedAny = true;
                     // Memoised the way TLibsItems memoises a failing path: a
                     // claim can be repeated at click rate, and a path TLibs was
@@ -668,7 +702,9 @@ public class ActivityManager {
                     // on the next click. A throwing drop must not un-pay it
                     // either.
                     gaveAny = true;
-                    for (ItemStack leftover : player.getInventory().addItem(chunk).values()) {
+                    Map<Integer, ItemStack> leftovers = player.getInventory().addItem(chunk);
+                    insertedAny = true;
+                    for (ItemStack leftover : leftovers.values()) {
                         // Owner-locked for the first seconds, so the overflow
                         // cannot be picked up by whoever happens to be standing
                         // next to the claimer
@@ -692,15 +728,27 @@ public class ActivityManager {
         // burned on purpose - rolling it back would hand the part that did go
         // out over a second time - so the only way the rest ever reaches the
         // player is an operator reading this line.
-        if (gaveAny && missedAny) {
+        if (insertedAny && missedAny) {
             logger.warning("Only part of reward '" + Utils.safeForLog(entry.display()) + "' reached "
                 + player.getUniqueId() + " at milestone " + milestone + " - the milestone stays claimed,"
                 + " so hand the rest over by hand.");
         }
         if (gaveAny) {
-            // The inventory was changed inside a cancelled InventoryClickEvent,
-            // which leaves the client showing ghost stacks until it reopens
-            player.updateInventory();
+            try {
+                // The inventory was changed inside a cancelled
+                // InventoryClickEvent, which leaves the client showing ghost
+                // stacks until it reopens
+                player.updateInventory();
+            } catch (Throwable t) {
+                // The one Bukkit call here that used to sit outside a try. It
+                // must not unwind either: claim() has already burned and saved
+                // the milestones and would skip its rollback, leaving disk
+                // claiming milestones nobody was ever paid for. A stale client
+                // view fixes itself on the next window open.
+                logger.warning("Could not resync the inventory of " + player.getUniqueId()
+                    + " after reward '" + Utils.safeForLog(entry.display()) + "' at milestone " + milestone
+                    + ": " + t);
+            }
         }
         return gaveAny;
     }

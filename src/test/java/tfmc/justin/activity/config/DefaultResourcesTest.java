@@ -94,7 +94,7 @@ class DefaultResourcesTest {
             }
         }
 
-        List<Map<?, ?>> pool = config.getMapList("rewards.pool");
+        List<Map<?, ?>> pool = config.getMapList(ActivityConfiguration.REWARDS_POOL_PATH);
         assertFalse(pool.isEmpty(), "rewards.pool should ship at least one entry");
         for (int i = 0; i < pool.size(); i++) {
             Object display = pool.get(i).get("display");
@@ -149,7 +149,7 @@ class DefaultResourcesTest {
     @Test
     void everyRewardPoolEntryIsUsable() {
         YamlConfiguration config = load("config.yml");
-        List<Map<?, ?>> pool = config.getMapList("rewards.pool");
+        List<Map<?, ?>> pool = config.getMapList(ActivityConfiguration.REWARDS_POOL_PATH);
 
         assertFalse(pool.isEmpty());
         for (int i = 0; i < pool.size(); i++) {
@@ -169,7 +169,42 @@ class DefaultResourcesTest {
             // marked paid having received nothing
             assertTrue(entry.get("items") instanceof List<?> items && !items.isEmpty(),
                     where + ".items should list at least one item");
+
+            // The payload itself, not just its shape: the four paths and their
+            // amounts are the whole shipped economy, and both are checkable
+            // headless (ItemPath.material is a name lookup). A 'DIAMONDS' typo
+            // would otherwise ship green and pay nothing.
+            List<?> items = (List<?>) entry.get("items");
+            for (int j = 0; j < items.size(); j++) {
+                String at = where + ".items[" + j + "]";
+                assertTrue(items.get(j) instanceof Map<?, ?>, at + " should be an item block");
+                Map<?, ?> item = (Map<?, ?>) items.get(j);
+
+                Object path = item.get("item");
+                assertFalse(path == null || String.valueOf(path).isBlank(), at + ".item should not be blank");
+                // Every shipped entry pays a bare Material on purpose: an
+                // m.<type>.<id> would make the default config depend on
+                // MMOItems being installed
+                assertTrue(tfmc.justin.activity.utils.ItemPath.material(String.valueOf(path)) != null,
+                        at + ".item is not a Material: " + path);
+
+                Object amount = item.get("amount");
+                assertTrue(amount instanceof Integer count && count >= 1 && count <= 64,
+                        at + ".amount should be a whole number in 1-64, was: " + amount);
+            }
         }
+    }
+
+    // The multiplier the shipped file pays at. 1 is also the fallback, so this
+    // reads the key through the constant load() reads it through - a typo in
+    // either end fails here rather than paying every claim 1x in silence.
+    @Test
+    void shippedConfigDefaultsTheRewardMultiplierToOne() {
+        YamlConfiguration config = load("config.yml");
+
+        assertTrue(config.contains(ActivityConfiguration.REWARDS_MULTIPLIER_PATH),
+                "config.yml should set " + ActivityConfiguration.REWARDS_MULTIPLIER_PATH);
+        assertEquals(1, config.getInt(ActivityConfiguration.REWARDS_MULTIPLIER_PATH));
     }
 
     // Every "gui.<key>" literal ActivityGui.java passes to Messages.get(...)

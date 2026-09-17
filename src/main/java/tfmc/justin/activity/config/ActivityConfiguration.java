@@ -170,7 +170,7 @@ public class ActivityConfiguration {
         loadActivities(config.getConfigurationSection("activities"));
 
         rewardPool = loadRewardPool(config);
-        rewardMultiplier = rewardMultiplier(config.getInt("rewards.multiplier", 1));
+        rewardMultiplier = rewardMultiplier(config);
 
         // ====================================
         // One line for the whole file, and only when config.yml actually asks
@@ -223,6 +223,12 @@ public class ActivityConfiguration {
     // ====================================
     static final String REROLLS_PER_DAY_PATH = "reroll.per-day";
     static final String REROLL_MAX_POINTS_PATH = "reroll.max-points";
+
+    // The reward keys, constants for the same reason: the shipped multiplier
+    // is 1, which is also the fallback, so a typo in either path would leave
+    // every claim paying 1x with nothing to show for it.
+    static final String REWARDS_MULTIPLIER_PATH = "rewards.multiplier";
+    static final String REWARDS_POOL_PATH = "rewards.pool";
 
     // 0 turns rerolling off entirely, so like playtime.afk-minutes this clamp
     // has no lower bound of 1
@@ -552,8 +558,8 @@ public class ActivityConfiguration {
     private List<RewardEntry> loadRewardPool(FileConfiguration config) {
         List<RewardEntry> pool = new ArrayList<>();
         int index = 0;
-        for (Map<?, ?> entry : config.getMapList("rewards.pool")) {
-            String where = "rewards.pool[" + index++ + "]";
+        for (Map<?, ?> entry : config.getMapList(REWARDS_POOL_PATH)) {
+            String where = REWARDS_POOL_PATH + "[" + index++ + "]";
 
             int weight = entry.get("weight") instanceof Number number ? number.intValue() : 1;
             if (weight <= 0) {
@@ -698,15 +704,39 @@ public class ActivityConfiguration {
     // never what an admin meant (the way to pay nothing is to drop the entry),
     // and 64 x a 64 amount is already 64 full stacks off one 'items:' line.
     // Console 'give' commands are opaque strings and are never multiplied.
+    //
+    // Read raw rather than through getInt, and refused the same way an
+    // 'amount:' is: getInt turns 2.9 into 2 in silence and reports a
+    // non-numeric value as "0 is outside 1-64", naming a number the admin
+    // never wrote. Takes the section, not the value, so a headless test can
+    // catch a typo in the path - the shipped value is 1, which is also the
+    // fallback, so nothing else would.
     // ====================================
-    private int rewardMultiplier(int raw) {
-        if (raw < 1 || raw > 64) {
-            int clamped = Math.max(1, Math.min(64, raw));
-            plugin.getLogger().warning("rewards.multiplier " + raw + " is outside 1-64 - using "
-                + clamped + ".");
-            return clamped;
+    private int rewardMultiplier(ConfigurationSection config) {
+        Object raw = config.get(REWARDS_MULTIPLIER_PATH);
+        if (raw == null) {
+            return 1;
         }
-        return raw;
+        if (!(raw instanceof Number number)) {
+            plugin.getLogger().warning(REWARDS_MULTIPLIER_PATH + " is not a number ('"
+                + Utils.safeForLog(String.valueOf(raw)) + "') - using 1.");
+            return 1;
+        }
+        // Long before narrowing, and a fraction refused rather than rounded,
+        // exactly as rewardAmount does it
+        long value = number.longValue();
+        if (number.doubleValue() != value) {
+            plugin.getLogger().warning(REWARDS_MULTIPLIER_PATH + " '" + Utils.safeForLog(String.valueOf(raw))
+                + "' is not a whole number - using 1.");
+            return 1;
+        }
+        if (value < 1 || value > 64) {
+            long clamped = Math.max(1, Math.min(64, value));
+            plugin.getLogger().warning(REWARDS_MULTIPLIER_PATH + " " + value + " is outside 1-64 - using "
+                + clamped + ".");
+            return (int) clamped;
+        }
+        return (int) value;
     }
 
     // ====================================

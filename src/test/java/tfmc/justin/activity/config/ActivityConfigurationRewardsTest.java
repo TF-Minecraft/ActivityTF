@@ -1,5 +1,6 @@
 package tfmc.justin.activity.config;
 
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -349,15 +350,23 @@ class ActivityConfigurationRewardsTest {
     // reads as 1, never as "hand nothing over".
     // ====================================
 
-    private int rewardMultiplier(int raw) {
+    // Fed a whole config rather than a value, so the key path itself is under
+    // test: the shipped multiplier is 1 and so is the fallback, which means a
+    // typo in the path is invisible everywhere else.
+    private int rewardMultiplier(String yamlContent) {
         try {
             ActivityConfiguration config = new ActivityConfiguration(stubPlugin());
-            Method method = ActivityConfiguration.class.getDeclaredMethod("rewardMultiplier", int.class);
+            Method method = ActivityConfiguration.class.getDeclaredMethod("rewardMultiplier",
+                ConfigurationSection.class);
             method.setAccessible(true);
-            return (int) method.invoke(config, raw);
+            return (int) method.invoke(config, yaml(yamlContent));
         } catch (ReflectiveOperationException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    private int rewardMultiplier(int raw) {
+        return rewardMultiplier("rewards:\n  multiplier: " + raw + "\n");
     }
 
     @Test
@@ -378,6 +387,36 @@ class ActivityConfigurationRewardsTest {
     void aMultiplierAboveTheUpperBoundIsClamped() {
         assertEquals(64, rewardMultiplier(1000));
         assertTrue(loggedContains("rewards.multiplier 1000 is outside 1-64 - using 64."));
+    }
+
+    // The wiring, not the clamp: read out of a whole config at the path the
+    // shipped file writes, so a typo in either would be caught here
+    @Test
+    void theMultiplierIsReadFromItsConfiguredPath() {
+        assertEquals(3, rewardMultiplier("rewards:\n  multiplier: 3\n  pool: []\n"));
+        assertEquals("rewards.multiplier", ActivityConfiguration.REWARDS_MULTIPLIER_PATH);
+    }
+
+    @Test
+    void anAbsentMultiplierReadsAsOneWithoutAWarning() {
+        assertEquals(1, rewardMultiplier("rewards:\n  pool: []\n"));
+        assertFalse(loggedContains("rewards.multiplier"));
+    }
+
+    // getInt would have truncated this to 2 in silence, paying double what was
+    // written rather than what a broken key is meant to pay
+    @Test
+    void aFractionalMultiplierFallsBackToOneWithAWarning() {
+        assertEquals(1, rewardMultiplier("rewards:\n  multiplier: 2.9\n"));
+        assertTrue(loggedContains("rewards.multiplier '2.9' is not a whole number - using 1."));
+    }
+
+    // getInt reported this as "rewards.multiplier 0 is outside 1-64", naming a
+    // value the admin never wrote
+    @Test
+    void aNonNumericMultiplierFallsBackToOneAndIsNamedAsWritten() {
+        assertEquals(1, rewardMultiplier("rewards:\n  multiplier: 'three'\n"));
+        assertTrue(loggedContains("rewards.multiplier is not a number ('three') - using 1."));
     }
 
     // ====================================

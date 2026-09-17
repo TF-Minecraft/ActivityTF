@@ -37,9 +37,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 // Not reachable headless, and so not covered here: the real resolver
 // (ActivityManager#resolveRewardItem) - both its TLibs branch, which needs
 // TLibs, MMOItems and MythicLib running, and its Material branch, where
-// new ItemStack(Material) and Material#isItem() both need the live registry of
-// a running server (the isItem() guard that refuses a block-only name such as
-// CARROTS is therefore only exercised in production); claim() itself, which
+// new ItemStack(Material) needs the live registry of a running server, as does
+// the Material#isItem() behind ActivityManager.isItem - so the guard that
+// refuses a block-only name such as CARROTS only ever answers for real in
+// production, and what is pinned here is its headless fallback; claim() itself, which
 // needs a live store, a live Messages and Bukkit.dispatchCommand; and the real
 // PlayerInventory#addItem stacking rules, which are server code. What the stubs
 // stand in for is exactly those calls: addItem, getWorld, dropItemNaturally and
@@ -86,6 +87,7 @@ class ActivityManagerRewardItemsTest {
         Map<Integer, ItemStack> leftover = new HashMap<>();
         boolean addItemThrows;
         boolean dropThrows;
+        boolean updateThrows;
         int updates;
         Player player;
     }
@@ -136,6 +138,9 @@ class ActivityManagerRewardItemsTest {
             case "getLocation" -> new Location(world, 0, 64, 0);
             case "updateInventory" -> {
                 handover.updates++;
+                if (handover.updateThrows) {
+                    throw new IllegalStateException("resync boom");
+                }
                 yield null;
             }
             case "toString" -> "stub-player";
@@ -454,6 +459,45 @@ class ActivityManagerRewardItemsTest {
         assertTrue(give(handover, MATERIALS, new RewardEntry.Item("DIAMOND", 3)));
 
         assertEquals(1, handover.updates);
+    }
+
+    // Material#isItem() reads a registry that only exists on a running server.
+    // Without one the resolved stack is taken at face value: refusing every
+    // stack instead would mean handing nothing over at all.
+    @Test
+    void theBlockOnlyGuardPassesAnythingThroughWithoutARegistry() {
+        assertTrue(ActivityManager.isItem(new TestStack(Material.DIAMOND, 1)));
+        assertTrue(ActivityManager.isItem(new TestStack(Material.CARROTS, 1)));
+    }
+
+    // The resync runs after the milestone is already burned and saved, so it
+    // must not unwind past claim()'s rollback: an escape there would leave disk
+    // claiming milestones the player was never paid for.
+    @Test
+    void aThrowingResyncIsSwallowedAndLeavesTheEntryPaid() {
+        Handover handover = player();
+        handover.updateThrows = true;
+
+        assertTrue(give(handover, MATERIALS, new RewardEntry.Item("DIAMOND", 1)));
+
+        assertEquals(1, handover.added.size());
+        assertTrue(loggedAtLeastOne(Level.WARNING, "Could not resync the inventory"));
+    }
+
+    // The entry counts as paid the moment the inventory is touched, which is
+    // before addItem returns - so "only part of it reached him" must not be
+    // claimed when the first insert threw and nothing reached him at all
+    @Test
+    void aThrowingFirstInsertIsNotReportedAsAPartialHandover() {
+        Handover handover = player();
+        handover.addItemThrows = true;
+
+        assertTrue(ActivityManager.giveItems(handover.player,
+            new RewardEntry(1, "Steel Bundle", List.of(), List.of(new RewardEntry.Item("DIAMOND", 1))),
+            1, 20, MATERIALS, logger()));
+
+        assertTrue(loggedAtLeastOne(Level.SEVERE, "threw for"));
+        assertFalse(loggedAtLeastOne(Level.WARNING, "Only part of reward"));
     }
 
     @Test
