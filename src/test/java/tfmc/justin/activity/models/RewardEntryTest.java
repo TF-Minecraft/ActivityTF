@@ -14,8 +14,10 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 // ====================================
 class RewardEntryTest {
 
-    private static final RewardEntry COMMON = new RewardEntry(3, "common", List.of("give %player% diamond 3"));
-    private static final RewardEntry RARE = new RewardEntry(1, "rare", List.of("give %player% netherite_ingot 1"));
+    private static final RewardEntry COMMON = new RewardEntry(3, "common",
+        List.of("give %player% diamond 3"), List.of());
+    private static final RewardEntry RARE = new RewardEntry(1, "rare",
+        List.of("give %player% netherite_ingot 1"), List.of());
     private static final List<RewardEntry> POOL = List.of(COMMON, RARE);
 
     @Test

@@ -404,13 +404,15 @@ activities:
 
 # The reward pool. Clicking the weekly bar in /activity claims every
 # milestone reached and not yet claimed (see bar.milestones), drawing one
-# entry from this pool at random per milestone and running that entry's
-# commands.
+# entry from this pool at random per milestone, handing over that entry's
+# items and running its commands.
 #   weight   - how likely the entry is, relative to the others. Optional,
 #              defaults to 1; an entry with weight 0 or less is dropped with a
 #              warning and can never be drawn.
 #   display  - one line, shown in chat when the entry is drawn.
-#   commands - console commands run for that draw.
+#   items    - items handed straight to the inventory for that draw, each
+#              multiplied by rewards.multiplier below.
+#   commands - console commands run for that draw, never multiplied.
 # %player% = name, %uuid% = the player's UUID.
 # A command containing %player% is skipped with a warning when the name is not
 # [A-Za-z0-9_.]{1,16} (e.g. a Bedrock name with a space); commands that only
@@ -421,23 +423,48 @@ activities:
 # Bedrock/Floodgate or other unsafe names, write reward commands using only
 # %uuid% (e.g. via a plugin that can look a player up by UUID).
 rewards:
+  # Multiplies every 'amount:' below at payout, so a reload changes what the
+  # next claim pays. 1-64; anything outside that is clamped, and 0 or a
+  # negative reads as 1 rather than as "pay nothing". Only items are
+  # multiplied - a 'commands:' line is an opaque string this plugin never
+  # rewrites. A total above one stack is handed over as whole stacks of the
+  # item's own maximum size.
+  multiplier: 1
   pool:
     - weight: 4
       display: "#50d990x3 #b8906eDiamond"
-      commands:
-        - "give %player% diamond 3"
+      items:
+        - item: "DIAMOND"
+          amount: 3
     - weight: 3
       display: "#50d990x16 #b8906eGolden Apple"
-      commands:
-        - "give %player% golden_apple 16"
+      items:
+        - item: "GOLDEN_APPLE"
+          amount: 16
     - weight: 2
       display: "#50d990x1 #b8906eExperience Bottle Stack"
-      commands:
-        - "give %player% experience_bottle 64"
+      items:
+        - item: "EXPERIENCE_BOTTLE"
+          amount: 64
     - weight: 1
       display: "#50d990x1 #b8906eNetherite Ingot"
-      commands:
-        - "give %player% netherite_ingot 1"
+      items:
+        - item: "NETHERITE_INGOT"
+          amount: 1
+    # An entry can also run console commands ('commands:', with %player% and
+    # %uuid%) instead of, or as well as, handing items over. Items are the
+    # safer half: a failed 'give' is invisible to the plugin, so the player is
+    # marked paid having received nothing, while a failed item hands the
+    # milestone back. 'item:' takes the same three forms as an activity icon -
+    # IRON_INGOT, v.iron_ingot, m.<type>.<id> - and 'amount:' is 1-64,
+    # defaulting to 1. Anything that does not fit is dropped at the player's
+    # feet. Unlike a 'give %player% ...' command this also pays a Bedrock or
+    # otherwise unsafe player name.
+    # - weight: 2
+    #   display: "#50d990x3 #b8906eSteel"
+    #   items:
+    #     - item: "m.material.steel"
+    #       amount: 3
 
 gui:
   title: "&8Weekly Activity"

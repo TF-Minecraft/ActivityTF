@@ -116,6 +116,11 @@ public class ActivityConfiguration {
     // list the claim is paying out of
     private volatile List<RewardEntry> rewardPool = List.of();
 
+    // What every 'items:' amount is multiplied by at payout. Read fresh on
+    // every handover rather than folded into the pool at load, so a reload
+    // changes what the next claim pays.
+    private volatile int rewardMultiplier = 1;
+
     private String guiTitle;
 
     private volatile int barMax;
@@ -164,6 +169,9 @@ public class ActivityConfiguration {
         pluginPathConfigured = false;
         loadActivities(config.getConfigurationSection("activities"));
 
+        rewardPool = loadRewardPool(config);
+        rewardMultiplier = rewardMultiplier(config);
+
         // ====================================
         // One line for the whole file, and only when config.yml actually asks
         // for an m. path: the icons and the craft keys all fail for the same
@@ -172,10 +180,9 @@ public class ActivityConfiguration {
         if ((pluginPathConfigured || !craftPaths.isEmpty()) && !itemPathsUsable) {
             plugin.getLogger().warning("config.yml uses m.<type>.<id> item paths but " + missingItemPathPlugins
                 + (missingItemPathPlugins.contains(",") ? " are" : " is") + " not enabled - those icons"
-                + " fall back to PAPER and those crafts are never credited.");
+                + " fall back to PAPER, those crafts are never credited, and any reward item on such a path"
+                + " hands over nothing and leaves its milestone unclaimed.");
         }
-
-        rewardPool = loadRewardPool(config);
 
         guiTitle = config.getString("gui.title", "&8Weekly Activity");
 
@@ -216,6 +223,12 @@ public class ActivityConfiguration {
     // ====================================
     static final String REROLLS_PER_DAY_PATH = "reroll.per-day";
     static final String REROLL_MAX_POINTS_PATH = "reroll.max-points";
+
+    // The reward keys, constants for the same reason: the shipped multiplier
+    // is 1, which is also the fallback, so a typo in either path would leave
+    // every claim paying 1x with nothing to show for it.
+    static final String REWARDS_MULTIPLIER_PATH = "rewards.multiplier";
+    static final String REWARDS_POOL_PATH = "rewards.pool";
 
     // 0 turns rerolling off entirely, so like playtime.afk-minutes this clamp
     // has no lower bound of 1
@@ -545,8 +558,8 @@ public class ActivityConfiguration {
     private List<RewardEntry> loadRewardPool(FileConfiguration config) {
         List<RewardEntry> pool = new ArrayList<>();
         int index = 0;
-        for (Map<?, ?> entry : config.getMapList("rewards.pool")) {
-            String where = "rewards.pool[" + index++ + "]";
+        for (Map<?, ?> entry : config.getMapList(REWARDS_POOL_PATH)) {
+            String where = REWARDS_POOL_PATH + "[" + index++ + "]";
 
             int weight = entry.get("weight") instanceof Number number ? number.intValue() : 1;
             if (weight <= 0) {
@@ -563,15 +576,17 @@ public class ActivityConfiguration {
                     }
                 }
             }
-            if (commands.isEmpty()) {
-                plugin.getLogger().warning(where + " has no commands - skipped, since drawing it would pay"
-                    + " the player nothing.");
+            List<RewardEntry.Item> items = loadRewardItems(entry.get("items"), where);
+
+            if (commands.isEmpty() && items.isEmpty()) {
+                plugin.getLogger().warning(where + " has no commands and no items - skipped, since drawing it"
+                    + " would pay the player nothing.");
                 continue;
             }
 
             Object display = entry.get("display");
             pool.add(new RewardEntry(Math.min(weight, 1_000_000),
-                display == null ? "" : String.valueOf(display), List.copyOf(commands)));
+                display == null ? "" : String.valueOf(display), List.copyOf(commands), List.copyOf(items)));
         }
 
         if (pool.isEmpty()) {
@@ -579,6 +594,149 @@ public class ActivityConfiguration {
                 + " can be reached but nothing can ever be claimed.");
         }
         return List.copyOf(pool);
+    }
+
+    // ====================================
+    // The items one pool entry hands over. A path that cannot possibly work -
+    // an unknown material, another plugin's path syntax, a malformed
+    // m.<type>.<id> - is dropped here with a warning rather than kept to fail
+    // at payout, because a broken path at payout costs the player a click and
+    // a 'reward-failed'. A well formed m. path is kept even when TLibs is not
+    // enabled right now: nothing here can tell a deleted MMOItems id from one
+    // that resolves fine once the server has all three plugins, so that one is
+    // left to fail loudly at payout instead.
+    // ====================================
+    private List<RewardEntry.Item> loadRewardItems(Object raw, String where) {
+        List<RewardEntry.Item> items = new ArrayList<>();
+        if (raw == null) {
+            return items;
+        }
+        // A single 'items: DIAMOND' or 'items: {item: DIAMOND}' is the natural
+        // typo, and silently paying nothing for it is exactly what every other
+        // malformed key here refuses to do
+        if (!(raw instanceof List<?> list)) {
+            plugin.getLogger().warning(where + ".items is not a list of 'item:'/'amount:' blocks ('"
+                + Utils.safeForLog(String.valueOf(raw)) + "') - no item is handed over for this entry.");
+            return items;
+        }
+        int index = 0;
+        for (Object element : list) {
+            String at = where + ".items[" + index++ + "]";
+            if (!(element instanceof Map<?, ?> map)) {
+                plugin.getLogger().warning(at + " is not an 'item:'/'amount:' block - ignored.");
+                continue;
+            }
+            Object path = map.get("item");
+            if (path == null || String.valueOf(path).isBlank()) {
+                plugin.getLogger().warning(at + " has no 'item:' path - ignored.");
+                continue;
+            }
+            String value = String.valueOf(path).strip();
+            if (!validItemPath(value, at)) {
+                continue;
+            }
+            items.add(new RewardEntry.Item(value, rewardAmount(map.get("amount"), at)));
+        }
+        return items;
+    }
+
+    // The three forms ItemPath accepts, warned about the way material() and
+    // iconPath() warn - except that a reward item has no safe default, so a
+    // value that is none of them is dropped instead of falling back.
+    private boolean validItemPath(String value, String at) {
+        if (ItemPath.isUnsupportedPath(value)) {
+            plugin.getLogger().warning("Unsupported item path '" + Utils.safeForLog(value) + "' at " + at
+                + " - only bare Material names, v.<material> and m.<type>.<id> are supported - ignored.");
+            return false;
+        }
+        if (ItemPath.isPluginPath(value)) {
+            if (ItemPath.pluginPath(value) == null) {
+                plugin.getLogger().warning("Malformed item path '" + Utils.safeForLog(value) + "' at " + at
+                    + " - expected m.<type>.<id> - ignored.");
+                return false;
+            }
+            // Counts as "the admin asked for item paths", so load() warns once
+            // for the file when TLibs/MMOItems/MythicLib are not all enabled
+            pluginPathConfigured = true;
+            return true;
+        }
+        if (ItemPath.material(value) == null) {
+            plugin.getLogger().warning("Unknown material '" + Utils.safeForLog(value) + "' at " + at
+                + " - ignored.");
+            return false;
+        }
+        return true;
+    }
+
+    // 64 is a vanilla stack and the most one 'items:' line may hand over;
+    // anything else (absent, negative, text) falls back to 1 the way every
+    // other numeric key here clamps rather than skips.
+    private int rewardAmount(Object raw, String at) {
+        if (raw == null) {
+            return 1;
+        }
+        if (!(raw instanceof Number number)) {
+            plugin.getLogger().warning(at + " has a non-numeric amount '" + Utils.safeForLog(String.valueOf(raw))
+                + "' - using 1.");
+            return 1;
+        }
+        // Tested as a long before narrowing: intValue() on 4294967298 is 2,
+        // which would pass the range test having asked for something else
+        // entirely. A fractional amount is a different mistake and falls back
+        // rather than silently rounding.
+        long amount = number.longValue();
+        if (number.doubleValue() != amount) {
+            plugin.getLogger().warning(at + " amount '" + Utils.safeForLog(String.valueOf(raw))
+                + "' is not a whole number - using 1.");
+            return 1;
+        }
+        if (amount < 1 || amount > 64) {
+            long clamped = Math.max(1, Math.min(64, amount));
+            plugin.getLogger().warning(at + " amount " + amount + " is outside 1-64 - using " + clamped + ".");
+            return (int) clamped;
+        }
+        return (int) amount;
+    }
+
+    // ====================================
+    // rewards.multiplier: what every 'items:' amount is multiplied by at
+    // payout. 1-64 - 0 or negative would mean "hand nothing over", which is
+    // never what an admin meant (the way to pay nothing is to drop the entry),
+    // and 64 x a 64 amount is already 64 full stacks off one 'items:' line.
+    // Console 'give' commands are opaque strings and are never multiplied.
+    //
+    // Read raw rather than through getInt, and refused the same way an
+    // 'amount:' is: getInt turns 2.9 into 2 in silence and reports a
+    // non-numeric value as "0 is outside 1-64", naming a number the admin
+    // never wrote. Takes the section, not the value, so a headless test can
+    // catch a typo in the path - the shipped value is 1, which is also the
+    // fallback, so nothing else would.
+    // ====================================
+    private int rewardMultiplier(ConfigurationSection config) {
+        Object raw = config.get(REWARDS_MULTIPLIER_PATH);
+        if (raw == null) {
+            return 1;
+        }
+        if (!(raw instanceof Number number)) {
+            plugin.getLogger().warning(REWARDS_MULTIPLIER_PATH + " is not a number ('"
+                + Utils.safeForLog(String.valueOf(raw)) + "') - using 1.");
+            return 1;
+        }
+        // Long before narrowing, and a fraction refused rather than rounded,
+        // exactly as rewardAmount does it
+        long value = number.longValue();
+        if (number.doubleValue() != value) {
+            plugin.getLogger().warning(REWARDS_MULTIPLIER_PATH + " '" + Utils.safeForLog(String.valueOf(raw))
+                + "' is not a whole number - using 1.");
+            return 1;
+        }
+        if (value < 1 || value > 64) {
+            long clamped = Math.max(1, Math.min(64, value));
+            plugin.getLogger().warning(REWARDS_MULTIPLIER_PATH + " " + value + " is outside 1-64 - using "
+                + clamped + ".");
+            return (int) clamped;
+        }
+        return (int) value;
     }
 
     // ====================================
@@ -853,6 +1011,10 @@ public class ActivityConfiguration {
 
     public List<RewardEntry> rewardPool() {
         return rewardPool;
+    }
+
+    public int rewardMultiplier() {
+        return rewardMultiplier;
     }
 
     public String guiTitle() {

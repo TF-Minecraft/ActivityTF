@@ -240,8 +240,10 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
         ActivityConfiguration.Keys keys = config.currentKeys();
         boolean currentWeek = data.weekKey().equals(keys.week());
         boolean today = isToday(data, keys);
-        // Clamped: peek() never runs the clamp rolled() does, so a lowered
-        // bar.max would otherwise print "60/50"
+        // Clamped for display only, the way PlaceholderHook clamps: nothing in
+        // the model ever clamps claimedPoints, and PlayerData.clamp touches
+        // only the weekly points, so after a lowered bar.max this would
+        // otherwise print "60/50" for good - no write puts it right.
         int points = currentWeek ? Math.min(data.points(), config.barMax()) : 0;
         int claimed = currentWeek ? Math.min(data.claimedPoints(), config.barMax()) : 0;
 
@@ -252,9 +254,10 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
         }
         sender.sendMessage(messages().get("admin.check-points", "%points%", points,
             "%max%", config.barMax(), "%claimed%", claimed));
-        // Clamped like the weekly points above: peek() never runs the
-        // clamp rolled() does, so a lowered daily.max would otherwise print
-        // "15/10" until the row is next touched.
+        // Clamped like the points above, and for the same reason: nothing
+        // clamps dailyPoints anywhere in the model - PlayerData.clamp is only
+        // about the weekly points - so after a lowered bar.daily-max this
+        // display clamp is the only thing between the operator and "15/10".
         int dailyPoints = today ? Math.min(data.dailyPoints(), config.dailyMax()) : 0;
         sender.sendMessage(messages().get("admin.check-daily", "%points%", dailyPoints,
             "%max%", config.dailyMax()));

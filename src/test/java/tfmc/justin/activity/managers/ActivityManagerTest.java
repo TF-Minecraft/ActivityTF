@@ -81,9 +81,12 @@ class ActivityManagerTest {
     // ====================================
     @Test
     void unsafeNameKeepsOnlyEntriesWithAUuidOrNoPlaceholderCommand() {
-        RewardEntry playerOnly = new RewardEntry(1, "player-only", List.of("give %player% diamond 3"));
-        RewardEntry uuidOnly = new RewardEntry(1, "uuid-only", List.of("lp user %uuid% parent add vip"));
-        RewardEntry mixed = new RewardEntry(1, "mixed", List.of("give %player% diamond 3", "say done"));
+        RewardEntry playerOnly = new RewardEntry(1, "player-only",
+            List.of("give %player% diamond 3"), List.of());
+        RewardEntry uuidOnly = new RewardEntry(1, "uuid-only",
+            List.of("lp user %uuid% parent add vip"), List.of());
+        RewardEntry mixed = new RewardEntry(1, "mixed",
+            List.of("give %player% diamond 3", "say done"), List.of());
         List<RewardEntry> pool = List.of(playerOnly, uuidOnly, mixed);
 
         assertEquals(List.of(uuidOnly, mixed),
@@ -92,9 +95,12 @@ class ActivityManagerTest {
 
     @Test
     void safeNameKeepsEveryEntry() {
-        RewardEntry playerOnly = new RewardEntry(1, "player-only", List.of("give %player% diamond 3"));
-        RewardEntry uuidOnly = new RewardEntry(1, "uuid-only", List.of("lp user %uuid% parent add vip"));
-        RewardEntry mixed = new RewardEntry(1, "mixed", List.of("give %player% diamond 3", "say done"));
+        RewardEntry playerOnly = new RewardEntry(1, "player-only",
+            List.of("give %player% diamond 3"), List.of());
+        RewardEntry uuidOnly = new RewardEntry(1, "uuid-only",
+            List.of("lp user %uuid% parent add vip"), List.of());
+        RewardEntry mixed = new RewardEntry(1, "mixed",
+            List.of("give %player% diamond 3", "say done"), List.of());
         List<RewardEntry> pool = List.of(playerOnly, uuidOnly, mixed);
 
         assertEquals(pool, ActivityManager.runnableEntries(pool, "Notch"));
@@ -180,8 +186,8 @@ class ActivityManagerTest {
     // ====================================
     @Test
     void aWeightedDrawWalksTheCumulativeWeights() {
-        RewardEntry common = new RewardEntry(3, "common", List.of("give %player% diamond 3"));
-        RewardEntry rare = new RewardEntry(1, "rare", List.of("give %player% netherite_ingot 1"));
+        RewardEntry common = new RewardEntry(3, "common", List.of("give %player% diamond 3"), List.of());
+        RewardEntry rare = new RewardEntry(1, "rare", List.of("give %player% netherite_ingot 1"), List.of());
         List<RewardEntry> pool = List.of(common, rare);
 
         assertEquals(4, RewardEntry.totalWeight(pool));
