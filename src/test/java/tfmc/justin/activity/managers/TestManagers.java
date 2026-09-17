@@ -188,7 +188,8 @@ public final class TestManagers {
             case "getPlayer" -> null;
             // Its own logger, deliberately not the one audit lines land on:
             // anything logged through Bukkit.getLogger() must not show up in
-            // a test's captured audit stream
+            // a test's captured audit stream. Hyphen in the name prevents Java's
+            // hierarchical logger inheritance (dot would make it a child of TestManagers)
             case "getLogger" -> Logger.getLogger(SERVER_LOGGER_NAME);
             case "getName", "getVersion", "getBukkitVersion" -> "TestManagers";
             case "toString" -> STUB_NAME;
@@ -218,7 +219,7 @@ public final class TestManagers {
 
     private static final String LOGGER_NAME = "TestManagers";
 
-    private static final String SERVER_LOGGER_NAME = "TestManagers.Server";
+    private static final String SERVER_LOGGER_NAME = "TestManagers-Server";
 
     private static final String STUB_NAME = "stub-server";
 
