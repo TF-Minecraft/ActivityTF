@@ -228,4 +228,104 @@ class ActivityManagerRerollTest {
 
         assertEquals(PlayerData.TASKS_PER_DAY, manager.getStore().get(uuid).tasks().size());
     }
+
+    // ====================================
+    // reroll.max-points is an inclusive ceiling: banked points equal to it
+    // still reroll, one more refuses.
+    // ====================================
+    @Test
+    void dailyPointsExactlyAtTheThresholdStillRerolls() {
+        ActivityManager manager = TestManagers.manager(defs(20));
+        TestManagers.storeLoaded(manager);
+        TestManagers.rerollsPerDay(manager, 1);
+        TestManagers.rerollMaxPoints(manager, 1);
+        UUID uuid = UUID.randomUUID();
+        PlayerData data = manager.tasks(uuid);
+        data.record(1, def("a0"), 50, 10, List.of());
+        assertEquals(1, data.dailyPoints());
+
+        assertEquals(ActivityManager.Rerolled.DONE, manager.reroll(uuid));
+    }
+
+    @Test
+    void onePointAboveTheThresholdIsTooLateAndMutatesNothing() {
+        ActivityManager manager = TestManagers.manager(defs(20));
+        TestManagers.storeLoaded(manager);
+        TestManagers.rerollsPerDay(manager, 1);
+        TestManagers.rerollMaxPoints(manager, 1);
+        UUID uuid = UUID.randomUUID();
+        PlayerData data = manager.tasks(uuid);
+        manager.reveal(uuid, 0);
+        data.record(2, def("a0"), 50, 10, List.of());
+        assertEquals(2, data.dailyPoints());
+        List<String> tasksBefore = List.copyOf(data.tasks());
+        Set<String> revealedBefore = Set.copyOf(data.revealed());
+        int pointsBefore = data.points();
+
+        assertEquals(ActivityManager.Rerolled.TOO_LATE, manager.reroll(uuid));
+
+        assertEquals(tasksBefore, data.tasks(), "TOO_LATE changed the draw");
+        assertEquals(revealedBefore, data.revealed(), "TOO_LATE changed revealed flags");
+        assertEquals(pointsBefore, data.points(), "TOO_LATE changed the weekly bar");
+        assertEquals(2, data.dailyPoints(), "TOO_LATE changed daily points");
+        assertEquals(0, data.rerolls(), "TOO_LATE spent the budget");
+    }
+
+    // ====================================
+    // The gate reads dailyPoints after the rollover has been applied, so
+    // yesterday's earnings never block today's reroll.
+    // ====================================
+    @Test
+    void aPlayerRefusedYesterdayMayRerollAfterTheDayRolls() {
+        ActivityManager manager = TestManagers.manager(defs(20));
+        TestManagers.storeLoaded(manager);
+        TestManagers.rerollsPerDay(manager, 1);
+        TestManagers.rerollMaxPoints(manager, 1);
+        UUID uuid = UUID.randomUUID();
+        PlayerData data = manager.tasks(uuid);
+        data.record(5, def("a0"), 50, 10, List.of());
+
+        assertEquals(ActivityManager.Rerolled.TOO_LATE, manager.reroll(uuid));
+
+        data.roll(data.weekKey(), data.dayKey() + "-tomorrow");
+
+        assertEquals(ActivityManager.Rerolled.DONE, manager.reroll(uuid));
+    }
+
+    // max-points: 0 - only a player who has earned nothing today may reroll
+    @Test
+    void aZeroThresholdAllowsOnlyAPlayerWhoHasEarnedNothing() {
+        ActivityManager manager = TestManagers.manager(defs(20));
+        TestManagers.storeLoaded(manager);
+        TestManagers.rerollsPerDay(manager, 2);
+        TestManagers.rerollMaxPoints(manager, 0);
+        UUID uuid = UUID.randomUUID();
+        PlayerData data = manager.tasks(uuid);
+
+        assertEquals(ActivityManager.Rerolled.DONE, manager.reroll(uuid));
+
+        data.record(1, def("a0"), 50, 10, List.of());
+
+        assertEquals(ActivityManager.Rerolled.TOO_LATE, manager.reroll(uuid));
+    }
+
+    // ====================================
+    // Both blockers at once: the point gate wins. The threshold holds for the
+    // rest of the day whatever the budget says, so it is the useful answer.
+    // ====================================
+    @Test
+    void theThresholdIsReportedBeforeAnExhaustedBudget() {
+        ActivityManager manager = TestManagers.manager(defs(20));
+        TestManagers.storeLoaded(manager);
+        TestManagers.rerollsPerDay(manager, 1);
+        TestManagers.rerollMaxPoints(manager, 1);
+        UUID uuid = UUID.randomUUID();
+        PlayerData data = manager.tasks(uuid);
+
+        assertEquals(ActivityManager.Rerolled.DONE, manager.reroll(uuid));
+
+        data.record(2, def("a0"), 50, 10, List.of());
+
+        assertEquals(ActivityManager.Rerolled.TOO_LATE, manager.reroll(uuid));
+    }
 }

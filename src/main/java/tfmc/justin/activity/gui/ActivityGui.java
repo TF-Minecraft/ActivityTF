@@ -186,6 +186,10 @@ public class ActivityGui implements Listener {
             lore = messages.get("gui.reroll-lore-disabled");
         } else if (!player.hasPermission("activity.reroll")) {
             lore = messages.get("gui.reroll-lore-locked");
+        } else if (data.dailyPoints() > config.rerollMaxPoints()) {
+            // Past the threshold the button refuses for the rest of the day,
+            // so showing a remaining count would only be a lie
+            lore = messages.get("gui.reroll-lore-too-late", "%points%", config.rerollMaxPoints());
         } else {
             lore = messages.get("gui.reroll-lore-left",
                 "%left%", Math.max(0, perDay - data.rerolls()), "%max%", perDay);
@@ -388,6 +392,8 @@ public class ActivityGui implements Listener {
             case DISABLED -> player.sendMessage(messages.get("reroll-disabled"));
             case FAILED -> player.sendMessage(messages.get("reroll-failed"));
             case NONE_LEFT -> player.sendMessage(messages.get("reroll-none-left"));
+            case TOO_LATE -> player.sendMessage(
+                messages.get("reroll-too-late", "%points%", config.rerollMaxPoints()));
             case DONE -> {
                 player.sendMessage(messages.get("reroll-done"));
                 repaintAll(event.getView().getTopInventory(), config,

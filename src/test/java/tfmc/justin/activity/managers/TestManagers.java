@@ -53,6 +53,9 @@ public final class TestManagers {
             set(config, "barMax", 50);
             set(config, "dailyMax", 10);
             set(config, "milestones", List.of(10, 20));
+            // Out of the way by default: the point gate is a separate feature
+            // and only the tests that exercise it should feel it
+            set(config, "rerollMaxPoints", Integer.MAX_VALUE);
 
             return manager;
         } catch (ReflectiveOperationException e) {
@@ -109,6 +112,15 @@ public final class TestManagers {
     public static void rerollsPerDay(ActivityManager manager, int perDay) {
         try {
             set(manager.getConfiguration(), "rerollsPerDay", perDay);
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    // The point gate load() would parse from reroll.max-points
+    public static void rerollMaxPoints(ActivityManager manager, int maxPoints) {
+        try {
+            set(manager.getConfiguration(), "rerollMaxPoints", maxPoints);
         } catch (ReflectiveOperationException e) {
             throw new RuntimeException(e);
         }

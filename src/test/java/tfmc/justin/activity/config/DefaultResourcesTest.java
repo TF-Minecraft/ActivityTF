@@ -231,17 +231,26 @@ class DefaultResourcesTest {
         assertEquals(1, config.getInt("reroll.per-day"));
     }
 
+    // The default point gate: rerollable at 0 or 1 points earned today
+    @Test
+    void shippedConfigDefaultsRerollMaxPointsToOne() {
+        YamlConfiguration config = load("config.yml");
+
+        assertEquals(1, config.getInt("reroll.max-points"));
+    }
+
     @Test
     void shippedMessagesHasEveryRerollKeyNonBlank() {
         YamlConfiguration messages = load("messages.yml");
 
         for (String key : List.of("reroll-done", "reroll-none-left", "reroll-disabled", "reroll-failed",
-                "reroll-locked")) {
+                "reroll-locked", "reroll-too-late")) {
             String value = messages.getString(key);
             assertFalse(value == null || value.isBlank(), key + " should not be blank");
         }
         for (String key : List.of("gui.reroll-name", "gui.reroll-lore-left",
-                "gui.reroll-lore-locked", "gui.reroll-lore-disabled")) {
+                "gui.reroll-lore-locked", "gui.reroll-lore-disabled",
+                "gui.reroll-lore-too-late")) {
             String value = messages.getString(key);
             assertFalse(value == null || value.isBlank(), key + " should not be blank");
         }

@@ -458,6 +458,7 @@ bar:
 # whichever rank the perk belongs to).
 reroll:
   per-day: 1         # rerolls each player gets per day; 0 disables the button for everyone
+  max-points: 1      # refuse the reroll once today's earned points are above this; 0 allows it only before anything is earned
 
 sounds:               # Bukkit Sound names, "" disables
   goal-complete: ENTITY_EXPERIENCE_ORB_PICKUP   # every time points are earned

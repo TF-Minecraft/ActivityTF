@@ -268,6 +268,10 @@ public class ActivityManager {
     public enum Rerolled {
         DONE,
         NONE_LEFT,
+        // Too much already earned today (reroll.max-points) - checked before
+        // NONE_LEFT, since the threshold blocks the rest of the day whatever
+        // the budget says, and a "rerolls left: 1" that refuses is worse
+        TOO_LATE,
         DISABLED,
         // players.yml was never loaded, so the spent reroll and the points it
         // took back could not be saved - refused rather than done in memory
@@ -295,7 +299,13 @@ public class ActivityManager {
             return Rerolled.FAILED;
         }
 
+        // After get(), so a rollover has already reset dailyPoints: yesterday's
+        // earnings must not block today's reroll
         PlayerData data = store.get(uuid);
+        if (data.dailyPoints() > config.rerollMaxPoints()) {
+            return Rerolled.TOO_LATE;
+        }
+
         if (data.rerolls() >= perDay) {
             return Rerolled.NONE_LEFT;
         }
