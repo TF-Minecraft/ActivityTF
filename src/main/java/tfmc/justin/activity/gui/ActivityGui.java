@@ -37,6 +37,9 @@ public class ActivityGui implements Listener {
 
     private static final int SIZE = 27;
     private static final int DAILY_BAR_SLOT = 3;
+    // Between the two bars, and shown to everyone: a player without the
+    // permission sees what the perk is rather than nothing at all
+    private static final int REROLL_SLOT = 4;
     private static final int BAR_SLOT = 5;
 
     // The middle row, one slot per daily task - PlayerData.TASKS_PER_DAY of
@@ -72,6 +75,7 @@ public class ActivityGui implements Listener {
         marker.inventory = inventory;
 
         inventory.setItem(DAILY_BAR_SLOT, dailyBarItem(config, messages, data));
+        inventory.setItem(REROLL_SLOT, rerollItem(config, messages, data, player));
         inventory.setItem(BAR_SLOT, barItem(config, messages, data));
 
         for (int slot = 0; slot < TASK_SLOTS.length; slot++) {
@@ -168,6 +172,30 @@ public class ActivityGui implements Listener {
             }
         }
         return null;
+    }
+
+    // ====================================
+    // The reroll button. Everyone sees it; the lore is what differs, so a
+    // player without the rank learns the perk exists instead of wondering
+    // what the button is for.
+    // ====================================
+    private ItemStack rerollItem(ActivityConfiguration config, Messages messages, PlayerData data, Player player) {
+        int perDay = config.rerollsPerDay();
+        String lore;
+        if (perDay <= 0) {
+            lore = messages.get("gui.reroll-lore-disabled");
+        } else if (!player.hasPermission("activity.reroll")) {
+            lore = messages.get("gui.reroll-lore-locked");
+        } else if (data.dailyPoints() > config.rerollMaxPoints()) {
+            // Past the threshold the button refuses for the rest of the day,
+            // so showing a remaining count would only be a lie
+            lore = messages.get("gui.reroll-lore-too-late", "%points%", config.rerollMaxPoints());
+        } else {
+            lore = messages.get("gui.reroll-lore-left",
+                "%left%", Math.max(0, perDay - data.rerolls()), "%max%", perDay);
+        }
+
+        return item(Material.NETHER_STAR, messages.get("gui.reroll-name"), List.of(lore));
     }
 
     private ItemStack dailyBarItem(ActivityConfiguration config, Messages messages, PlayerData data) {
@@ -282,6 +310,12 @@ public class ActivityGui implements Listener {
             return;
         }
 
+        if (event.getRawSlot() == REROLL_SLOT) {
+            clickSound(player);
+            reroll(player, event);
+            return;
+        }
+
         int task = taskSlot(event.getRawSlot());
         if (task < 0) {
             return;
@@ -311,14 +345,60 @@ public class ActivityGui implements Listener {
             // wipe or rescale what the two bars show - repainting the tasks
             // alone would leave a fresh draw beside a stale "10/10" daily bar
             // and a claim button that no longer does anything
-            Messages messages = config.messages();
-            top.setItem(DAILY_BAR_SLOT, dailyBarItem(config, messages, data));
-            top.setItem(BAR_SLOT, barItem(config, messages, data));
-            for (int slot = 0; slot < TASK_SLOTS.length; slot++) {
-                top.setItem(TASK_SLOTS[slot], taskOrFiller(config, data, slot));
-            }
+            repaintAll(top, config, data, player);
         } else {
             top.setItem(event.getRawSlot(), taskOrFiller(config, data, task));
+        }
+    }
+
+    // Every slot build() paints, on the open view: used wherever a click
+    // changed the draw and the bars at once
+    private void repaintAll(Inventory top, ActivityConfiguration config, PlayerData data, Player player) {
+        Messages messages = config.messages();
+        top.setItem(DAILY_BAR_SLOT, dailyBarItem(config, messages, data));
+        top.setItem(REROLL_SLOT, rerollItem(config, messages, data, player));
+        top.setItem(BAR_SLOT, barItem(config, messages, data));
+        for (int slot = 0; slot < TASK_SLOTS.length; slot++) {
+            top.setItem(TASK_SLOTS[slot], taskOrFiller(config, data, slot));
+        }
+    }
+
+    // ====================================
+    // The reroll click. The permission is checked here rather than in the
+    // manager: a player without it is not a failed reroll but a sales pitch,
+    // and nothing about their data is read or written.
+    //
+    // A feature the server has switched off is not a sales pitch either, so
+    // that is checked first - the same order rerollItem() paints the lore in.
+    // ====================================
+    private void reroll(Player player, InventoryClickEvent event) {
+        ActivityConfiguration config = manager.getConfiguration();
+        Messages messages = config.messages();
+
+        if (config.rerollsPerDay() <= 0) {
+            player.sendMessage(messages.get("reroll-disabled"));
+            return;
+        }
+
+        if (!player.hasPermission("activity.reroll")) {
+            player.sendMessage(messages.get("reroll-locked"));
+            return;
+        }
+
+        switch (manager.reroll(player.getUniqueId())) {
+            // Unreachable: the rerollsPerDay() <= 0 guard above already
+            // returns on this exact condition. Kept so the switch stays
+            // exhaustive over Rerolled without a default branch.
+            case DISABLED -> player.sendMessage(messages.get("reroll-disabled"));
+            case FAILED -> player.sendMessage(messages.get("reroll-failed"));
+            case NONE_LEFT -> player.sendMessage(messages.get("reroll-none-left"));
+            case TOO_LATE -> player.sendMessage(
+                messages.get("reroll-too-late", "%points%", config.rerollMaxPoints()));
+            case DONE -> {
+                player.sendMessage(messages.get("reroll-done"));
+                repaintAll(event.getView().getTopInventory(), config,
+                    manager.getStore().get(player.getUniqueId()), player);
+            }
         }
     }
 

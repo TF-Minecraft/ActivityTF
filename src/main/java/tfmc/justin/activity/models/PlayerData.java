@@ -50,6 +50,10 @@ public class PlayerData {
     // ====================================
     private volatile int claimedPoints;
 
+    // Rerolls of today's draw already used. Reset by every rollover, so the
+    // budget in config is per day.
+    private volatile int rerolls;
+
     public PlayerData(String weekKey, String dayKey) {
         this.weekKey = weekKey;
         this.dayKey = dayKey;
@@ -80,6 +84,15 @@ public class PlayerData {
         }
     }
 
+    // The store's constructor: same as above plus the persisted reroll count.
+    // Overloaded rather than added to the others so every existing caller that
+    // has no reroll count to give keeps working.
+    public PlayerData(int points, int dailyPoints, String weekKey, String dayKey, int claimedPoints,
+                      Map<String, Integer> daily, List<String> tasks, Collection<String> revealed, int rerolls) {
+        this(points, dailyPoints, weekKey, dayKey, claimedPoints, daily, tasks, revealed);
+        this.rerolls = rerolls;
+    }
+
     // ====================================
     // Lazy rollover, called before anything reads or writes this player.
     // A new week wipes everything; a new day only wipes the daily counters,
@@ -94,6 +107,7 @@ public class PlayerData {
             dailyPoints = 0;
             daily.clear();
             clearTasks();
+            rerolls = 0;
             this.weekKey = weekKey;
             changed = true;
         }
@@ -102,6 +116,7 @@ public class PlayerData {
             dailyPoints = 0;
             daily.clear();
             clearTasks();
+            rerolls = 0;
             this.dayKey = dayKey;
             changed = true;
         }
@@ -190,8 +205,44 @@ public class PlayerData {
         dailyPoints = 0;
         daily.clear();
         clearTasks();
+        rerolls = 0;
         this.weekKey = weekKey;
         this.dayKey = dayKey;
+    }
+
+    // ====================================
+    // Throws today away and starts it over on a fresh draw: today's unclaimed
+    // points come back off the weekly bar, the counts and the draw go, and the
+    // new tasks go in unrevealed. One method rather than a handful the caller
+    // sequences, so it is all written in a single call on the main thread -
+    // there is no lock, so an off-thread reader (PlaceholderAPI) can still
+    // observe an intermediate pair of fields.
+    //
+    // The weekly total never falls below claimedPoints: those points have
+    // already been paid for, and letting the bar drop under them would make
+    // the same milestone claimable a second time. It never rises above the
+    // bar either - claimedPoints can sit above a lowered bar.max.
+    //
+    // Whatever that floor kept on the bar is NOT refunded, so it must not hand
+    // today's budget back either: only the points actually taken off the bar
+    // buy back budget, and the rest carries forward as today's starting
+    // dailyPoints. A player who claims a milestone and then rerolls therefore
+    // keeps their points and gets no extra budget at all. The per-activity
+    // count map still goes - those tasks no longer exist.
+    // ====================================
+    public void reroll(List<String> newTasks, int max) {
+        int before = points;
+        points = Math.min(max, Math.max(claimedPoints, points - dailyPoints));
+        // The refund is clamped to zero before it is subtracted: if a reroll
+        // ever RAISES points (claimedPoints sitting above a bar.max that was
+        // lowered and then raised back), before - points is negative and
+        // must not be allowed to increase dailyPoints instead.
+        int refund = Math.max(0, before - points);
+        dailyPoints = Math.max(0, dailyPoints - refund);
+        daily.clear();
+        clearTasks();
+        tasks.addAll(newTasks);
+        rerolls++;
     }
 
     private void clearTasks() {
@@ -361,6 +412,10 @@ public class PlayerData {
 
     public String dayKey() {
         return dayKey;
+    }
+
+    public int rerolls() {
+        return rerolls;
     }
 
     public int claimedPoints() {

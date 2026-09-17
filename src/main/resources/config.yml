@@ -451,6 +451,15 @@ bar:
                         # Each is drawn as a marker in the weekly bar.
   length: 40         # segments - the weekly bar only; per-activity bars are fixed at 20
 
+# The reroll button in the GUI (slot 4). It throws today's draw away and hands
+# out a fresh one, taking today's points back off the weekly bar - but never
+# below what has already been claimed, so a reward paid for cannot be re-earned.
+# Clicking it needs the activity.reroll permission (default false; grant it to
+# whichever rank the perk belongs to).
+reroll:
+  per-day: 1         # rerolls each player gets per day; 0 disables the button for everyone
+  max-points: 1      # refuse the reroll once today's earned points are above this; 0 allows it only before anything is earned
+
 sounds:               # Bukkit Sound names, "" disables
   goal-complete: ENTITY_EXPERIENCE_ORB_PICKUP   # every time points are earned
   bar-complete: UI_TOAST_CHALLENGE_COMPLETE     # milestone reached / claimed

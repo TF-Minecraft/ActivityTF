@@ -22,8 +22,9 @@ import java.util.logging.Logger;
 // PluginClassLoader, so one is allocated through ReflectionFactory the same
 // way ActivityConfigurationStationTest does, then handed a real Logger.
 //
-// The store is left "not loaded" on purpose: nothing here writes a file, and
-// only the claim path cares.
+// The store is left "not loaded" on purpose: nothing here writes a file. The
+// paths that refuse to work unsaved (claim, reroll) opt back in with
+// storeLoaded().
 // ====================================
 public final class TestManagers {
 
@@ -52,6 +53,10 @@ public final class TestManagers {
             set(config, "barMax", 50);
             set(config, "dailyMax", 10);
             set(config, "milestones", List.of(10, 20));
+            // The shipped reroll.max-points, so a test that forgets to set its
+            // own gate runs the configuration players actually get rather than
+            // a permissive one no server has
+            set(config, "rerollMaxPoints", 1);
 
             return manager;
         } catch (ReflectiveOperationException e) {
@@ -98,6 +103,38 @@ public final class TestManagers {
         try {
             set(manager.getConfiguration(), "barMax", barMax);
             set(manager.getConfiguration(), "dailyMax", dailyMax);
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    // The reroll budget load() would parse from reroll.per-day - set directly
+    // the same way every other numeric config field here is
+    public static void rerollsPerDay(ActivityManager manager, int perDay) {
+        try {
+            set(manager.getConfiguration(), "rerollsPerDay", perDay);
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    // The point gate load() would parse from reroll.max-points
+    public static void rerollMaxPoints(ActivityManager manager, int maxPoints) {
+        try {
+            set(manager.getConfiguration(), "rerollMaxPoints", maxPoints);
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    // ====================================
+    // Marks players.yml as having been read, which load() would do. Only
+    // needed by the paths that refuse outright while nothing can be saved;
+    // still nothing is ever written, since no test calls save().
+    // ====================================
+    public static void storeLoaded(ActivityManager manager) {
+        try {
+            set(manager.getStore(), "loaded", true);
         } catch (ReflectiveOperationException e) {
             throw new RuntimeException(e);
         }

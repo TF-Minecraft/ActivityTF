@@ -124,6 +124,12 @@ public class ActivityConfiguration {
     private volatile List<Integer> milestones = List.of();
     private volatile int barLength;
 
+    // 0 disables the reroll button for everyone
+    private volatile int rerollsPerDay;
+    // Highest dailyPoints a player may still reroll at. 0 means only before
+    // anything has been earned today
+    private volatile int rerollMaxPoints;
+
     private String goalCompleteSound;
     private String barCompleteSound;
 
@@ -179,6 +185,9 @@ public class ActivityConfiguration {
         milestones = loadMilestones(config.getIntegerList("bar.milestones"));
         barLength = barLength(config.getInt("bar.length", 40));
 
+        rerollsPerDay = parseRerollsPerDay(config);
+        rerollMaxPoints = parseRerollMaxPoints(config);
+
         goalCompleteSound = soundKey(config.getString("sounds.goal-complete", ""));
         barCompleteSound = soundKey(config.getString("sounds.bar-complete", ""));
 
@@ -196,6 +205,28 @@ public class ActivityConfiguration {
         }
 
         warnIfBarUnreachable();
+    }
+
+    // ====================================
+    // The two reroll knobs, parsed apart from load() so a headless test can
+    // feed them a value and catch a typo in the path: the shipped defaults
+    // are identical to the getInt fallbacks, so nothing else here would.
+    // The paths are constants for the same reason - DefaultResourcesTest
+    // asserts the shipped file against these exact strings.
+    // ====================================
+    static final String REROLLS_PER_DAY_PATH = "reroll.per-day";
+    static final String REROLL_MAX_POINTS_PATH = "reroll.max-points";
+
+    // 0 turns rerolling off entirely, so like playtime.afk-minutes this clamp
+    // has no lower bound of 1
+    static int parseRerollsPerDay(ConfigurationSection config) {
+        return Math.max(0, config.getInt(REROLLS_PER_DAY_PATH, 1));
+    }
+
+    // 0 is a meaningful setting here too - it allows a reroll only while
+    // nothing has been earned today - so a negative clamps down to it
+    static int parseRerollMaxPoints(ConfigurationSection config) {
+        return Math.max(0, config.getInt(REROLL_MAX_POINTS_PATH, 1));
     }
 
     private void loadActivities(ConfigurationSection section) {
@@ -842,6 +873,19 @@ public class ActivityConfiguration {
 
     public int barLength() {
         return barLength;
+    }
+
+    // How many times a day a player may throw today's draw away. 0 means the
+    // reroll button refuses everyone.
+    public int rerollsPerDay() {
+        return rerollsPerDay;
+    }
+
+    // The most points a player may already have banked today and still be
+    // allowed to reroll. 0 means the reroll is only offered before anything
+    // has been earned.
+    public int rerollMaxPoints() {
+        return rerollMaxPoints;
     }
 
     public String goalCompleteSound() {

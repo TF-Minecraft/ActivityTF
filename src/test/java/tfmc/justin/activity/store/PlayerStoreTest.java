@@ -279,6 +279,77 @@ class PlayerStoreTest {
     }
 
     // ====================================
+    // rerolls: same round-trip and clamping rules as the other counters on
+    // this entry - a missing key defaults to zero, a negative or garbled
+    // stored value is clamped rather than trusted, and the count survives a
+    // save/load cycle.
+    // ====================================
+    @Test
+    void rerollsRoundTripsThroughSnapshotAndReadEntry() {
+        UUID id = UUID.randomUUID();
+        PlayerData data = new PlayerData(0, 0, "w", "d", 0, Map.of(), List.of(), Set.of(), 2);
+
+        YamlConfiguration yaml = PlayerStore.snapshot(Map.of(id, data));
+        ConfigurationSection players = yaml.getConfigurationSection("players");
+        PlayerData parsed = PlayerStore.readEntry(players, id.toString(), BAR_MAX, DAILY_MAX, KNOWN);
+
+        assertEquals(2, parsed.rerolls());
+    }
+
+    @Test
+    void aMissingRerollsKeyLoadsAsZero() {
+        ConfigurationSection root = new YamlConfiguration().createSection("players");
+        UUID id = UUID.randomUUID();
+        ConfigurationSection entry = root.createSection(id.toString());
+        entry.set("points", 1);
+
+        PlayerData data = PlayerStore.readEntry(root, id.toString(), BAR_MAX, DAILY_MAX, KNOWN);
+
+        assertEquals(0, data.rerolls());
+    }
+
+    @Test
+    void aNegativeStoredRerollsIsClampedToZero() {
+        ConfigurationSection root = new YamlConfiguration().createSection("players");
+        UUID id = UUID.randomUUID();
+        ConfigurationSection entry = root.createSection(id.toString());
+        entry.set("points", 1);
+        entry.set("rerolls", -4);
+
+        PlayerData data = PlayerStore.readEntry(root, id.toString(), BAR_MAX, DAILY_MAX, KNOWN);
+
+        assertEquals(0, data.rerolls());
+    }
+
+    // A non-numeric value is exactly what getInt() already falls back to 0
+    // for, the same as every other counter parsed off this entry
+    @Test
+    void aNonNumericStoredRerollsDoesNotCrashAndLoadsAsZero() {
+        ConfigurationSection root = new YamlConfiguration().createSection("players");
+        UUID id = UUID.randomUUID();
+        ConfigurationSection entry = root.createSection(id.toString());
+        entry.set("points", 1);
+        entry.set("rerolls", "not-a-number");
+
+        PlayerData data = PlayerStore.readEntry(root, id.toString(), BAR_MAX, DAILY_MAX, KNOWN);
+
+        assertEquals(0, data.rerolls());
+    }
+
+    // A player whose only non-default state is a reroll count is still worth
+    // writing, or a restart would hand their budget straight back to them
+    @Test
+    void aPlayerWithOnlyARerollCountIsStillWritten() {
+        UUID id = UUID.randomUUID();
+        PlayerData data = new PlayerData(0, 0, "w", "d", 0, Map.of(), List.of(), Set.of(), 1);
+
+        YamlConfiguration yaml = PlayerStore.snapshot(Map.of(id, data));
+
+        assertTrue(yaml.contains("players." + id));
+        assertEquals(1, yaml.getInt("players." + id + ".rerolls"));
+    }
+
+    // ====================================
     // Disk and memory must end up with the same draw when an activity is
     // removed: the read path drops the dead id, the in-memory path drops it
     // too, and both are topped back up to TASKS_PER_DAY on next use.

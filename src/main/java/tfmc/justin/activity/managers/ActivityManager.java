@@ -17,7 +17,9 @@ import tfmc.justin.activity.utils.Utils;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.regex.Pattern;
@@ -48,7 +50,7 @@ public class ActivityManager {
 
     // A store that never loaded refuses every save for the rest of the
     // session, so saying so once per session is enough
-    private boolean warnedStoreNotLoaded;
+    private final Set<String> warnedStoreNotLoaded = new HashSet<>();
 
     // Same idea for an empty reward pool, which a player can hit at click rate
     // - said once per load rather than once per click
@@ -254,8 +256,82 @@ public class ActivityManager {
     }
 
     private boolean ensureTasks(PlayerData data) {
-        return data.ensureTasks(config.activities().stream().map(ActivityDef::id).toList(),
-            config.guaranteed(), ThreadLocalRandom.current());
+        return data.ensureTasks(activityIds(), config.guaranteed(), ThreadLocalRandom.current());
+    }
+
+    private List<String> activityIds() {
+        return config.activities().stream().map(ActivityDef::id).toList();
+    }
+
+    // What a reroll click came to - the GUI says which of these it was, and
+    // only DONE changed anything
+    public enum Rerolled {
+        DONE,
+        NONE_LEFT,
+        // Too much already earned today (reroll.max-points) - checked before
+        // NONE_LEFT, since the threshold blocks the rest of the day whatever
+        // the budget says, and a "rerolls left: 1" that refuses is worse
+        TOO_LATE,
+        DISABLED,
+        // players.yml was never loaded, so the spent reroll and the points it
+        // took back could not be saved - refused rather than done in memory
+        FAILED
+    }
+
+    // ====================================
+    // Throws today's draw away and hands out a fresh one, taking today's
+    // points back off the weekly bar (never below what has already been paid
+    // out - see PlayerData.reroll). The draw is the same one ensureTasks
+    // makes, so daily-guaranteed activities are still guaranteed afterwards.
+    // Nothing is touched unless DONE is returned.
+    // ====================================
+    public Rerolled reroll(UUID uuid) {
+        int perDay = config.rerollsPerDay();
+        if (perDay <= 0) {
+            return Rerolled.DISABLED;
+        }
+
+        // Same rule as claim(): nothing that has to be persisted may happen
+        // while nothing can be. A reroll done in memory only would cost the
+        // player today's points until the next restart and hand the counter
+        // back with them, making the per-day budget a per-restart one
+        if (storeNeverLoaded("Refusing every reroll")) {
+            return Rerolled.FAILED;
+        }
+
+        // After get(), so a rollover has already reset dailyPoints: yesterday's
+        // earnings must not block today's reroll
+        PlayerData data = store.get(uuid);
+        if (data.dailyPoints() > config.rerollMaxPoints()) {
+            return Rerolled.TOO_LATE;
+        }
+
+        if (data.rerolls() >= perDay) {
+            return Rerolled.NONE_LEFT;
+        }
+
+        data.reroll(PlayerData.draw(activityIds(), config.guaranteed(), ThreadLocalRandom.current()),
+            config.barMax());
+        store.markDirty();
+        return Rerolled.DONE;
+    }
+
+    // ====================================
+    // True when players.yml was never read, in which case the store refuses
+    // every save for the rest of the session and nothing that must survive a
+    // restart may be done. Says so once per session per distinct 'refusing'
+    // context, however many callers ask - reroll and reward-claim refusals
+    // are warned about separately so one does not silence the other.
+    // ====================================
+    private boolean storeNeverLoaded(String refusing) {
+        if (store.isLoaded()) {
+            return false;
+        }
+        if (warnedStoreNotLoaded.add(refusing)) {
+            plugin.getLogger().severe(refusing + ": " + PlayerStore.FILE
+                + " was never loaded, so nothing done here could be saved.");
+        }
+        return true;
     }
 
     // ====================================
@@ -334,12 +410,7 @@ public class ActivityManager {
         // Nothing may be paid while nothing can be persisted: a store that
         // never loaded refuses every write for the rest of the session, so a
         // payout here would last only until the next restart and then repeat
-        if (!store.isLoaded()) {
-            if (!warnedStoreNotLoaded) {
-                warnedStoreNotLoaded = true;
-                plugin.getLogger().severe("Refusing every reward claim: " + PlayerStore.FILE
-                    + " was never loaded, so nothing handed over could be saved.");
-            }
+        if (storeNeverLoaded("Refusing every reward claim")) {
             player.sendMessage(messages.get("reward-failed"));
             return 0;
         }

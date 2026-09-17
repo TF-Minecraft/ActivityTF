@@ -14,6 +14,9 @@ permissions:
   activity.use:
     description: Open the weekly activity GUI
     default: true
+  activity.reroll:
+    description: Reroll today's activity tasks from the GUI (Ascended perk)
+    default: false
   activity.admin:
     description: Access to activity admin subcommands
     default: op

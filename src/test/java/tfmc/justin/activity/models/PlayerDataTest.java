@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 
@@ -824,6 +825,160 @@ class PlayerDataTest {
 
         assertFalse(data.ensureTasks(ids(30), List.of("a9"), new Random(6)));
         assertEquals(first, data.tasks());
+    }
+
+    // ====================================
+    // The one bit of reroll arithmetic worth pinning: today's points come back
+    // off the weekly bar, but never below what has already been paid out, or
+    // the same milestone would become claimable twice. What the floor keeps on
+    // the bar was not refunded, so it carries forward as today's starting
+    // dailyPoints instead of handing the budget back for free: 12 - 5 = 7 is
+    // under the claimed 10, so only 2 of the 5 come off and the other 3 stay
+    // spent.
+    // ====================================
+    @Test
+    void aRerollTakesTodayBackOffTheWeeklyBarButNeverBelowWhatWasClaimed() {
+        PlayerData data = new PlayerData(12, 5, "w", "d", 10, Map.of("a1", 3),
+            List.of("a1", "a2"), List.of("a1"));
+
+        data.reroll(List.of("a3", "a4"), 50);
+
+        assertEquals(10, data.points());
+        assertEquals(3, data.dailyPoints());
+        assertEquals(10, data.claimedPoints());
+        assertTrue(data.daily().isEmpty());
+        assertEquals(List.of("a3", "a4"), data.tasks());
+        assertTrue(data.revealed().isEmpty());
+        assertEquals(1, data.rerolls());
+    }
+
+    @Test
+    void aDayRolloverGivesTheRerollBack() {
+        PlayerData data = data();
+        data.reroll(List.of("a1"), 50);
+        assertEquals(1, data.rerolls());
+
+        assertTrue(data.roll(WEEK, "2026-09-10"));
+        assertEquals(0, data.rerolls());
+    }
+
+    // A week rollover resets the counter too, even when the day key inside it
+    // happens not to change - the counter is not keyed off the day string
+    @Test
+    void aWeekRolloverGivesTheRerollBackEvenWithTheSameDayKey() {
+        PlayerData data = data();
+        data.reroll(List.of("a1"), 50);
+        assertEquals(1, data.rerolls());
+
+        assertTrue(data.roll("2026-W99", DAY));
+        assertEquals(0, data.rerolls());
+    }
+
+    // Below the claimed floor, the ordinary case: dailyPoints fits entirely
+    // inside points - claimedPoints, so the subtraction lands exactly and the
+    // floor never engages
+    @Test
+    void anOrdinaryRerollDropsTheWeeklyTotalByExactlyTodaysPoints() {
+        PlayerData data = new PlayerData(20, 6, "w", "d", 5, Map.of("a1", 3),
+            List.of("a1", "a2"), List.of("a1"));
+
+        data.reroll(List.of("a3"), 50);
+
+        assertEquals(14, data.points());
+        assertEquals(5, data.claimedPoints());
+        // Every one of today's points was refunded, so today starts over
+        assertEquals(0, data.dailyPoints());
+    }
+
+    // ====================================
+    // Claim-then-reroll: the whole of today sits on top of claimedPoints, so
+    // the floor blocks the entire subtraction. Nothing is refunded, so nothing
+    // of today's budget comes back either - the player keeps their 10 points
+    // and has 0 of bar.daily-max left to earn against.
+    // ====================================
+    @Test
+    void aFullyFlooredRerollRefundsNothingAndCarriesTheWholeDayForward() {
+        PlayerData data = new PlayerData(10, 10, "w", "d", 10, Map.of("a1", 3),
+            List.of("a1"), List.of("a1"));
+
+        data.reroll(List.of("a2"), 50);
+
+        assertEquals(10, data.points());
+        assertEquals(10, data.dailyPoints());
+        assertEquals(10, data.claimedPoints());
+        assertTrue(data.daily().isEmpty());
+    }
+
+    // ====================================
+    // bar.max lowered under a claimedPoints that was earned against the old
+    // one: the reroll must not push the bar back over the new max.
+    // ====================================
+    @Test
+    void aRerollNeverRaisesTheWeeklyTotalAboveTheBarMax() {
+        PlayerData data = new PlayerData(8, 4, "w", "d", 20, Map.of(),
+            List.of("a1"), List.of());
+
+        data.reroll(List.of("a2"), 8);
+
+        assertEquals(8, data.points());
+        assertEquals(4, data.dailyPoints());
+    }
+
+    // Stored points above the bar max: the refund the reroll computes (12)
+    // is larger than dailyPoints (5). Without the Math.max(0, ...) floor on
+    // the refund itself, dailyPoints would go negative here.
+    @Test
+    void aRefundLargerThanDailyPointsFloorsAtZero() {
+        PlayerData data = new PlayerData(20, 5, "w", "d", 0, Map.of(),
+            List.of("a1"), List.of());
+
+        data.reroll(List.of("a2"), 8);
+
+        assertEquals(8, data.points());
+        assertEquals(0, data.dailyPoints());
+    }
+
+    // ====================================
+    // Pins the exact regression from the bug report: bar.max was lowered and
+    // then raised back after claimedPoints (80) was already banked against
+    // the higher max, leaving stored points (60) below claimedPoints. The
+    // reroll then RAISES points (60 -> 80), so before - points is negative.
+    // dailyPoints must stay unchanged, not increase.
+    // ====================================
+    @Test
+    void aRerollThatRaisesPointsDoesNotIncreaseDailyPoints() {
+        PlayerData data = new PlayerData(60, 10, "w", "d", 80, Map.of(),
+            List.of("a1"), List.of());
+
+        data.reroll(List.of("a2"), 100);
+
+        assertEquals(80, data.points());
+        assertEquals(10, data.dailyPoints());
+    }
+
+    // No points earned today means a reroll changes no points at all
+    @Test
+    void aRerollWithNoDailyPointsChangesNoPoints() {
+        PlayerData data = new PlayerData(15, 0, "w", "d", 5, Map.of(),
+            List.of("a1"), List.of());
+
+        data.reroll(List.of("a2"), 50);
+
+        assertEquals(15, data.points());
+        assertEquals(5, data.claimedPoints());
+        assertEquals(0, data.dailyPoints());
+    }
+
+    // The counter keeps counting across multiple rerolls in the same day
+    @Test
+    void aSecondRerollTheSameDayIncrementsTheCounterAgain() {
+        PlayerData data = data();
+
+        data.reroll(List.of("a1"), 50);
+        data.reroll(List.of("a2"), 50);
+
+        assertEquals(2, data.rerolls());
+        assertEquals(List.of("a2"), data.tasks());
     }
 
     @Test

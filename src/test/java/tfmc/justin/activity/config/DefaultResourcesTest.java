@@ -223,6 +223,50 @@ class DefaultResourcesTest {
         assertFalse(value == null || value.isBlank(), "gui.daily-bar-name should not be blank");
     }
 
+    // The default budget the reroll button ships with: 1 a day, not off
+    @Test
+    void shippedConfigDefaultsRerollsPerDayToOne() {
+        YamlConfiguration config = load("config.yml");
+
+        assertEquals(1, config.getInt(ActivityConfiguration.REROLLS_PER_DAY_PATH));
+    }
+
+    // The default point gate: rerollable at 0 or 1 points earned today
+    @Test
+    void shippedConfigDefaultsRerollMaxPointsToOne() {
+        YamlConfiguration config = load("config.yml");
+
+        assertEquals(1, config.getInt(ActivityConfiguration.REROLL_MAX_POINTS_PATH));
+    }
+
+    @Test
+    void shippedMessagesHasEveryRerollKeyNonBlank() {
+        YamlConfiguration messages = load("messages.yml");
+
+        for (String key : List.of("reroll-done", "reroll-none-left", "reroll-disabled", "reroll-failed",
+                "reroll-locked", "reroll-too-late")) {
+            String value = messages.getString(key);
+            assertFalse(value == null || value.isBlank(), key + " should not be blank");
+        }
+        for (String key : List.of("gui.reroll-name", "gui.reroll-lore-left",
+                "gui.reroll-lore-locked", "gui.reroll-lore-disabled",
+                "gui.reroll-lore-too-late")) {
+            String value = messages.getString(key);
+            assertFalse(value == null || value.isBlank(), key + " should not be blank");
+        }
+    }
+
+    // The lore that shows the remaining budget needs both placeholders to be
+    // worth anything - a fixed string would lie once the budget changed
+    @Test
+    void theRerollLoreLeftKeepsItsPlaceholders() {
+        YamlConfiguration messages = load("messages.yml");
+
+        String value = messages.getString("gui.reroll-lore-left");
+        assertTrue(value.contains("%left%"));
+        assertTrue(value.contains("%max%"));
+    }
+
     @Test
     void colorizeStripsHexAndLegacyCodes() {
         String result = Utils.colorize("#e6ca40&lX");
