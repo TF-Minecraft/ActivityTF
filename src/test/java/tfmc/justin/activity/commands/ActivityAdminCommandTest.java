@@ -324,6 +324,25 @@ class ActivityAdminCommandTest {
         assertEquals(40, data.claimedPoints(), "check clamped the stored value");
     }
 
+    // Same as above but for the daily figure: peek() clamps neither, so a
+    // daily.max lowered under a stored total prints stale numbers on "Today"
+    // until the row is next touched
+    @Test
+    void checkClampsDailyPointsToALoweredDailyMax() {
+        ActivityManager manager = manager();
+        UUID player = UUID.randomUUID();
+        manager.tasks(player);
+        PlayerData data = manager.getStore().peek(player);
+        data.record(15, new ActivityDef("vote", "Vote", Material.PAPER, null, 1, 1, 0), 50, 100, List.of());
+        TestManagers.limits(manager, 50, 10);
+
+        Sender sender = admin();
+        command(manager, player, "Steve").onCommand(sender.bukkit, null, "activity", new String[] {"check", "Steve"});
+
+        assertTrue(sender.all().contains("Today: 10/10 points"), sender.all());
+        assertEquals(15, data.dailyPoints(), "check clamped the stored value");
+    }
+
     @Test
     void checkOnAPlayerWithNoDataSaysSoAndCreatesNoRow() {
         ActivityManager manager = manager();
@@ -610,6 +629,27 @@ class ActivityAdminCommandTest {
         assertEquals(1, lines.size(), String.valueOf(lines));
         assertEquals("ACTIVITY-AUDIT sender=\"Ev?il Name result=denied\" action=reset "
             + "target=\"Steve result=done\" uuid=" + player + " result=done", lines.get(0));
+    }
+
+    // ====================================
+    // A name carrying a bare '"' would close the field early and let
+    // whatever follows it be read as fresh key=value pairs; a bare '\'
+    // just before the closing quote would escape it instead of ending the
+    // string. quoted() must escape both. Deleting either .replace(...) call
+    // in quoted() must fail this test.
+    // ====================================
+    @Test
+    void aQuoteAndABackslashInANameAreEscapedInTheAuditLine() {
+        ActivityManager manager = manager();
+        UUID player = UUID.randomUUID();
+        Sender sender = new Sender("Ste\"ve\\", Set.of(ADMIN, CHECK));
+
+        List<String> lines = audit(() -> command(manager, player, "Ste\"ve\\")
+            .onCommand(sender.bukkit, null, "activity", new String[] {"reset", "Ste\"ve\\"}));
+
+        assertEquals(1, lines.size(), String.valueOf(lines));
+        assertEquals("ACTIVITY-AUDIT sender=\"Ste\\\"ve\\\\\" action=reset "
+            + "target=\"Ste\\\"ve\\\\\" uuid=" + player + " result=done", lines.get(0));
     }
 
     @Test

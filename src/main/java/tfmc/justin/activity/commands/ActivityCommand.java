@@ -109,6 +109,10 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
                 handleAdd(sender, args);
                 return true;
             default:
+                // Unreachable: sub is one of SUBCOMMANDS, checked above, and
+                // every case here matches one of them. Kept because the
+                // compiler cannot prove that and requires this switch
+                // statement to return on every path.
                 sender.sendMessage(messages().get("admin.usage"));
                 return true;
         }
@@ -248,7 +252,11 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
         }
         sender.sendMessage(messages().get("admin.check-points", "%points%", points,
             "%max%", config.barMax(), "%claimed%", claimed));
-        sender.sendMessage(messages().get("admin.check-daily", "%points%", today ? data.dailyPoints() : 0,
+        // Clamped like the weekly points above: peek() never runs the
+        // clamp rolled() does, so a lowered daily.max would otherwise print
+        // "15/10" until the row is next touched.
+        int dailyPoints = today ? Math.min(data.dailyPoints(), config.dailyMax()) : 0;
+        sender.sendMessage(messages().get("admin.check-daily", "%points%", dailyPoints,
             "%max%", config.dailyMax()));
         sender.sendMessage(messages().get("admin.check-rerolls", "%used%", today ? data.rerolls() : 0,
             "%max%", config.rerollsPerDay()));
