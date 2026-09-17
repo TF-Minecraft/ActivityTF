@@ -346,11 +346,12 @@ public class ActivityGui implements Listener {
             // revealed. That is the click that runs the activity's
             // 'click-commands', if it configures any - so the first click
             // reveals and every later one runs them. The manager owns the
-            // dispatch, the rate limit and the close; a click it refused
-            // (no commands, or still inside the cooldown) stays as silent as
-            // it has always been.
+            // revealed check, the dispatch, the two rate limits and the
+            // close; a click it refused (nothing to run, or one of the
+            // limits) stays as silent as it has always been, and only a click
+            // that really dispatched something makes a sound.
             // ====================================
-            if (clickCommands(player, task)) {
+            if (manager.runClickCommands(player, task)) {
                 clickSound(player);
             }
             return;
@@ -450,17 +451,6 @@ public class ActivityGui implements Listener {
             }
         }
         return -1;
-    }
-
-    // ====================================
-    // The already-revealed task the player clicked, handed to the manager.
-    // False when the slot shows filler, when the activity configures no
-    // click-commands, or when the player is inside the dispatch cooldown.
-    // ====================================
-    private boolean clickCommands(Player player, int task) {
-        ActivityConfiguration config = manager.getConfiguration();
-        String id = taskIdAt(config, manager.tasks(player.getUniqueId()), task);
-        return id != null && manager.runClickCommands(player, config.activity(id));
     }
 
     // ====================================

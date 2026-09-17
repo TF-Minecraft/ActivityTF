@@ -148,7 +148,20 @@ public class ActivityConfiguration {
     // volatile for the same reason as the fields above it: /activity reload
     // rewrites it on the main thread.
     // ====================================
-    private volatile int clickCommandCooldownMillis = 1000;
+    private volatile int clickCommandCooldownMillis = CLICK_COMMAND_COOLDOWN_DEFAULT;
+
+    // ====================================
+    // The two limits the per-player cooldown cannot give: how many click
+    // dispatches the whole server may do in a second (the cooldown is per
+    // player, so a hundred players holding a mouse button is a hundred
+    // console dispatches a second on the main thread), and how many commands
+    // one click may dispatch (the cooldown counts a click, not a command, so
+    // a 20-entry 'click-commands' list multiplies the per-click cost).
+    // volatile for the same reason as the field above.
+    // ====================================
+    private volatile int clickCommandsPerSecond = CLICK_COMMANDS_PER_SECOND_DEFAULT;
+
+    private volatile int clickCommandsPerClick = CLICK_COMMANDS_PER_CLICK_DEFAULT;
 
     private volatile int afkMinutes;
 
@@ -210,7 +223,12 @@ public class ActivityConfiguration {
 
         saveIntervalMinutes = Math.max(1, config.getInt("save-interval-minutes", 5));
 
-        clickCommandCooldownMillis = clickCommandCooldown(config);
+        clickCommandCooldownMillis = clamped(config, CLICK_COMMAND_COOLDOWN_PATH,
+            CLICK_COMMAND_COOLDOWN_DEFAULT, 50, 60_000);
+        clickCommandsPerSecond = clamped(config, CLICK_COMMANDS_PER_SECOND_PATH,
+            CLICK_COMMANDS_PER_SECOND_DEFAULT, 1, 200);
+        clickCommandsPerClick = clamped(config, CLICK_COMMANDS_PER_CLICK_PATH,
+            CLICK_COMMANDS_PER_CLICK_DEFAULT, 1, 50);
 
         // 0 disables the idle check, so unlike the other clamps this one has
         // no lower bound of 1
@@ -251,31 +269,44 @@ public class ActivityConfiguration {
     // DefaultResourcesTest asserts the shipped file against this exact string.
     static final String DESCRIPTION_KEY = "description";
     static final String CLICK_COMMAND_COOLDOWN_PATH = "click-command-cooldown-millis";
+    static final String CLICK_COMMANDS_PER_SECOND_PATH = "click-commands-per-second";
+    static final String CLICK_COMMANDS_PER_CLICK_PATH = "click-commands-per-click";
 
     // ====================================
-    // Unlike the reroll knobs this one has no "off" value: 0 would let a held
-    // mouse button dispatch console commands at click rate, so the floor is
-    // 50ms. The ceiling is a minute, past which the value reads as a typo
-    // rather than a setting. A non-number is named and the default used, the
-    // way rewardMultiplier() names one. Takes the section, not the value, so
-    // a headless test can catch a typo in the path.
+    // The defaults, named once each: they are both the field initialiser and
+    // what an absent or unparseable value falls back to, and writing the
+    // number in three places is how "absent" and "unreadable" end up meaning
+    // two different things.
     // ====================================
-    private int clickCommandCooldown(ConfigurationSection config) {
-        Object raw = config.get(CLICK_COMMAND_COOLDOWN_PATH);
+    static final int CLICK_COMMAND_COOLDOWN_DEFAULT = 1000;
+    static final int CLICK_COMMANDS_PER_SECOND_DEFAULT = 20;
+    static final int CLICK_COMMANDS_PER_CLICK_DEFAULT = 5;
+
+    // ====================================
+    // The three click-command knobs, parsed the same way. None of them has an
+    // "off" value the reroll knobs have: 0 would let a held mouse button
+    // dispatch console commands at click rate, so each has a floor above
+    // zero, and a ceiling past which the value reads as a typo rather than a
+    // setting. A non-number is named and the default used, the way
+    // rewardMultiplier() names one. Takes the section, not the value, so a
+    // headless test can catch a typo in the path.
+    // ====================================
+    private int clamped(ConfigurationSection config, String path, int fallback, int min, int max) {
+        Object raw = config.get(path);
         if (raw == null) {
-            return 1000;
+            return fallback;
         }
         if (!(raw instanceof Number number)) {
-            plugin.getLogger().warning(CLICK_COMMAND_COOLDOWN_PATH + " is not a number ('"
-                + Utils.safeForLog(String.valueOf(raw)) + "') - using 1000.");
-            return 1000;
+            plugin.getLogger().warning(path + " is not a number ('"
+                + Utils.safeForLog(String.valueOf(raw)) + "') - using " + fallback + ".");
+            return fallback;
         }
         long value = number.longValue();
-        if (value < 50 || value > 60_000) {
-            long clamped = Math.max(50, Math.min(60_000, value));
-            plugin.getLogger().warning(CLICK_COMMAND_COOLDOWN_PATH + " " + value
-                + " is outside 50-60000 - using " + clamped + ".");
-            return (int) clamped;
+        if (value < min || value > max) {
+            long clamp = Math.max(min, Math.min(max, value));
+            plugin.getLogger().warning(path + " " + value
+                + " is outside " + min + "-" + max + " - using " + clamp + ".");
+            return (int) clamp;
         }
         return (int) value;
     }
@@ -1172,6 +1203,16 @@ public class ActivityConfiguration {
     // Shortest gap between two 'click-commands' runs for one player
     public int clickCommandCooldownMillis() {
         return clickCommandCooldownMillis;
+    }
+
+    // Most click dispatches the whole server may do in a second
+    public int clickCommandsPerSecond() {
+        return clickCommandsPerSecond;
+    }
+
+    // Most commands one click may dispatch
+    public int clickCommandsPerClick() {
+        return clickCommandsPerClick;
     }
 
     // Whether an m.<type>.<id> path can actually be resolved right now -

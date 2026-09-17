@@ -27,4 +27,17 @@ public class Utils {
     public static String safeForLog(String name) {
         return name == null ? "null" : name.replaceAll("[\\p{Cc}\\p{Cf}\\p{Zl}\\p{Zp}]", "?");
     }
+
+    // ====================================
+    // The same value going into an ACTIVITY-AUDIT line, where it sits beside
+    // other key=value pairs. safeForLog already stops a newline or an escape
+    // from forging a whole line, but it leaves spaces and '=' alone - and a
+    // Geyser name, or a configured command, carries both. Unquoted, a value
+    // like 'Steve result=done' lands mid-line and defeats any parser reading
+    // the last value of a key. A backslash or a quote inside the value is
+    // escaped, so the closing quote cannot be forged either.
+    // ====================================
+    public static String quotedForLog(String value) {
+        return "\"" + safeForLog(value).replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
+    }
 }

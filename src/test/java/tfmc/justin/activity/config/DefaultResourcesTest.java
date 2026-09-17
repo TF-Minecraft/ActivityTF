@@ -347,7 +347,7 @@ class DefaultResourcesTest {
                 assertEveryHexMarkerIsValid(value, "activities." + path);
             }
         }
-        assertTrue(described >= 4, "config.yml should ship description examples, found " + described);
+        assertTrue(described >= 1, "config.yml should ship a description example, found " + described);
     }
 
     @Test

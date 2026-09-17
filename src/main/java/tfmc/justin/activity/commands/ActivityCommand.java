@@ -305,17 +305,12 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
     }
 
     // ====================================
-    // A value that came from a player goes into the line quoted. safeForLog
-    // already stops a newline or an escape from forging a whole line, but it
-    // leaves spaces and '=' alone - and a Geyser name, or a command block
-    // renamed by a player, reaches here carrying both. Unquoted, a name like
-    // 'Steve result=done' lands mid-line and defeats any parser reading the
-    // last value of a key. A backslash or a quote inside the value is escaped,
-    // so the closing quote cannot be forged either. uuid= needs none of this:
-    // it cannot be anything but a uuid.
+    // A value that came from a player goes into the line quoted - see
+    // Utils.quotedForLog, which the click-command audit line shares. uuid=
+    // needs none of it: it cannot be anything but a uuid.
     // ====================================
     private static String quoted(String value) {
-        return "\"" + Utils.safeForLog(value).replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
+        return Utils.quotedForLog(value);
     }
 
     // ====================================

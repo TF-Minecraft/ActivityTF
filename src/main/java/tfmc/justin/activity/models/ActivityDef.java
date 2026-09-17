@@ -27,15 +27,11 @@ public record ActivityDef(String id, String display, Material icon, String iconP
         description = description == null ? List.of() : List.copyOf(description);
     }
 
-    // The overwhelming majority of activities have no description; this keeps
-    // the click-command call sites reading the way they always have
-    public ActivityDef(String id, String display, Material icon, String iconPath, int every, int points,
-                       int dailyCap, List<String> clickCommands) {
-        this(id, display, icon, iconPath, every, points, dailyCap, clickCommands, List.of());
-    }
-
-    // The overwhelming majority of activities have no click commands either;
-    // this keeps every one of those call sites reading the way it always has
+    // The overwhelming majority of activities have no click commands and no
+    // description; this keeps every one of those call sites reading the way it
+    // always has. There is deliberately no 8-arg convenience constructor in
+    // between: '..., dailyCap, List.of("&7Vote daily")' would compile and
+    // register a description as a console command to dispatch.
     public ActivityDef(String id, String display, Material icon, String iconPath, int every, int points,
                        int dailyCap) {
         this(id, display, icon, iconPath, every, points, dailyCap, List.of(), List.of());

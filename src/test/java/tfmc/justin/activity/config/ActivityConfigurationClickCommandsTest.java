@@ -4,20 +4,13 @@ import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.junit.jupiter.api.Test;
-import sun.reflect.ReflectionFactory;
 import tfmc.justin.activity.models.ActivityDef;
 
 import java.io.File;
 import java.io.StringReader;
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.logging.Handler;
-import java.util.logging.Level;
-import java.util.logging.LogRecord;
-import java.util.logging.Logger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -33,42 +26,8 @@ class ActivityConfigurationClickCommandsTest {
 
     private final List<String> logged = new ArrayList<>();
 
-    private static final class TestPlugin extends JavaPlugin {
-    }
-
     private JavaPlugin stubPlugin() {
-        try {
-            ReflectionFactory rf = ReflectionFactory.getReflectionFactory();
-            Constructor<Object> objectCtor = Object.class.getDeclaredConstructor();
-            Constructor<?> bypass = rf.newConstructorForSerialization(TestPlugin.class, objectCtor);
-            JavaPlugin plugin = (JavaPlugin) bypass.newInstance();
-
-            Logger logger = Logger.getAnonymousLogger();
-            logger.setUseParentHandlers(false);
-            logger.setLevel(Level.ALL);
-            logger.addHandler(new Handler() {
-                @Override
-                public void publish(LogRecord record) {
-                    logged.add(record.getMessage());
-                }
-
-                @Override
-                public void flush() {
-                }
-
-                @Override
-                public void close() {
-                }
-            });
-
-            Field loggerField = JavaPlugin.class.getDeclaredField("logger");
-            loggerField.setAccessible(true);
-            loggerField.set(plugin, logger);
-
-            return plugin;
-        } catch (ReflectiveOperationException e) {
-            throw new RuntimeException(e);
-        }
+        return TestPlugins.capturing(logged);
     }
 
     private ActivityConfiguration configFor(String activitiesYaml) {
@@ -128,16 +87,33 @@ class ActivityConfigurationClickCommandsTest {
         assertEquals(List.of("say hi"), only(config).clickCommands());
     }
 
-    private int cooldown(String yaml) {
+    // The one numeric parser all three click-command knobs go through
+    private int clamped(String yaml, String path, int fallback, int min, int max) {
         ActivityConfiguration config = new ActivityConfiguration(stubPlugin());
         try {
-            Method method = ActivityConfiguration.class.getDeclaredMethod("clickCommandCooldown",
-                ConfigurationSection.class);
+            Method method = ActivityConfiguration.class.getDeclaredMethod("clamped",
+                ConfigurationSection.class, String.class, int.class, int.class, int.class);
             method.setAccessible(true);
-            return (int) method.invoke(config, YamlConfiguration.loadConfiguration(new StringReader(yaml)));
+            return (int) method.invoke(config, YamlConfiguration.loadConfiguration(new StringReader(yaml)),
+                path, fallback, min, max);
         } catch (ReflectiveOperationException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    private int cooldown(String yaml) {
+        return clamped(yaml, ActivityConfiguration.CLICK_COMMAND_COOLDOWN_PATH,
+            ActivityConfiguration.CLICK_COMMAND_COOLDOWN_DEFAULT, 50, 60_000);
+    }
+
+    private int perSecond(String yaml) {
+        return clamped(yaml, ActivityConfiguration.CLICK_COMMANDS_PER_SECOND_PATH,
+            ActivityConfiguration.CLICK_COMMANDS_PER_SECOND_DEFAULT, 1, 200);
+    }
+
+    private int perClick(String yaml) {
+        return clamped(yaml, ActivityConfiguration.CLICK_COMMANDS_PER_CLICK_PATH,
+            ActivityConfiguration.CLICK_COMMANDS_PER_CLICK_DEFAULT, 1, 50);
     }
 
     @Test
@@ -181,5 +157,50 @@ class ActivityConfigurationClickCommandsTest {
         assertEquals(List.of("sudo %player% votelist"),
             shipped.getStringList("activities.vote." + ActivityConfiguration.CLICK_COMMANDS_KEY));
         assertEquals(1000, shipped.getInt(ActivityConfiguration.CLICK_COMMAND_COOLDOWN_PATH));
+        assertEquals(20, shipped.getInt(ActivityConfiguration.CLICK_COMMANDS_PER_SECOND_PATH));
+        assertEquals(5, shipped.getInt(ActivityConfiguration.CLICK_COMMANDS_PER_CLICK_PATH));
+    }
+
+    // ====================================
+    // The server-wide ceiling and the per-click cap, which the per-player
+    // cooldown cannot give: they are parsed by the same method, so what is
+    // pinned here is that each one is read from its own path with its own
+    // default and its own bounds.
+    // ====================================
+    @Test
+    void anAbsentGlobalLimitIsTwentyASecond() {
+        assertEquals(20, perSecond("bar:\n  max: 50\n"));
+    }
+
+    @Test
+    void aGlobalLimitInsideTheBoundsIsKept() {
+        assertEquals(60, perSecond(ActivityConfiguration.CLICK_COMMANDS_PER_SECOND_PATH + ": 60\n"));
+    }
+
+    // No "off" value here either: 0 a second would stop the feature dead
+    // rather than bound it, which is what removing 'click-commands' is for
+    @Test
+    void aGlobalLimitOutsideTheBoundsIsClamped() {
+        assertEquals(1, perSecond(ActivityConfiguration.CLICK_COMMANDS_PER_SECOND_PATH + ": 0\n"));
+        assertEquals(200, perSecond(ActivityConfiguration.CLICK_COMMANDS_PER_SECOND_PATH + ": 5000\n"));
+        assertTrue(warned("is outside 1-200"), logged.toString());
+    }
+
+    @Test
+    void aNonNumericGlobalLimitWarnsAndFallsBackToTwenty() {
+        assertEquals(20, perSecond(ActivityConfiguration.CLICK_COMMANDS_PER_SECOND_PATH + ": 'lots'\n"));
+        assertTrue(warned("is not a number"), logged.toString());
+    }
+
+    @Test
+    void anAbsentPerClickCapIsFive() {
+        assertEquals(5, perClick("bar:\n  max: 50\n"));
+    }
+
+    @Test
+    void aPerClickCapOutsideTheBoundsIsClamped() {
+        assertEquals(1, perClick(ActivityConfiguration.CLICK_COMMANDS_PER_CLICK_PATH + ": 0\n"));
+        assertEquals(50, perClick(ActivityConfiguration.CLICK_COMMANDS_PER_CLICK_PATH + ": 99\n"));
+        assertTrue(warned("is outside 1-50"), logged.toString());
     }
 }
