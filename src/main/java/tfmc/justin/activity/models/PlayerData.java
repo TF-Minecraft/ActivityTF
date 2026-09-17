@@ -201,8 +201,12 @@ public class PlayerData {
             awarded < earned ? Recorded.WEEKLY_CLAMPED : Recorded.RECORDED);
     }
 
+    // Widened to long before the sum: a forced add hands over an award that
+    // saturates at Integer.MAX_VALUE, and 'points + p' as an int would wrap
+    // negative and Math.max(0, ..) would then wipe the bar instead of filling
+    // it. Every value that did not overflow before is unaffected.
     public void addPoints(int p, int max) {
-        points = Math.max(0, Math.min(max, points + p));
+        points = (int) Math.max(0, Math.min(max, (long) points + p));
     }
 
     // Stored points can exceed the bar after bar.max is lowered or the file

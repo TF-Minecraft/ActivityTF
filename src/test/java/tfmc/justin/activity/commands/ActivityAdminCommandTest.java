@@ -244,6 +244,27 @@ class ActivityAdminCommandTest {
     }
 
     // ====================================
+    // An add part-way to its next award gets the plain line, with no points
+    // figure: "0 points." on the most common staff action reads like a
+    // failure when the count did go in.
+    // ====================================
+    @Test
+    void anAddThatAwardsNoPointsYetOmitsThePointsFigure() {
+        TestManagers.bukkit();
+        ActivityManager manager = TestManagers.manager(
+            new ActivityDef("instrument", "Notes", Material.NOTE_BLOCK, null, 20, 1, 5));
+        TestManagers.messages(manager);
+        UUID player = UUID.randomUUID();
+
+        Sender sender = admin();
+        command(manager, player, "Steve").onCommand(
+            sender.bukkit, null, "activity", new String[] {"add", "Steve", "instrument", "1", "--force"});
+
+        assertEquals("Added 1 to instrument for Steve.", sender.all());
+        assertEquals(1, manager.getStore().get(player).count("instrument"));
+    }
+
+    // ====================================
     // check
     // ====================================
 

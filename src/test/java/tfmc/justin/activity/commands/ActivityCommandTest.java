@@ -285,6 +285,14 @@ class ActivityCommandTest {
             assertFalse(value == null || value.isBlank(), outcome.messageKey() + " is missing");
         }
 
+        // The points figure rides on its own key, not on admin.add-done: that
+        // key predates the figure, so a live messages.yml would win over the
+        // packaged default and hide it
+        String plain = messages.getString("admin.add-done");
+        assertFalse(plain == null || plain.contains("%points%"), plain);
+        String withPoints = messages.getString("admin.add-done-points");
+        assertTrue(withPoints != null && withPoints.contains("%points%"), withPoints);
+
         String notATask = messages.getString("admin.add-not-a-task");
         assertTrue(notATask.contains("%activity%"), notATask);
         assertTrue(notATask.contains("%player%"), notATask);

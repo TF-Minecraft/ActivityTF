@@ -44,9 +44,23 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
     // The one optional trailing argument 'add' takes
     private static final String FORCE = "--force";
 
-    // Well above any real day's activity, low enough that no arithmetic
-    // downstream can be pushed anywhere near overflowing
+    // Well above any real day's activity. A forced add is no longer bounded
+    // by daily-cap or bar.daily-max, so this alone does not keep the award
+    // small: count times an activity's 'points' can still saturate at
+    // Integer.MAX_VALUE. What bounds the award is PlayerData.addPoints, which
+    // sums in long and clamps to bar.max, and ActivityDef.rawWorth, which
+    // saturates rather than wrapping.
     private static final int MAX_ADD = 1_000_000;
+
+    // ====================================
+    // ADDED has two lines. The figure lives on its own key rather than in
+    // admin.add-done, because that key already exists in every deployed
+    // messages.yml without a %points% placeholder and the live file wins over
+    // the packaged default - the figure would be invisible in production.
+    // The plain key is still what an add part-way to its next award gets:
+    // "0 points." reads like a failure on the most common staff action.
+    // ====================================
+    private static final String ADD_DONE_POINTS = "admin.add-done-points";
 
     private final ActivityManager manager;
     private final ActivityGui gui;
@@ -358,7 +372,8 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
         Outcome outcome = added.outcome();
         sender.sendMessage(switch (outcome) {
             case ADDED, CAPPED_ACTIVITY, CAPPED_DAILY, CAPPED_WEEKLY, CLAMPED_WEEKLY ->
-                messages().get(outcome.messageKey(),
+                messages().get(
+                    outcome == Outcome.ADDED && added.points() > 0 ? ADD_DONE_POINTS : outcome.messageKey(),
                     "%count%", count, "%activity%", args[2], "%player%", name(target, args[1]),
                     "%points%", added.points(), "%max%", manager.getConfiguration().barMax());
             case NOT_A_TASK -> messages().get(outcome.messageKey(),

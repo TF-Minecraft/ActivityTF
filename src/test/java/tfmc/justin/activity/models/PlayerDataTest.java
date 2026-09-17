@@ -93,6 +93,29 @@ class PlayerDataTest {
         assertEquals(5, data.count("instrument"));
     }
 
+    // ====================================
+    // A forced award that saturates at Integer.MAX_VALUE must fill the bar,
+    // not wrap it. 'points + p' as an int would go negative and be clamped to
+    // 0, wiping a bar that already had points on it - and leaving points below
+    // claimedPoints, which PlayerStore.parse resolves by cutting claimedPoints
+    // down, handing every milestone the player already collected back.
+    // ====================================
+    @Test
+    void aForcedAwardThatSaturatesFillsTheBarInsteadOfWrappingIt() {
+        ActivityDef rich = new ActivityDef("boss", "Boss", Material.STONE, null, 1, 2500, 0);
+        PlayerData data = data();
+        data.addPoints(15, MAX);
+        data.setClaimedPoints(10);
+        assertEquals(Integer.MAX_VALUE, rich.rawWorth(1_000_000));
+
+        RecordResult result = forced(data, rich, 1_000_000, MAX);
+
+        assertEquals(MAX, data.points());
+        assertTrue(data.points() >= data.claimedPoints(), "points=" + data.points());
+        assertEquals(MAX - 15, result.pointsAwarded());
+        assertEquals(Recorded.WEEKLY_CLAMPED, result.outcome());
+    }
+
     @Test
     void aForcedRecordStillCountsMilestonesReached() {
         PlayerData data = data();

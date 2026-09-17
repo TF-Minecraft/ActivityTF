@@ -166,20 +166,33 @@ public final class TestManagers {
     // can be driven headless: they end in Bukkit.getPlayer(uuid), which NPEs
     // while Bukkit.server is null. The stub answers that with null - the
     // offline-player case - so the award lands and nothing is announced.
-    // Bukkit's singleton can only be set once per JVM, hence the guard; every
-    // other method is left to throw rather than quietly answering a caller
-    // this was not written for.
+    // Bukkit's singleton can only be set once per JVM, so the contract is
+    // first caller wins: whichever test calls this first installs the stub
+    // every later test in the same fork gets. That is fine while this is the
+    // only stub - and if another one is ever installed, or this is reached
+    // inside a real server, the call throws rather than silently handing back
+    // a server the caller did not ask for. Every method the stub does not
+    // answer throws too, so a test that needs a richer Server fails loudly on
+    // the call it makes rather than quietly getting a wrong answer.
     // ====================================
     public static void bukkit() {
-        if (Bukkit.getServer() != null) {
+        Server installed = Bukkit.getServer();
+        if (installed != null) {
+            if (!STUB_NAME.equals(installed.toString())) {
+                throw new IllegalStateException(
+                    "Bukkit.server is already set to " + installed + "; this JVM cannot hold two stubs");
+            }
             return;
         }
         InvocationHandler handler = (proxy, method, args) -> switch (method.getName()) {
             case "getPlayer" -> null;
-            case "getLogger" -> Logger.getLogger(LOGGER_NAME);
+            // Its own logger, deliberately not the one audit lines land on:
+            // anything logged through Bukkit.getLogger() must not show up in
+            // a test's captured audit stream
+            case "getLogger" -> Logger.getLogger(SERVER_LOGGER_NAME);
             case "getName", "getVersion", "getBukkitVersion" -> "TestManagers";
-            case "toString" -> "stub-server";
-            case "hashCode" -> LOGGER_NAME.hashCode();
+            case "toString" -> STUB_NAME;
+            case "hashCode" -> STUB_NAME.hashCode();
             case "equals" -> proxy == args[0];
             default -> throw new UnsupportedOperationException("unexpected call to Server#" + method.getName());
         };
@@ -204,6 +217,10 @@ public final class TestManagers {
     }
 
     private static final String LOGGER_NAME = "TestManagers";
+
+    private static final String SERVER_LOGGER_NAME = "TestManagers.Server";
+
+    private static final String STUB_NAME = "stub-server";
 
     private static JavaPlugin stubPlugin() {
         try {
