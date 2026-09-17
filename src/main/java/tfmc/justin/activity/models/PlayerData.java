@@ -418,6 +418,20 @@ public class PlayerData {
         return rerolls;
     }
 
+    // ====================================
+    // Hands one consumed reroll back, floored at zero - /activity givereroll
+    // <player>, for a player who burned theirs on a misclick. Nothing else
+    // about the day is touched: the draw and the points stay as they are.
+    // True if the counter actually moved.
+    // ====================================
+    public boolean refundReroll() {
+        if (rerolls <= 0) {
+            return false;
+        }
+        rerolls--;
+        return true;
+    }
+
     public int claimedPoints() {
         return claimedPoints;
     }

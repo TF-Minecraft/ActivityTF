@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.logging.Logger;
 import java.util.regex.Pattern;
 
 // ====================================
@@ -160,6 +161,11 @@ public class ActivityManager {
 
     public PlayerStore getStore() {
         return store;
+    }
+
+    // The plugin's logger, so the admin command can write its audit line
+    public Logger logger() {
+        return plugin.getLogger();
     }
 
     // ====================================

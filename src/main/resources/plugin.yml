@@ -9,7 +9,7 @@ softdepend: [VotingPlugin, MusicalInstruments, geiger_counter, MMOCore, MMOItems
 commands:
   activity:
     description: Open the weekly activity bar, or run admin subcommands
-    usage: /activity [reload|reset <player>|add <player> <activity> <count> [--force]]
+    usage: /activity [reload|check <player>|reset <player>|givereroll <player>|add <player> <activity> <count> [--force]]
 permissions:
   activity.use:
     description: Open the weekly activity GUI
@@ -17,6 +17,11 @@ permissions:
   activity.reroll:
     description: Reroll today's activity tasks from the GUI (Ascended perk)
     default: false
+  activity.check:
+    description: Inspect another player's activity state
+    default: op
   activity.admin:
     description: Access to activity admin subcommands
     default: op
+    children:
+      activity.check: true
