@@ -22,8 +22,9 @@ import java.util.logging.Logger;
 // PluginClassLoader, so one is allocated through ReflectionFactory the same
 // way ActivityConfigurationStationTest does, then handed a real Logger.
 //
-// The store is left "not loaded" on purpose: nothing here writes a file, and
-// only the claim path cares.
+// The store is left "not loaded" on purpose: nothing here writes a file. The
+// paths that refuse to work unsaved (claim, reroll) opt back in with
+// storeLoaded().
 // ====================================
 public final class TestManagers {
 
@@ -108,6 +109,19 @@ public final class TestManagers {
     public static void rerollsPerDay(ActivityManager manager, int perDay) {
         try {
             set(manager.getConfiguration(), "rerollsPerDay", perDay);
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    // ====================================
+    // Marks players.yml as having been read, which load() would do. Only
+    // needed by the paths that refuse outright while nothing can be saved;
+    // still nothing is ever written, since no test calls save().
+    // ====================================
+    public static void storeLoaded(ActivityManager manager) {
+        try {
+            set(manager.getStore(), "loaded", true);
         } catch (ReflectiveOperationException e) {
             throw new RuntimeException(e);
         }

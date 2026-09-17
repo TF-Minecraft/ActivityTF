@@ -830,17 +830,21 @@ class PlayerDataTest {
     // ====================================
     // The one bit of reroll arithmetic worth pinning: today's points come back
     // off the weekly bar, but never below what has already been paid out, or
-    // the same milestone would become claimable twice.
+    // the same milestone would become claimable twice. What the floor keeps on
+    // the bar was not refunded, so it carries forward as today's starting
+    // dailyPoints instead of handing the budget back for free: 12 - 5 = 7 is
+    // under the claimed 10, so only 2 of the 5 come off and the other 3 stay
+    // spent.
     // ====================================
     @Test
     void aRerollTakesTodayBackOffTheWeeklyBarButNeverBelowWhatWasClaimed() {
         PlayerData data = new PlayerData(12, 5, "w", "d", 10, Map.of("a1", 3),
             List.of("a1", "a2"), List.of("a1"));
 
-        data.reroll(List.of("a3", "a4"));
+        data.reroll(List.of("a3", "a4"), 50);
 
         assertEquals(10, data.points());
-        assertEquals(0, data.dailyPoints());
+        assertEquals(3, data.dailyPoints());
         assertEquals(10, data.claimedPoints());
         assertTrue(data.daily().isEmpty());
         assertEquals(List.of("a3", "a4"), data.tasks());
@@ -851,7 +855,7 @@ class PlayerDataTest {
     @Test
     void aDayRolloverGivesTheRerollBack() {
         PlayerData data = data();
-        data.reroll(List.of("a1"));
+        data.reroll(List.of("a1"), 50);
         assertEquals(1, data.rerolls());
 
         assertTrue(data.roll(WEEK, "2026-09-10"));
@@ -863,7 +867,7 @@ class PlayerDataTest {
     @Test
     void aWeekRolloverGivesTheRerollBackEvenWithTheSameDayKey() {
         PlayerData data = data();
-        data.reroll(List.of("a1"));
+        data.reroll(List.of("a1"), 50);
         assertEquals(1, data.rerolls());
 
         assertTrue(data.roll("2026-W99", DAY));
@@ -878,10 +882,46 @@ class PlayerDataTest {
         PlayerData data = new PlayerData(20, 6, "w", "d", 5, Map.of("a1", 3),
             List.of("a1", "a2"), List.of("a1"));
 
-        data.reroll(List.of("a3"));
+        data.reroll(List.of("a3"), 50);
 
         assertEquals(14, data.points());
         assertEquals(5, data.claimedPoints());
+        // Every one of today's points was refunded, so today starts over
+        assertEquals(0, data.dailyPoints());
+    }
+
+    // ====================================
+    // Claim-then-reroll: the whole of today sits on top of claimedPoints, so
+    // the floor blocks the entire subtraction. Nothing is refunded, so nothing
+    // of today's budget comes back either - the player keeps their 10 points
+    // and has 0 of bar.daily-max left to earn against.
+    // ====================================
+    @Test
+    void aFullyFlooredRerollRefundsNothingAndCarriesTheWholeDayForward() {
+        PlayerData data = new PlayerData(10, 10, "w", "d", 10, Map.of("a1", 3),
+            List.of("a1"), List.of("a1"));
+
+        data.reroll(List.of("a2"), 50);
+
+        assertEquals(10, data.points());
+        assertEquals(10, data.dailyPoints());
+        assertEquals(10, data.claimedPoints());
+        assertTrue(data.daily().isEmpty());
+    }
+
+    // ====================================
+    // bar.max lowered under a claimedPoints that was earned against the old
+    // one: the reroll must not push the bar back over the new max.
+    // ====================================
+    @Test
+    void aRerollNeverRaisesTheWeeklyTotalAboveTheBarMax() {
+        PlayerData data = new PlayerData(8, 4, "w", "d", 20, Map.of(),
+            List.of("a1"), List.of());
+
+        data.reroll(List.of("a2"), 8);
+
+        assertEquals(8, data.points());
+        assertEquals(4, data.dailyPoints());
     }
 
     // No points earned today means a reroll changes no points at all
@@ -890,7 +930,7 @@ class PlayerDataTest {
         PlayerData data = new PlayerData(15, 0, "w", "d", 5, Map.of(),
             List.of("a1"), List.of());
 
-        data.reroll(List.of("a2"));
+        data.reroll(List.of("a2"), 50);
 
         assertEquals(15, data.points());
         assertEquals(5, data.claimedPoints());
@@ -902,8 +942,8 @@ class PlayerDataTest {
     void aSecondRerollTheSameDayIncrementsTheCounterAgain() {
         PlayerData data = data();
 
-        data.reroll(List.of("a1"));
-        data.reroll(List.of("a2"));
+        data.reroll(List.of("a1"), 50);
+        data.reroll(List.of("a2"), 50);
 
         assertEquals(2, data.rerolls());
         assertEquals(List.of("a2"), data.tasks());

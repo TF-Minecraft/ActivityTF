@@ -235,7 +235,8 @@ class DefaultResourcesTest {
     void shippedMessagesHasEveryRerollKeyNonBlank() {
         YamlConfiguration messages = load("messages.yml");
 
-        for (String key : List.of("reroll-done", "reroll-none-left", "reroll-disabled", "reroll-locked")) {
+        for (String key : List.of("reroll-done", "reroll-none-left", "reroll-disabled", "reroll-failed",
+                "reroll-locked")) {
             String value = messages.getString(key);
             assertFalse(value == null || value.isBlank(), key + " should not be blank");
         }

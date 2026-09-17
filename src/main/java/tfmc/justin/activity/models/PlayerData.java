@@ -211,18 +211,32 @@ public class PlayerData {
     }
 
     // ====================================
-    // Throws today away and starts it over on a fresh draw: everything today
-    // put on the weekly bar comes back off it, the counts and the draw go, and
-    // the new tasks go in unrevealed. One method rather than a handful the
-    // caller sequences, so a view of this player can never catch it half done.
+    // Throws today away and starts it over on a fresh draw: today's unclaimed
+    // points come back off the weekly bar, the counts and the draw go, and the
+    // new tasks go in unrevealed. One method rather than a handful the caller
+    // sequences, so it is all written in a single call on the main thread -
+    // there is no lock, so an off-thread reader (PlaceholderAPI) can still
+    // observe an intermediate pair of fields.
     //
     // The weekly total never falls below claimedPoints: those points have
     // already been paid for, and letting the bar drop under them would make
-    // the same milestone claimable a second time.
+    // the same milestone claimable a second time. It never rises above the
+    // bar either - claimedPoints can sit above a lowered bar.max.
+    //
+    // Whatever that floor kept on the bar is NOT refunded, so it must not hand
+    // today's budget back either: only the points actually taken off the bar
+    // buy back budget, and the rest carries forward as today's starting
+    // dailyPoints. A player who claims a milestone and then rerolls therefore
+    // keeps their points and gets no extra budget at all. The per-activity
+    // count map still goes - those tasks no longer exist.
     // ====================================
-    public void reroll(List<String> newTasks) {
-        points = Math.max(claimedPoints, points - dailyPoints);
-        dailyPoints = 0;
+    public void reroll(List<String> newTasks, int max) {
+        int before = points;
+        points = Math.min(max, Math.max(claimedPoints, points - dailyPoints));
+        // Never negative (a stored points above bar.max can refund more than
+        // today earned) and never above what it already was, so it stays
+        // inside dailyMax exactly as far as it already was
+        dailyPoints = Math.max(0, dailyPoints - (before - points));
         daily.clear();
         clearTasks();
         tasks.addAll(newTasks);

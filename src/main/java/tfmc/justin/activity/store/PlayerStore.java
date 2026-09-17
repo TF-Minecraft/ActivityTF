@@ -198,7 +198,8 @@ public class PlayerStore {
         List<String> tasks = new ArrayList<>(entry.getStringList("tasks"));
         tasks.removeIf(known.negate());
 
-        // A negative count off a hand-edited file would read as rerolls owed;
+        // A negative count off a hand-edited file would put the player under
+        // zero rerolls used, i.e. hand them extra ones past reroll.per-day;
         // there is no upper bound to enforce here, the budget lives in config
         int rerolls = Math.max(0, entry.getInt("rerolls"));
 

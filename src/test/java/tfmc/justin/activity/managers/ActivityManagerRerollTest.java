@@ -38,6 +38,7 @@ class ActivityManagerRerollTest {
     @Test
     void aRerollReplacesAllSevenTasksAndLeavesThemUnrevealed() {
         ActivityManager manager = TestManagers.manager(defs(20));
+        TestManagers.storeLoaded(manager);
         TestManagers.rerollsPerDay(manager, 1);
         UUID uuid = UUID.randomUUID();
         manager.tasks(uuid);
@@ -56,6 +57,7 @@ class ActivityManagerRerollTest {
     @Test
     void theRerollCounterIncrementsOnASuccessfulReroll() {
         ActivityManager manager = TestManagers.manager(defs(20));
+        TestManagers.storeLoaded(manager);
         TestManagers.rerollsPerDay(manager, 3);
         UUID uuid = UUID.randomUUID();
         manager.tasks(uuid);
@@ -72,6 +74,7 @@ class ActivityManagerRerollTest {
     @Test
     void exhaustingTheBudgetReturnsNoneLeftAndMutatesNothing() {
         ActivityManager manager = TestManagers.manager(defs(20));
+        TestManagers.storeLoaded(manager);
         TestManagers.rerollsPerDay(manager, 1);
         UUID uuid = UUID.randomUUID();
         manager.tasks(uuid);
@@ -101,6 +104,7 @@ class ActivityManagerRerollTest {
     @Test
     void aZeroBudgetIsDisabledAndCreatesNoRow() {
         ActivityManager manager = TestManagers.manager(defs(20));
+        TestManagers.storeLoaded(manager);
         TestManagers.rerollsPerDay(manager, 0);
         UUID uuid = UUID.randomUUID();
 
@@ -113,6 +117,7 @@ class ActivityManagerRerollTest {
     @Test
     void aZeroBudgetMutatesNothingForAnExistingPlayer() {
         ActivityManager manager = TestManagers.manager(defs(20));
+        TestManagers.storeLoaded(manager);
         TestManagers.rerollsPerDay(manager, 0);
         UUID uuid = UUID.randomUUID();
         List<String> before = List.copyOf(manager.tasks(uuid).tasks());
@@ -129,6 +134,7 @@ class ActivityManagerRerollTest {
     @Test
     void aBudgetAboveOneAllowsExactlyThatManyPerDay() {
         ActivityManager manager = TestManagers.manager(defs(20));
+        TestManagers.storeLoaded(manager);
         TestManagers.rerollsPerDay(manager, 3);
         UUID uuid = UUID.randomUUID();
         manager.tasks(uuid);
@@ -152,7 +158,8 @@ class ActivityManagerRerollTest {
         for (int i = 0; i < 200; i++) {
             ActivityManager manager = TestManagers.manager(defs(20));
             TestManagers.guarantee(manager, "a3");
-            TestManagers.rerollsPerDay(manager, 1);
+            TestManagers.storeLoaded(manager);
+        TestManagers.rerollsPerDay(manager, 1);
             UUID uuid = UUID.randomUUID();
             manager.tasks(uuid);
 
@@ -164,11 +171,56 @@ class ActivityManagerRerollTest {
         }
     }
 
+    // ====================================
+    // players.yml was never read, so the store refuses every save: a reroll
+    // done here would cost the player today's points only until the next
+    // restart, and would hand the spent budget back with them. Refused whole,
+    // the same way claim() refuses a payout it cannot persist.
+    // ====================================
+    @Test
+    void aStoreThatNeverLoadedRefusesTheRerollAndMutatesNothing() {
+        ActivityManager manager = TestManagers.manager(defs(20));
+        TestManagers.rerollsPerDay(manager, 1);
+        UUID uuid = UUID.randomUUID();
+        List<String> before = List.copyOf(manager.tasks(uuid).tasks());
+
+        assertEquals(ActivityManager.Rerolled.FAILED, manager.reroll(uuid));
+
+        PlayerData data = manager.getStore().get(uuid);
+        assertEquals(before, data.tasks(), "a refused reroll changed the draw");
+        assertEquals(0, data.rerolls(), "a refused reroll spent the budget");
+    }
+
+    // ====================================
+    // Claim-then-reroll must not hand today's budget back for free: the
+    // claimed floor keeps the points on the bar, so dailyPoints carries
+    // forward instead of resetting to 0 (see PlayerData.reroll).
+    // ====================================
+    @Test
+    void aRerollDoesNotRefundBudgetTheClaimedFloorKeptOnTheBar() {
+        ActivityManager manager = TestManagers.manager(defs(20));
+        TestManagers.storeLoaded(manager);
+        TestManagers.rerollsPerDay(manager, 1);
+        UUID uuid = UUID.randomUUID();
+        PlayerData data = manager.tasks(uuid);
+        // Today's whole budget (dailyMax is 10 in TestManagers), then claimed
+        data.record(10, def("a0"), 50, 10, List.of());
+        data.setClaimedPoints(10);
+        assertEquals(10, data.points());
+        assertEquals(10, data.dailyPoints());
+
+        assertEquals(ActivityManager.Rerolled.DONE, manager.reroll(uuid));
+
+        assertEquals(10, data.points(), "the claimed points came off the bar");
+        assertEquals(10, data.dailyPoints(), "the reroll handed today's budget back for free");
+    }
+
     // A reroll called before the player ever opened the GUI still hands out a
     // full, valid draw rather than working from an empty one
     @Test
     void aRerollWithNoPriorDrawStillProducesAFullDraw() {
         ActivityManager manager = TestManagers.manager(defs(20));
+        TestManagers.storeLoaded(manager);
         TestManagers.rerollsPerDay(manager, 1);
         UUID uuid = UUID.randomUUID();
 

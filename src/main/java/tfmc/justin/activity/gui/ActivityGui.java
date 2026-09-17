@@ -363,10 +363,18 @@ public class ActivityGui implements Listener {
     // The reroll click. The permission is checked here rather than in the
     // manager: a player without it is not a failed reroll but a sales pitch,
     // and nothing about their data is read or written.
+    //
+    // A feature the server has switched off is not a sales pitch either, so
+    // that is checked first - the same order rerollItem() paints the lore in.
     // ====================================
     private void reroll(Player player, InventoryClickEvent event) {
         ActivityConfiguration config = manager.getConfiguration();
         Messages messages = config.messages();
+
+        if (config.rerollsPerDay() <= 0) {
+            player.sendMessage(messages.get("reroll-disabled"));
+            return;
+        }
 
         if (!player.hasPermission("activity.reroll")) {
             player.sendMessage(messages.get("reroll-locked"));
@@ -375,6 +383,7 @@ public class ActivityGui implements Listener {
 
         switch (manager.reroll(player.getUniqueId())) {
             case DISABLED -> player.sendMessage(messages.get("reroll-disabled"));
+            case FAILED -> player.sendMessage(messages.get("reroll-failed"));
             case NONE_LEFT -> player.sendMessage(messages.get("reroll-none-left"));
             case DONE -> {
                 player.sendMessage(messages.get("reroll-done"));

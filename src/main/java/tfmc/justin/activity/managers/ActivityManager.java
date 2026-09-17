@@ -266,7 +266,10 @@ public class ActivityManager {
     public enum Rerolled {
         DONE,
         NONE_LEFT,
-        DISABLED
+        DISABLED,
+        // players.yml was never loaded, so the spent reroll and the points it
+        // took back could not be saved - refused rather than done in memory
+        FAILED
     }
 
     // ====================================
@@ -282,14 +285,40 @@ public class ActivityManager {
             return Rerolled.DISABLED;
         }
 
+        // Same rule as claim(): nothing that has to be persisted may happen
+        // while nothing can be. A reroll done in memory only would cost the
+        // player today's points until the next restart and hand the counter
+        // back with them, making the per-day budget a per-restart one
+        if (storeNeverLoaded("Refusing every reroll")) {
+            return Rerolled.FAILED;
+        }
+
         PlayerData data = store.get(uuid);
         if (data.rerolls() >= perDay) {
             return Rerolled.NONE_LEFT;
         }
 
-        data.reroll(PlayerData.draw(activityIds(), config.guaranteed(), ThreadLocalRandom.current()));
+        data.reroll(PlayerData.draw(activityIds(), config.guaranteed(), ThreadLocalRandom.current()),
+            config.barMax());
         store.markDirty();
         return Rerolled.DONE;
+    }
+
+    // ====================================
+    // True when players.yml was never read, in which case the store refuses
+    // every save for the rest of the session and nothing that must survive a
+    // restart may be done. Says so once per session, however many callers ask.
+    // ====================================
+    private boolean storeNeverLoaded(String refusing) {
+        if (store.isLoaded()) {
+            return false;
+        }
+        if (!warnedStoreNotLoaded) {
+            warnedStoreNotLoaded = true;
+            plugin.getLogger().severe(refusing + ": " + PlayerStore.FILE
+                + " was never loaded, so nothing done here could be saved.");
+        }
+        return true;
     }
 
     // ====================================
@@ -368,12 +397,7 @@ public class ActivityManager {
         // Nothing may be paid while nothing can be persisted: a store that
         // never loaded refuses every write for the rest of the session, so a
         // payout here would last only until the next restart and then repeat
-        if (!store.isLoaded()) {
-            if (!warnedStoreNotLoaded) {
-                warnedStoreNotLoaded = true;
-                plugin.getLogger().severe("Refusing every reward claim: " + PlayerStore.FILE
-                    + " was never loaded, so nothing handed over could be saved.");
-            }
+        if (storeNeverLoaded("Refusing every reward claim")) {
             player.sendMessage(messages.get("reward-failed"));
             return 0;
         }
