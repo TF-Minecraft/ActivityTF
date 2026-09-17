@@ -33,7 +33,8 @@ import java.util.UUID;
 // ====================================
 public class ActivityCommand implements CommandExecutor, TabCompleter {
 
-    private static final List<String> SUBCOMMANDS = Arrays.asList("reload", "check", "reset", "reroll", "add");
+    private static final List<String> SUBCOMMANDS =
+        Arrays.asList("reload", "check", "reset", "givereroll", "add");
 
     // What 'check' alone gets: the read-only half of the command
     private static final List<String> READ_ONLY_SUBCOMMANDS = List.of("check");
@@ -66,8 +67,26 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
         }
 
         String sub = args[0].toLowerCase(Locale.ROOT);
+        // ====================================
+        // An unrecognised subcommand is a usage error, not a permission one:
+        // permissionFor() maps it to activity.admin, which used to hide the
+        // usage line from exactly the check-only sender who mistyped. A sender
+        // holding neither permission still learns nothing.
+        // ====================================
+        if (!SUBCOMMANDS.contains(sub)) {
+            boolean anything = sender.hasPermission("activity.admin") || sender.hasPermission("activity.check");
+            sender.sendMessage(messages().get(anything ? "admin.usage" : "admin.no-permission"));
+            return true;
+        }
+
         if (!sender.hasPermission(permissionFor(sub))) {
             sender.sendMessage(messages().get("admin.no-permission"));
+            // A refused mutating attempt is logged too: someone probing for
+            // what they are allowed to run must not do it silently. 'check' is
+            // read-only and stays out of the log whichever way it ends.
+            if (!sub.equals("check")) {
+                audit(sender, "action=" + sub + " result=denied");
+            }
             return true;
         }
 
@@ -83,8 +102,8 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
             case "reset":
                 handleReset(sender, args);
                 return true;
-            case "reroll":
-                handleReroll(sender, args);
+            case "givereroll":
+                handleGiveReroll(sender, args);
                 return true;
             case "add":
                 handleAdd(sender, args);
@@ -110,11 +129,13 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
     private void handleReset(CommandSender sender, String[] args) {
         if (args.length < 2) {
             sender.sendMessage(messages().get("admin.usage"));
+            audit(sender, "action=reset result=usage");
             return;
         }
 
         OfflinePlayer target = resolve(sender, args[1]);
         if (target == null) {
+            audit(sender, "action=reset typed=" + quoted(args[1]) + " result=unknown-player");
             return;
         }
 
@@ -130,43 +151,66 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
     }
 
     // ====================================
-    // /activity reroll <player> gives one consumed reroll back - it does NOT
-    // reroll anything. rolled() rather than get(): a player with no row has
-    // used no rerolls, and asking about them must not put them in the file.
+    // /activity givereroll <player> gives one consumed reroll back - it does
+    // NOT reroll anything, which is why it is not called 'reroll'.
+    //
+    // peek() rather than rolled(): a player with no row, and a player whose
+    // stored day is not today, have both used no rerolls today - and asking
+    // about them must neither put them in the file nor perform the rollover
+    // as a side effect, which used to wipe a stale player's day while the
+    // audit line said 'noop'. It is also what 'check' reports for them, so
+    // the two commands cannot contradict each other.
     // ====================================
-    private void handleReroll(CommandSender sender, String[] args) {
+    private void handleGiveReroll(CommandSender sender, String[] args) {
         if (args.length < 2) {
             sender.sendMessage(messages().get("admin.usage"));
+            audit(sender, "action=givereroll result=usage");
             return;
         }
 
         OfflinePlayer target = resolve(sender, args[1]);
         if (target == null) {
+            audit(sender, "action=givereroll typed=" + quoted(args[1]) + " result=unknown-player");
             return;
         }
 
-        PlayerData data = manager.getStore().rolled(target.getUniqueId());
-        int before = data == null ? 0 : data.rerolls();
-        boolean given = data != null && data.refundReroll();
+        PlayerData data = manager.getStore().peek(target.getUniqueId());
+        boolean today = isToday(data, manager.getConfiguration().currentKeys());
+        int before = today ? data.rerolls() : 0;
+        boolean given = today && data.refundReroll();
         if (given) {
             manager.getStore().markDirty();
         }
 
-        int after = data == null ? 0 : data.rerolls();
+        int after = today ? data.rerolls() : 0;
         sender.sendMessage(given
             ? messages().get("admin.reroll-given", "%before%", before, "%after%", after,
                 "%player%", name(target, args[1]))
             : messages().get("admin.reroll-none-used", "%player%", name(target, args[1])));
-        audit(sender, "action=reroll " + who(target, args[1]) + " rerolls=" + before + "->" + after
+        audit(sender, "action=givereroll " + who(target, args[1]) + " rerolls=" + before + "->" + after
             + " result=" + (given ? "done" : "noop"));
+    }
+
+    // Whether this row's stored day is the one a rollover would leave it on.
+    // A stale week implies a stale day: roll() wipes the day either way.
+    private static boolean isToday(PlayerData data, ActivityConfiguration.Keys keys) {
+        return data != null && data.weekKey().equals(keys.week()) && data.dayKey().equals(keys.day());
     }
 
     // ====================================
     // /activity check <player>: everything staff needs to answer "why did I
     // not get a point", and nothing else. peek() is the read-only lookup - it
     // neither creates a row for a player who has none nor rolls the one it
-    // finds, so the week and day keys printed are exactly what is on disk (a
-    // stale pair is itself the answer to some reports).
+    // finds.
+    //
+    // The rollover is applied to the answer instead, the way PlaceholderHook
+    // does it: a stored week that is not the current one has nothing on the
+    // bar, a stale day has nothing done today and no draw. Printing the raw
+    // stored numbers under a "Today" label described a day the player's next
+    // login will wipe - and contradicted /activity givereroll, which reports
+    // the same stale player as having used no rerolls. The stored keys are
+    // still printed, and said to be stale, because a stale pair is itself the
+    // answer to some reports.
     // ====================================
     private void handleCheck(CommandSender sender, String[] args) {
         if (args.length < 2) {
@@ -187,17 +231,31 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
         }
 
         ActivityConfiguration config = manager.getConfiguration();
+        // One clock reading for both keys, so they cannot straddle a midnight
+        // tick and disagree about which day this week it is
+        ActivityConfiguration.Keys keys = config.currentKeys();
+        boolean currentWeek = data.weekKey().equals(keys.week());
+        boolean today = isToday(data, keys);
+        // Clamped: peek() never runs the clamp rolled() does, so a lowered
+        // bar.max would otherwise print "60/50"
+        int points = currentWeek ? Math.min(data.points(), config.barMax()) : 0;
+        int claimed = currentWeek ? Math.min(data.claimedPoints(), config.barMax()) : 0;
+
         sender.sendMessage(messages().get("admin.check-header", "%player%", player));
-        sender.sendMessage(messages().get("admin.check-points", "%points%", data.points(),
-            "%max%", config.barMax(), "%claimed%", data.claimedPoints()));
-        sender.sendMessage(messages().get("admin.check-daily", "%points%", data.dailyPoints(),
+        if (!today) {
+            sender.sendMessage(messages().get("admin.check-stale",
+                "%week%", data.weekKey(), "%day%", data.dayKey()));
+        }
+        sender.sendMessage(messages().get("admin.check-points", "%points%", points,
+            "%max%", config.barMax(), "%claimed%", claimed));
+        sender.sendMessage(messages().get("admin.check-daily", "%points%", today ? data.dailyPoints() : 0,
             "%max%", config.dailyMax()));
-        sender.sendMessage(messages().get("admin.check-rerolls", "%used%", data.rerolls(),
+        sender.sendMessage(messages().get("admin.check-rerolls", "%used%", today ? data.rerolls() : 0,
             "%max%", config.rerollsPerDay()));
         sender.sendMessage(messages().get("admin.check-keys", "%week%", data.weekKey(),
             "%day%", data.dayKey()));
 
-        List<String> tasks = data.tasks();
+        List<String> tasks = today ? data.tasks() : List.of();
         if (tasks.isEmpty()) {
             sender.sendMessage(messages().get("admin.check-no-tasks"));
             return;
@@ -228,11 +286,25 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
     // Names are sanitised: they reach here from chat.
     // ====================================
     private void audit(CommandSender sender, String what) {
-        manager.logger().info("ACTIVITY-AUDIT sender=" + Utils.safeForLog(sender.getName()) + " " + what);
+        manager.logger().info("ACTIVITY-AUDIT sender=" + quoted(sender.getName()) + " " + what);
     }
 
     private String who(OfflinePlayer target, String typed) {
-        return "target=" + Utils.safeForLog(name(target, typed)) + " uuid=" + target.getUniqueId();
+        return "target=" + quoted(name(target, typed)) + " uuid=" + target.getUniqueId();
+    }
+
+    // ====================================
+    // A value that came from a player goes into the line quoted. safeForLog
+    // already stops a newline or an escape from forging a whole line, but it
+    // leaves spaces and '=' alone - and a Geyser name, or a command block
+    // renamed by a player, reaches here carrying both. Unquoted, a name like
+    // 'Steve result=done' lands mid-line and defeats any parser reading the
+    // last value of a key. A backslash or a quote inside the value is escaped,
+    // so the closing quote cannot be forged either. uuid= needs none of this:
+    // it cannot be anything but a uuid.
+    // ====================================
+    private static String quoted(String value) {
+        return "\"" + Utils.safeForLog(value).replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
     }
 
     // ====================================
@@ -247,11 +319,13 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
     private void handleAdd(CommandSender sender, String[] args) {
         if (!wellFormedAdd(args)) {
             sender.sendMessage(messages().get("admin.usage"));
+            audit(sender, "action=add result=usage");
             return;
         }
 
         OfflinePlayer target = resolve(sender, args[1]);
         if (target == null) {
+            audit(sender, "action=add typed=" + quoted(args[1]) + " result=unknown-player");
             return;
         }
 
@@ -260,6 +334,7 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
             count = Integer.parseInt(args[3]);
         } catch (NumberFormatException e) {
             sender.sendMessage(messages().get("admin.invalid-number", "%value%", args[3]));
+            audit(sender, "action=add " + who(target, args[1]) + " result=invalid-number");
             return;
         }
 
@@ -267,6 +342,7 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
         // from a typo, and saying "not a number" about 5000000 helps nobody
         if (count <= 0 || count > MAX_ADD) {
             sender.sendMessage(messages().get("admin.out-of-range", "%max%", MAX_ADD));
+            audit(sender, "action=add " + who(target, args[1]) + " result=out-of-range");
             return;
         }
 
@@ -278,7 +354,7 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
                 "%activity%", args[2], "%player%", name(target, args[1]));
             case UNKNOWN_ACTIVITY -> messages().get(outcome.messageKey(), "%activity%", args[2]);
         });
-        audit(sender, "action=add " + who(target, args[1]) + " activity=" + Utils.safeForLog(args[2])
+        audit(sender, "action=add " + who(target, args[1]) + " activity=" + quoted(args[2])
             + " count=" + count + " force=" + forced(args) + " result=" + outcome);
     }
 
@@ -396,7 +472,7 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
         }
 
         if (args.length == 2
-            && (sub.equals("reset") || sub.equals("add") || sub.equals("check") || sub.equals("reroll"))) {
+            && (sub.equals("reset") || sub.equals("add") || sub.equals("check") || sub.equals("givereroll"))) {
             return filter(onlineNames(), args[1]);
         }
 

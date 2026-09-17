@@ -27,7 +27,7 @@ gui:
   filler-name: "&8 "
 placeholder: { done: "&a✔", not-done: "&c✘" }
 admin:
-  usage: "&eUsage: /activity <reload|check <player>|reset <player>|reroll <player>|add <player> <activity> <count> [--force]>"
+  usage: "&eUsage: /activity <reload|check <player>|reset <player>|givereroll <player>|add <player> <activity> <count> [--force]>"
   no-permission: "&cNo permission."
   players-only: "&cPlayers only."
   reloaded: "&aactivity reloaded."
@@ -49,6 +49,7 @@ admin:
   check-daily: "&7 Today: &f%points%&7/&f%max%&7 points"
   check-rerolls: "&7 Rerolls used today: &f%used%&7/&f%max%"
   check-keys: "&7 Week &f%week%&7, day &f%day%"
+  check-stale: "&e Stale: &7stored week &f%week%&7, day &f%day%&7 is not the current one - everything here is shown as it will be after their next login."
   check-no-tasks: "&7 No tasks drawn yet today."
-  check-task-revealed: "&7 %slot%. &a%activity%&7 - revealed, count &f%count%&7, worth &f%points%&7 points today"
+  check-task-revealed: "&7 %slot%. &a%activity%&7 - revealed, count &f%count%&7, that count is worth &f%points%&7 points before any cap"
   check-task-hidden: "&7 %slot%. &8%activity%&7 - hidden"

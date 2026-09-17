@@ -419,7 +419,7 @@ public class PlayerData {
     }
 
     // ====================================
-    // Hands one consumed reroll back, floored at zero - /activity reroll
+    // Hands one consumed reroll back, floored at zero - /activity givereroll
     // <player>, for a player who burned theirs on a misclick. Nothing else
     // about the day is touched: the draw and the points stay as they are.
     // True if the counter actually moved.
