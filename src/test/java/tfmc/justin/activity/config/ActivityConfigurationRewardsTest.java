@@ -3,6 +3,8 @@ package tfmc.justin.activity.config;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import sun.reflect.ReflectionFactory;
 import tfmc.justin.activity.models.RewardEntry;
@@ -11,10 +13,15 @@ import java.io.StringReader;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.logging.Handler;
+import java.util.logging.Level;
+import java.util.logging.LogRecord;
 import java.util.logging.Logger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // ====================================
@@ -44,6 +51,42 @@ class ActivityConfigurationRewardsTest {
         } catch (ReflectiveOperationException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    // What the parser logged while this test ran: the warnings are half of
+    // what these keys do, and a warning that names the wrong index is worth no
+    // more than none
+    private final List<String> logged = new ArrayList<>();
+
+    private final Handler capture = new Handler() {
+        @Override
+        public void publish(LogRecord record) {
+            logged.add(record.getMessage());
+        }
+
+        @Override
+        public void flush() {
+        }
+
+        @Override
+        public void close() {
+        }
+    };
+
+    @BeforeEach
+    void captureLog() {
+        Logger logger = Logger.getLogger("ActivityConfigurationRewardsTest");
+        logger.setLevel(Level.ALL);
+        logger.addHandler(capture);
+    }
+
+    @AfterEach
+    void releaseLog() {
+        Logger.getLogger("ActivityConfigurationRewardsTest").removeHandler(capture);
+    }
+
+    private boolean loggedContains(String fragment) {
+        return logged.stream().anyMatch(message -> message.contains(fragment));
     }
 
     private static FileConfiguration yaml(String content) {
@@ -230,12 +273,111 @@ class ActivityConfigurationRewardsTest {
 
         assertEquals(1, pool.size());
         assertEquals(List.of(new RewardEntry.Item("m.material.steel", 1)), pool.get(0).items());
+
+        // Each warning must name the element it came from, or an admin cannot
+        // find the line to fix
+        assertTrue(loggedContains("Unknown material 'NOT_A_MATERIAL' at rewards.pool[0].items[0]"));
+        assertTrue(loggedContains("Unsupported item path 'ia.custom.block' at rewards.pool[0].items[1]"));
+        assertTrue(loggedContains("Malformed item path 'm.material' at rewards.pool[0].items[2]"));
+        assertTrue(loggedContains("rewards.pool[0].items[3] has no 'item:' path"));
+        assertTrue(loggedContains("rewards.pool[0].items[4] is not an 'item:'/'amount:' block"));
+    }
+
+    // ====================================
+    // 'items:' written as anything but a list - 'items: DIAMOND', or the
+    // single-item map that is the natural typo - used to load clean and pay
+    // less than the admin wrote
+    // ====================================
+    @Test
+    void anItemsKeyThatIsNotAListIsNamedRatherThanSwallowed() {
+        List<RewardEntry> pool = loadRewardPool("rewards:\n  pool:\n    - weight: 1\n"
+            + "      commands: ['say hi']\n      items: 'DIAMOND'\n");
+
+        assertEquals(List.of(), pool.get(0).items());
+        assertTrue(loggedContains("rewards.pool[0].items is not a list"));
+    }
+
+    @Test
+    void anItemsKeyWrittenAsASingleMapIsNamedRatherThanSwallowed() {
+        List<RewardEntry> pool = loadRewardPool("rewards:\n  pool:\n    - weight: 1\n"
+            + "      commands: ['say hi']\n      items:\n        item: 'DIAMOND'\n");
+
+        assertEquals(List.of(), pool.get(0).items());
+        assertTrue(loggedContains("rewards.pool[0].items is not a list"));
+    }
+
+    @Test
+    void anEntryWithNoItemsKeyAtAllSaysNothing() {
+        loadRewardPool("rewards:\n  pool:\n    - weight: 1\n      commands: ['say hi']\n");
+
+        assertFalse(loggedContains("items is not a list"));
+    }
+
+    // ====================================
+    // An amount is range-tested as a long before it is narrowed: intValue() on
+    // 4294967298 is 2, which would pass the test having asked for something
+    // else entirely. A fractional amount is a different mistake and falls back
+    // rather than rounding in silence.
+    // ====================================
+    @Test
+    void anAmountTooLargeForAnIntIsClampedRatherThanNarrowedIntoRange() {
+        List<RewardEntry> pool = loadRewardPool("rewards:\n  pool:\n    - weight: 1\n      items:\n"
+            + "        - item: 'DIAMOND'\n          amount: 4294967298\n");
+
+        assertEquals(List.of(new RewardEntry.Item("DIAMOND", 64)), pool.get(0).items());
+        assertTrue(loggedContains("amount 4294967298 is outside 1-64 - using 64."));
+    }
+
+    @Test
+    void aFractionalAmountFallsBackToOneWithAWarning() {
+        List<RewardEntry> pool = loadRewardPool("rewards:\n  pool:\n    - weight: 1\n      items:\n"
+            + "        - item: 'DIAMOND'\n          amount: 3.9\n");
+
+        assertEquals(List.of(new RewardEntry.Item("DIAMOND", 1)), pool.get(0).items());
+        assertTrue(loggedContains("is not a whole number - using 1."));
     }
 
     @Test
     void anEntryWhoseOnlyItemPathsAreUnusableIsSkipped() {
         assertTrue(loadRewardPool("rewards:\n  pool:\n    - weight: 1\n      items:\n"
             + "        - item: 'NOT_A_MATERIAL'\n").isEmpty());
+    }
+
+    // ====================================
+    // rewards.multiplier - what every 'items:' amount is multiplied by at
+    // payout. Clamped the way every other numeric key here is; 0 or negative
+    // reads as 1, never as "hand nothing over".
+    // ====================================
+
+    private int rewardMultiplier(int raw) {
+        try {
+            ActivityConfiguration config = new ActivityConfiguration(stubPlugin());
+            Method method = ActivityConfiguration.class.getDeclaredMethod("rewardMultiplier", int.class);
+            method.setAccessible(true);
+            return (int) method.invoke(config, raw);
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    @Test
+    void theMultiplierIsKeptInsideItsBounds() {
+        assertEquals(1, rewardMultiplier(1));
+        assertEquals(3, rewardMultiplier(3));
+        assertEquals(64, rewardMultiplier(64));
+    }
+
+    @Test
+    void aZeroOrNegativeMultiplierReadsAsOne() {
+        assertEquals(1, rewardMultiplier(0));
+        assertEquals(1, rewardMultiplier(-5));
+        assertTrue(loggedContains("rewards.multiplier -5 is outside 1-64 - using 1."));
+    }
+
+    @Test
+    void aMultiplierAboveTheUpperBoundIsClamped() {
+        assertEquals(64, rewardMultiplier(1000));
+        assertTrue(loggedContains("rewards.multiplier 1000 is outside 1-64 - using 64."));
     }
 
     // ====================================

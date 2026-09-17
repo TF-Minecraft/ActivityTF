@@ -116,6 +116,11 @@ public class ActivityConfiguration {
     // list the claim is paying out of
     private volatile List<RewardEntry> rewardPool = List.of();
 
+    // What every 'items:' amount is multiplied by at payout. Read fresh on
+    // every handover rather than folded into the pool at load, so a reload
+    // changes what the next claim pays.
+    private volatile int rewardMultiplier = 1;
+
     private String guiTitle;
 
     private volatile int barMax;
@@ -165,6 +170,7 @@ public class ActivityConfiguration {
         loadActivities(config.getConfigurationSection("activities"));
 
         rewardPool = loadRewardPool(config);
+        rewardMultiplier = rewardMultiplier(config.getInt("rewards.multiplier", 1));
 
         // ====================================
         // One line for the whole file, and only when config.yml actually asks
@@ -174,7 +180,8 @@ public class ActivityConfiguration {
         if ((pluginPathConfigured || !craftPaths.isEmpty()) && !itemPathsUsable) {
             plugin.getLogger().warning("config.yml uses m.<type>.<id> item paths but " + missingItemPathPlugins
                 + (missingItemPathPlugins.contains(",") ? " are" : " is") + " not enabled - those icons"
-                + " fall back to PAPER and those crafts are never credited.");
+                + " fall back to PAPER, those crafts are never credited, and any reward item on such a path"
+                + " hands over nothing and leaves its milestone unclaimed.");
         }
 
         guiTitle = config.getString("gui.title", "&8Weekly Activity");
@@ -595,7 +602,15 @@ public class ActivityConfiguration {
     // ====================================
     private List<RewardEntry.Item> loadRewardItems(Object raw, String where) {
         List<RewardEntry.Item> items = new ArrayList<>();
+        if (raw == null) {
+            return items;
+        }
+        // A single 'items: DIAMOND' or 'items: {item: DIAMOND}' is the natural
+        // typo, and silently paying nothing for it is exactly what every other
+        // malformed key here refuses to do
         if (!(raw instanceof List<?> list)) {
+            plugin.getLogger().warning(where + ".items is not a list of 'item:'/'amount:' blocks ('"
+                + Utils.safeForLog(String.valueOf(raw)) + "') - no item is handed over for this entry.");
             return items;
         }
         int index = 0;
@@ -659,13 +674,39 @@ public class ActivityConfiguration {
                 + "' - using 1.");
             return 1;
         }
-        int amount = number.intValue();
+        // Tested as a long before narrowing: intValue() on 4294967298 is 2,
+        // which would pass the range test having asked for something else
+        // entirely. A fractional amount is a different mistake and falls back
+        // rather than silently rounding.
+        long amount = number.longValue();
+        if (number.doubleValue() != amount) {
+            plugin.getLogger().warning(at + " amount '" + Utils.safeForLog(String.valueOf(raw))
+                + "' is not a whole number - using 1.");
+            return 1;
+        }
         if (amount < 1 || amount > 64) {
-            int clamped = Math.max(1, Math.min(64, amount));
+            long clamped = Math.max(1, Math.min(64, amount));
             plugin.getLogger().warning(at + " amount " + amount + " is outside 1-64 - using " + clamped + ".");
+            return (int) clamped;
+        }
+        return (int) amount;
+    }
+
+    // ====================================
+    // rewards.multiplier: what every 'items:' amount is multiplied by at
+    // payout. 1-64 - 0 or negative would mean "hand nothing over", which is
+    // never what an admin meant (the way to pay nothing is to drop the entry),
+    // and 64 x a 64 amount is already 64 full stacks off one 'items:' line.
+    // Console 'give' commands are opaque strings and are never multiplied.
+    // ====================================
+    private int rewardMultiplier(int raw) {
+        if (raw < 1 || raw > 64) {
+            int clamped = Math.max(1, Math.min(64, raw));
+            plugin.getLogger().warning("rewards.multiplier " + raw + " is outside 1-64 - using "
+                + clamped + ".");
             return clamped;
         }
-        return amount;
+        return raw;
     }
 
     // ====================================
@@ -940,6 +981,10 @@ public class ActivityConfiguration {
 
     public List<RewardEntry> rewardPool() {
         return rewardPool;
+    }
+
+    public int rewardMultiplier() {
+        return rewardMultiplier;
     }
 
     public String guiTitle() {

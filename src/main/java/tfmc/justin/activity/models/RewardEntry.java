@@ -15,11 +15,6 @@ public record RewardEntry(int weight, String display, List<String> commands, Lis
     public record Item(String path, int amount) {
     }
 
-    // The command-only entry every caller wrote before items existed
-    public RewardEntry(int weight, String display, List<String> commands) {
-        this(weight, display, commands, List.of());
-    }
-
     public static int totalWeight(List<RewardEntry> pool) {
         long total = 0;
         for (RewardEntry entry : pool) {

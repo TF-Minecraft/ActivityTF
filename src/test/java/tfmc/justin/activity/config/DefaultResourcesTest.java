@@ -145,7 +145,7 @@ class DefaultResourcesTest {
     }
 
     // Every shipped pool entry must be drawable: a weight above 0, something
-    // to say in chat and at least one command to run.
+    // to say in chat and at least one item to hand over.
     @Test
     void everyRewardPoolEntryIsUsable() {
         YamlConfiguration config = load("config.yml");
@@ -164,8 +164,11 @@ class DefaultResourcesTest {
             assertFalse(display == null || String.valueOf(display).isBlank(),
                     where + ".display should not be blank");
 
-            assertTrue(entry.get("commands") instanceof List<?> commands && !commands.isEmpty(),
-                    where + ".commands should list at least one command");
+            // The shipped pool pays in items rather than commands on purpose:
+            // a console 'give' that fails is invisible here, so the player is
+            // marked paid having received nothing
+            assertTrue(entry.get("items") instanceof List<?> items && !items.isEmpty(),
+                    where + ".items should list at least one item");
         }
     }
 

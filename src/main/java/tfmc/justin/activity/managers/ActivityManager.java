@@ -26,7 +26,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
@@ -62,6 +64,11 @@ public class ActivityManager {
     // Same idea for an empty reward pool, which a player can hit at click rate
     // - said once per load rather than once per click
     private boolean warnedEmptyPool;
+
+    // Reward item paths already reported as unresolvable, so a broken config
+    // warns once rather than once per claim click. Static because giveItems is,
+    // and cleared by reload() the way warnedEmptyPool is.
+    static final Set<String> reportedItemPaths = ConcurrentHashMap.newKeySet();
 
     // One tick a minute crediting online, non-idle players. Cancelled by
     // shutdown; reload leaves it running, since it reads the AFK threshold
@@ -479,7 +486,7 @@ public class ActivityManager {
         int paid = 0;
         for (int i = 0; i < due.size(); i++) {
             RewardEntry drawn = draw(runnablePool);
-            if (drawn == null || !dispatchRewards(player, drawn)) {
+            if (drawn == null || !dispatchRewards(player, drawn, due.get(i))) {
                 break;
             }
             paid++;
@@ -496,9 +503,15 @@ public class ActivityManager {
             int rolledBack = rollbackClaimedPoints(claimedBefore, paid, due);
             data.setClaimedPoints(rolledBack);
             store.markDirty();
-            if (!store.saveNow()) {
+            // Nothing went out at all - the case a player holding the mouse
+            // down on a broken pool hits on every click. The row is back where
+            // this click found it, so the autosave the dirty flag just armed is
+            // enough and the whole store is not serialised a second time per
+            // click. Only a partial payout, which changes what was already
+            // written, is worth blocking the tick on.
+            if (rolledBack != claimedBefore && !store.saveNow()) {
                 plugin.getLogger().severe("Reward payout for " + player.getUniqueId() + " is out of sync:"
-                    + " paid " + paid + " of " + due.size() + " milestones, claimed-points is " + rolledBack
+                    + " paid " + paid + " of the milestones " + due + ", claimed-points is " + rolledBack
                     + " in memory but " + claimedAfter + " on disk. Repair " + PlayerStore.FILE + " by hand.");
             }
             player.sendMessage(messages.get("reward-failed"));
@@ -565,9 +578,18 @@ public class ActivityManager {
     // Both halves always run: the commands are not skipped just because the
     // items already succeeded.
     // ====================================
-    private boolean dispatchRewards(Player player, RewardEntry entry) {
-        boolean gaveItems = giveItems(player, entry.items(), this::resolveRewardItem, plugin.getLogger());
-        boolean ranCommands = dispatchCommands(player, entry.commands());
+    private boolean dispatchRewards(Player player, RewardEntry entry, int milestone) {
+        return dispatchRewards(
+            () -> giveItems(player, entry, config.rewardMultiplier(), milestone,
+                this::resolveRewardItem, plugin.getLogger()),
+            () -> dispatchCommands(player, entry.commands()));
+    }
+
+    // The combine on its own, so the rule above can be pinned without a server
+    // behind the command half
+    static boolean dispatchRewards(BooleanSupplier items, BooleanSupplier commands) {
+        boolean gaveItems = items.getAsBoolean();
+        boolean ranCommands = commands.getAsBoolean();
         return gaveItems || ranCommands;
     }
 
@@ -583,7 +605,12 @@ public class ActivityManager {
             return config.itemPathsUsable() ? TLibsItems.item(path) : null;
         }
         Material material = ItemPath.material(path);
-        return material == null ? null : new ItemStack(material);
+        // isItem() so a block-only name (CARROTS, WATER, FIRE) is refused here
+        // rather than at addItem, which turns such a stack into nothing and
+        // reports no leftover - the milestone would stay burned and the player
+        // would be told he was paid. Needs a live registry, so it is asked here
+        // at payout rather than at load.
+        return material == null || !material.isItem() ? null : new ItemStack(material);
     }
 
     // ====================================
@@ -598,39 +625,82 @@ public class ActivityManager {
     // on the main thread - claim() is only ever reached from the GUI's
     // InventoryClickEvent handler - so the inventory is touched inline.
     //
-    // The resolved stack's own amount is whatever built it, so 'amount:' is set
-    // on a clone rather than multiplied: 'amount: 3' means three items. The
-    // clone also keeps a stack TLibs might be holding on to out of reach.
+    // The resolved stack's own amount is whatever built it, so the total is set
+    // on a clone rather than multiplied: 'amount: 3' at rewards.multiplier 2
+    // means six items. That total goes over as whole stacks of at most the
+    // resolved item's own getMaxStackSize(), so six swords are six stacks of
+    // one and 192 diamonds are three of 64. The clone also keeps a stack TLibs
+    // might be holding on to out of reach.
     // ====================================
-    static boolean giveItems(Player player, List<RewardEntry.Item> items,
+    static boolean giveItems(Player player, RewardEntry entry, int multiplier, int milestone,
                              Function<String, ItemStack> resolver, Logger logger) {
         boolean gaveAny = false;
-        for (RewardEntry.Item item : items) {
+        boolean missedAny = false;
+        for (RewardEntry.Item item : entry.items()) {
+            int total = item.amount() * multiplier;
             try {
                 ItemStack stack = resolver.apply(item.path());
                 // Compared against AIR rather than through Material#isAir(),
                 // which needs the block registry of a running server
                 if (stack == null || stack.getType() == Material.AIR) {
-                    logger.warning("Reward item '" + Utils.safeForLog(item.path()) + "' could not be resolved"
-                        + " for " + player.getUniqueId() + " - nothing was handed over for it.");
+                    missedAny = true;
+                    // Memoised the way TLibsItems memoises a failing path: a
+                    // claim can be repeated at click rate, and a path TLibs was
+                    // never asked about (item paths unusable) memoises nowhere
+                    // else
+                    if (reportedItemPaths.add(item.path())) {
+                        logger.warning("Reward item '" + Utils.safeForLog(item.path()) + "' (x" + total
+                            + ", milestone " + milestone + ") could not be resolved for "
+                            + player.getUniqueId() + " - nothing was handed over for it.");
+                    }
                     continue;
                 }
-                stack = stack.clone();
-                stack.setAmount(item.amount());
-                Map<Integer, ItemStack> leftovers = player.getInventory().addItem(stack);
-                // Set before the drop: the stack has reached the player either
-                // way, and a throwing drop must not un-pay the milestone
-                gaveAny = true;
-                for (ItemStack leftover : leftovers.values()) {
-                    player.getWorld().dropItem(player.getLocation(), leftover);
+                // The resolved item's own limit, not the vanilla 64: a stack of
+                // 64 items whose max stack size is 1 is a dupe primitive in
+                // every shift-click and crafting path that touches it after
+                int max = Math.max(1, stack.getMaxStackSize());
+                for (int left = total; left > 0; left -= max) {
+                    ItemStack chunk = stack.clone();
+                    chunk.setAmount(Math.min(left, max));
+                    // Set before the inventory is touched, not after: addItem
+                    // can throw having already filled some slots, and a
+                    // milestone rolled back then would be drawn and paid again
+                    // on the next click. A throwing drop must not un-pay it
+                    // either.
+                    gaveAny = true;
+                    for (ItemStack leftover : player.getInventory().addItem(chunk).values()) {
+                        // Owner-locked for the first seconds, so the overflow
+                        // cannot be picked up by whoever happens to be standing
+                        // next to the claimer
+                        player.getWorld().dropItemNaturally(player.getLocation(), leftover, drop -> {
+                            drop.setOwner(player.getUniqueId());
+                            drop.setThrower(player.getUniqueId());
+                        });
+                    }
                 }
             } catch (Throwable t) {
                 // Same reason dispatchCommands swallows: claim() has already
                 // burned and saved the milestones and must be able to put them
                 // back rather than unwind through this loop.
-                logger.severe("Reward item '" + Utils.safeForLog(item.path()) + "' threw for "
-                    + player.getUniqueId() + ": " + t);
+                missedAny = true;
+                logger.severe("Reward item '" + Utils.safeForLog(item.path()) + "' (x" + total
+                    + ", milestone " + milestone + ") threw for " + player.getUniqueId() + ": " + t);
             }
+        }
+
+        // Part of an entry went out and part did not. The milestone stays
+        // burned on purpose - rolling it back would hand the part that did go
+        // out over a second time - so the only way the rest ever reaches the
+        // player is an operator reading this line.
+        if (gaveAny && missedAny) {
+            logger.warning("Only part of reward '" + Utils.safeForLog(entry.display()) + "' reached "
+                + player.getUniqueId() + " at milestone " + milestone + " - the milestone stays claimed,"
+                + " so hand the rest over by hand.");
+        }
+        if (gaveAny) {
+            // The inventory was changed inside a cancelled InventoryClickEvent,
+            // which leaves the client showing ghost stacks until it reopens
+            player.updateInventory();
         }
         return gaveAny;
     }
@@ -688,6 +758,7 @@ public class ActivityManager {
         // An operator who fixed rewards.pool deserves to hear about it again
         // if they got it wrong twice
         warnedEmptyPool = false;
+        reportedItemPaths.clear();
     }
 
     private void playSound(Player player, String soundKey) {
