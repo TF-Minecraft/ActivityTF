@@ -185,12 +185,8 @@ public class ActivityConfiguration {
         milestones = loadMilestones(config.getIntegerList("bar.milestones"));
         barLength = barLength(config.getInt("bar.length", 40));
 
-        // 0 turns rerolling off entirely, so like playtime.afk-minutes this
-        // clamp has no lower bound of 1
-        rerollsPerDay = Math.max(0, config.getInt("reroll.per-day", 1));
-        // 0 is a meaningful setting here too - it allows a reroll only while
-        // nothing has been earned today - so a negative clamps down to it
-        rerollMaxPoints = Math.max(0, config.getInt("reroll.max-points", 1));
+        rerollsPerDay = parseRerollsPerDay(config);
+        rerollMaxPoints = parseRerollMaxPoints(config);
 
         goalCompleteSound = soundKey(config.getString("sounds.goal-complete", ""));
         barCompleteSound = soundKey(config.getString("sounds.bar-complete", ""));
@@ -209,6 +205,28 @@ public class ActivityConfiguration {
         }
 
         warnIfBarUnreachable();
+    }
+
+    // ====================================
+    // The two reroll knobs, parsed apart from load() so a headless test can
+    // feed them a value and catch a typo in the path: the shipped defaults
+    // are identical to the getInt fallbacks, so nothing else here would.
+    // The paths are constants for the same reason - DefaultResourcesTest
+    // asserts the shipped file against these exact strings.
+    // ====================================
+    static final String REROLLS_PER_DAY_PATH = "reroll.per-day";
+    static final String REROLL_MAX_POINTS_PATH = "reroll.max-points";
+
+    // 0 turns rerolling off entirely, so like playtime.afk-minutes this clamp
+    // has no lower bound of 1
+    static int parseRerollsPerDay(ConfigurationSection config) {
+        return Math.max(0, config.getInt(REROLLS_PER_DAY_PATH, 1));
+    }
+
+    // 0 is a meaningful setting here too - it allows a reroll only while
+    // nothing has been earned today - so a negative clamps down to it
+    static int parseRerollMaxPoints(ConfigurationSection config) {
+        return Math.max(0, config.getInt(REROLL_MAX_POINTS_PATH, 1));
     }
 
     private void loadActivities(ConfigurationSection section) {

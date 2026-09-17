@@ -53,9 +53,10 @@ public final class TestManagers {
             set(config, "barMax", 50);
             set(config, "dailyMax", 10);
             set(config, "milestones", List.of(10, 20));
-            // Out of the way by default: the point gate is a separate feature
-            // and only the tests that exercise it should feel it
-            set(config, "rerollMaxPoints", Integer.MAX_VALUE);
+            // The shipped reroll.max-points, so a test that forgets to set its
+            // own gate runs the configuration players actually get rather than
+            // a permissive one no server has
+            set(config, "rerollMaxPoints", 1);
 
             return manager;
         } catch (ReflectiveOperationException e) {

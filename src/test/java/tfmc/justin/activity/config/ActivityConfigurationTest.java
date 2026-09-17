@@ -1,6 +1,7 @@
 package tfmc.justin.activity.config;
 
 import org.bukkit.Material;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -312,5 +313,38 @@ class ActivityConfigurationTest {
     @Test
     void aReachableFirstRewardWarnsAboutNothing() {
         assertNull(ActivityConfiguration.unreachableWarning(caps(40, 5), 40, 10, 10));
+    }
+
+    // ====================================
+    // The two reroll knobs. load() never runs headless and both getInt
+    // fallbacks equal the shipped values, so only a non-default value proves
+    // the path string is the one an admin edits.
+    // ====================================
+    private static YamlConfiguration yaml(String path, Object value) {
+        YamlConfiguration config = new YamlConfiguration();
+        config.set(path, value);
+        return config;
+    }
+
+    @Test
+    void theRerollKnobsReadTheValueTheirPathCarries() {
+        assertEquals(5, ActivityConfiguration.parseRerollsPerDay(
+            yaml(ActivityConfiguration.REROLLS_PER_DAY_PATH, 5)));
+        assertEquals(5, ActivityConfiguration.parseRerollMaxPoints(
+            yaml(ActivityConfiguration.REROLL_MAX_POINTS_PATH, 5)));
+    }
+
+    @Test
+    void aNegativeRerollKnobClampsToZero() {
+        assertEquals(0, ActivityConfiguration.parseRerollsPerDay(
+            yaml(ActivityConfiguration.REROLLS_PER_DAY_PATH, -3)));
+        assertEquals(0, ActivityConfiguration.parseRerollMaxPoints(
+            yaml(ActivityConfiguration.REROLL_MAX_POINTS_PATH, -3)));
+    }
+
+    @Test
+    void anUnsetRerollKnobFallsBackToOne() {
+        assertEquals(1, ActivityConfiguration.parseRerollsPerDay(new YamlConfiguration()));
+        assertEquals(1, ActivityConfiguration.parseRerollMaxPoints(new YamlConfiguration()));
     }
 }

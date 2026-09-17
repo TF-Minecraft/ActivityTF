@@ -4,7 +4,9 @@ import org.bukkit.Material;
 import org.junit.jupiter.api.Test;
 import tfmc.justin.activity.models.ActivityDef;
 import tfmc.justin.activity.models.PlayerData;
+import tfmc.justin.activity.utils.Weeks;
 
+import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -20,6 +22,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 // itself is never run headless), so every test here sets its own budget
 // explicitly through TestManagers.rerollsPerDay - a test that forgot to would
 // see DISABLED everywhere and fail loudly rather than silently pass.
+//
+// rerollMaxPoints is the other half of that rule, defaulted the other way
+// round: TestManagers ships it at 1, the production value, so a test that
+// banks points and forgets to widen the gate sees TOO_LATE rather than
+// silently passing on a threshold no server runs. Anything that needs more
+// headroom says so with TestManagers.rerollMaxPoints.
 // ====================================
 class ActivityManagerRerollTest {
 
@@ -195,12 +203,17 @@ class ActivityManagerRerollTest {
     // Claim-then-reroll must not hand today's budget back for free: the
     // claimed floor keeps the points on the bar, so dailyPoints carries
     // forward instead of resetting to 0 (see PlayerData.reroll).
+    //
+    // A full day's earnings only reach the reroll at all on an admin who has
+    // raised reroll.max-points well above the shipped 1, so the gate is opened
+    // to 10 here rather than left at the default it would refuse under.
     // ====================================
     @Test
     void aRerollDoesNotRefundBudgetTheClaimedFloorKeptOnTheBar() {
         ActivityManager manager = TestManagers.manager(defs(20));
         TestManagers.storeLoaded(manager);
         TestManagers.rerollsPerDay(manager, 1);
+        TestManagers.rerollMaxPoints(manager, 10);
         UUID uuid = UUID.randomUUID();
         PlayerData data = manager.tasks(uuid);
         // Today's whole budget (dailyMax is 10 in TestManagers), then claimed
@@ -213,6 +226,31 @@ class ActivityManagerRerollTest {
 
         assertEquals(10, data.points(), "the claimed points came off the bar");
         assertEquals(10, data.dailyPoints(), "the reroll handed today's budget back for free");
+    }
+
+    // ====================================
+    // The same floor at the shipped reroll.max-points: 1, the only threshold
+    // on which PlayerData.reroll's carry-forward is still reachable by a
+    // default server. One claimed point is all a player can have banked and
+    // still reroll, and it must stay banked.
+    // ====================================
+    @Test
+    void theClaimedFloorStillBlocksTheRefundAtTheShippedThreshold() {
+        ActivityManager manager = TestManagers.manager(defs(20));
+        TestManagers.storeLoaded(manager);
+        TestManagers.rerollsPerDay(manager, 1);
+        TestManagers.rerollMaxPoints(manager, 1);
+        UUID uuid = UUID.randomUUID();
+        PlayerData data = manager.tasks(uuid);
+        data.record(1, def("a0"), 50, 10, List.of());
+        data.setClaimedPoints(1);
+        assertEquals(1, data.points());
+        assertEquals(1, data.dailyPoints());
+
+        assertEquals(ActivityManager.Rerolled.DONE, manager.reroll(uuid));
+
+        assertEquals(1, data.points(), "the claimed point came off the bar");
+        assertEquals(1, data.dailyPoints(), "the reroll handed today's budget back for free");
     }
 
     // A reroll called before the player ever opened the GUI still hands out a
@@ -274,6 +312,11 @@ class ActivityManagerRerollTest {
     // ====================================
     // The gate reads dailyPoints after the rollover has been applied, so
     // yesterday's earnings never block today's reroll.
+    //
+    // Midnight is modelled by backdating the row to the real previous day
+    // key rather than by inventing one: what makes the second click work is
+    // store.get rolling the row forward onto the key currentKeys() reports,
+    // so the test asserts the row landed on exactly that key.
     // ====================================
     @Test
     void aPlayerRefusedYesterdayMayRerollAfterTheDayRolls() {
@@ -287,9 +330,11 @@ class ActivityManagerRerollTest {
 
         assertEquals(ActivityManager.Rerolled.TOO_LATE, manager.reroll(uuid));
 
-        data.roll(data.weekKey(), data.dayKey() + "-tomorrow");
+        String today = manager.getConfiguration().currentKeys().day();
+        data.roll(data.weekKey(), Weeks.dayKey(LocalDate.parse(today).minusDays(1)));
 
         assertEquals(ActivityManager.Rerolled.DONE, manager.reroll(uuid));
+        assertEquals(today, data.dayKey(), "the reroll ran without the day rolling forward");
     }
 
     // max-points: 0 - only a player who has earned nothing today may reroll

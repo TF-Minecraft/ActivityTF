@@ -228,7 +228,7 @@ class DefaultResourcesTest {
     void shippedConfigDefaultsRerollsPerDayToOne() {
         YamlConfiguration config = load("config.yml");
 
-        assertEquals(1, config.getInt("reroll.per-day"));
+        assertEquals(1, config.getInt(ActivityConfiguration.REROLLS_PER_DAY_PATH));
     }
 
     // The default point gate: rerollable at 0 or 1 points earned today
@@ -236,7 +236,7 @@ class DefaultResourcesTest {
     void shippedConfigDefaultsRerollMaxPointsToOne() {
         YamlConfiguration config = load("config.yml");
 
-        assertEquals(1, config.getInt("reroll.max-points"));
+        assertEquals(1, config.getInt(ActivityConfiguration.REROLL_MAX_POINTS_PATH));
     }
 
     @Test
