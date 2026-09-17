@@ -8,6 +8,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
@@ -326,6 +327,18 @@ public class ActivityGui implements Listener {
             clickSound(player);
             player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1f, 1f);
         } else if (!reveal.drawChanged()) {
+            // ====================================
+            // Nothing to reveal and nothing to repaint: the task was already
+            // revealed. That is the click that runs the activity's
+            // 'click-commands', if it configures any - so the first click
+            // reveals and every later one runs them. The manager owns the
+            // dispatch, the rate limit and the close; a click it refused
+            // (no commands, or still inside the cooldown) stays as silent as
+            // it has always been.
+            // ====================================
+            if (clickCommands(player, task)) {
+                clickSound(player);
+            }
             return;
         }
 
@@ -423,6 +436,28 @@ public class ActivityGui implements Listener {
             }
         }
         return -1;
+    }
+
+    // ====================================
+    // The already-revealed task the player clicked, handed to the manager.
+    // False when the slot shows filler, when the activity configures no
+    // click-commands, or when the player is inside the dispatch cooldown.
+    // ====================================
+    private boolean clickCommands(Player player, int task) {
+        ActivityConfiguration config = manager.getConfiguration();
+        String id = taskIdAt(config, manager.tasks(player.getUniqueId()), task);
+        return id != null && manager.runClickCommands(player, config.activity(id));
+    }
+
+    // ====================================
+    // The per-player click-commands cooldown would otherwise keep an entry
+    // for every player who ever clicked a task, for the whole uptime. This
+    // listener is registered unconditionally (see ActivityPlugin), so there
+    // is no new registration to add for it.
+    // ====================================
+    @EventHandler
+    public void onQuit(PlayerQuitEvent event) {
+        manager.forgetClickCooldown(event.getPlayer().getUniqueId());
     }
 
     // Marketblock's menu click; a successful claim still plays its own sound

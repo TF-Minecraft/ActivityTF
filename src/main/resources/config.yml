@@ -75,6 +75,16 @@ reset:
 #   and one craft counts as one action however big the output stack is. An
 #   activity with both 'station' and 'craft'/'profession' is a config error:
 #   the extra 'station' is reported at load and ignored.
+# click-commands: optional. Console commands run when the player clicks this
+#   activity's task in /activity AFTER it has already been revealed - the
+#   first click on a hidden task only reveals it, every later click runs
+#   these. They run from the console, not as the player, and %player% and
+#   %uuid% are replaced with his name and his UUID. A name that cannot be
+#   safely pasted into a console command (a Bedrock name with a space in it,
+#   say) skips the commands that use %player% and still runs the %uuid% ones.
+#   The menu closes when they run, so the command can open one of its own.
+#   One player can only set these off once every 'click-command-cooldown-millis'
+#   however fast he clicks.
 activities:
   vote:
     display: "#e6ca40&lVoting"
@@ -83,6 +93,8 @@ activities:
     points: 1
     daily-cap: 5
     daily-guaranteed: true
+    click-commands:
+      - "sudo %player% votelist"
   geiger:
     display: "#e6ca40&lRadioactive Sources"
     material: SPYGLASS
@@ -492,6 +504,12 @@ sounds:               # Bukkit Sound names, "" disables
   bar-complete: UI_TOAST_CHALLENGE_COMPLETE     # milestone reached / claimed
 
 save-interval-minutes: 5
+
+# Shortest gap, per player, between two runs of any activity's
+# 'click-commands'. A click inside it does nothing at all. Clamped to
+# 50-60000; there is no "off" value, since 0 would let a held mouse button
+# make the console run commands at click rate.
+click-command-cooldown-millis: 1000
 
 # Feeds the 'playtime' activity above: one counted action per whole minute a
 # player is online whose client has not gone silent. Part-minutes at join and

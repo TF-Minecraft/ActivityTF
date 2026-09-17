@@ -51,27 +51,27 @@ class ActivityManagerTest {
 
     @Test
     void aCommandPastingTheNameIsSkippedForAnUnsafeName() {
-        assertFalse(ActivityManager.canRunRewardCommand("give %player% diamond 3", "Bedrock Player"));
-        assertFalse(ActivityManager.canRunRewardCommand("say %player% and %uuid%", "Bob; op Bob"));
-        assertFalse(ActivityManager.canRunRewardCommand("give %player% diamond 3", null));
+        assertFalse(ActivityManager.canRunCommand("give %player% diamond 3", "Bedrock Player"));
+        assertFalse(ActivityManager.canRunCommand("say %player% and %uuid%", "Bob; op Bob"));
+        assertFalse(ActivityManager.canRunCommand("give %player% diamond 3", null));
     }
 
     @Test
     void aCommandUsingOnlyTheUuidRunsForAnUnsafeName() {
-        assertTrue(ActivityManager.canRunRewardCommand("lp user %uuid% parent add vip", "Bedrock Player"));
-        assertTrue(ActivityManager.canRunRewardCommand("say done", "Bob; op Bob"));
-        assertTrue(ActivityManager.canRunRewardCommand("lp user %uuid% parent add vip", null));
+        assertTrue(ActivityManager.canRunCommand("lp user %uuid% parent add vip", "Bedrock Player"));
+        assertTrue(ActivityManager.canRunCommand("say done", "Bob; op Bob"));
+        assertTrue(ActivityManager.canRunCommand("lp user %uuid% parent add vip", null));
     }
 
     @Test
     void aCommandPastingTheNameRunsForASafeName() {
-        assertTrue(ActivityManager.canRunRewardCommand("give %player% diamond 3", "Notch"));
-        assertTrue(ActivityManager.canRunRewardCommand("give %player% diamond 3", ".BedrockBob"));
+        assertTrue(ActivityManager.canRunCommand("give %player% diamond 3", "Notch"));
+        assertTrue(ActivityManager.canRunCommand("give %player% diamond 3", ".BedrockBob"));
     }
 
     @Test
     void aNullCommandRunsNothing() {
-        assertFalse(ActivityManager.canRunRewardCommand(null, "Notch"));
+        assertFalse(ActivityManager.canRunCommand(null, "Notch"));
     }
 
     // ====================================
