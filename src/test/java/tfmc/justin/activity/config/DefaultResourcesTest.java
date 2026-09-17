@@ -16,6 +16,7 @@ import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // ====================================
@@ -58,7 +59,7 @@ class DefaultResourcesTest {
         assertTrue(messages.getString("gui.activity-lore-today").contains("%today%"));
         assertTrue(messages.getString("gui.activity-lore-today-capped").contains("%today%"));
         assertTrue(messages.getString("gui.activity-lore-today-capped").contains("%cap%"));
-        assertTrue(messages.getString("gui.bar-lore-milestones").contains("%milestones%"));
+        assertNull(messages.getString("gui.bar-lore-milestones"));
         assertTrue(messages.getString("gui.bar-lore-next").contains("%points%"));
     }
 

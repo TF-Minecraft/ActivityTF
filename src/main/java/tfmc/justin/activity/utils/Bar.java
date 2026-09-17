@@ -1,6 +1,5 @@
 package tfmc.justin.activity.utils;
 
-import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 
@@ -20,13 +19,16 @@ public final class Bar {
     private static final int R2 = 0x00, G2 = 0xff, B2 = 0x00;
 
     // ====================================
-    // A milestone segment. A marker drawn as '|' like every other segment
-    // would be invisible, which is the one thing it must not be, so it is the
-    // heavy vertical bar instead - same shape, thicker, and it keeps its
-    // position's colour so it still reads as part of the run.
+    // A milestone segment. A marker drawn as '|' in the run's colour is
+    // invisible, which is the one thing it must not be, so it is the heavy
+    // vertical bar in a fixed colour of its own: gold while the milestone is
+    // still ahead, aqua once the value has reached it. Reached is judged on
+    // the value, not the rounded fill, which can cover a marker a point early.
     // ====================================
     private static final char SEGMENT = '|';
     private static final char MARKER = '┃';
+    static final String MARKER_AHEAD = "#ffd700";
+    static final String MARKER_REACHED = "#55ffff";
 
     private Bar() {
     }
@@ -52,25 +54,32 @@ public final class Bar {
         int g = (int) Math.round(G1 + (G2 - G1) * ratio);
         int b = (int) Math.round(B1 + (B2 - B1) * ratio);
 
-        char[] segments = new char[length];
-        Arrays.fill(segments, SEGMENT);
+        // The highest milestone on each segment, 0 for none: a shared segment
+        // only shows as reached once every milestone on it is
+        int[] markers = new int[length];
         if (max > 0 && length > 0) {
             for (Integer milestone : milestones) {
                 if (milestone == null || milestone < 1) {
                     continue;
                 }
                 int position = (int) Math.round((double) milestone / max * length) - 1;
-                segments[Math.max(0, Math.min(length - 1, position))] = MARKER;
+                int index = Math.max(0, Math.min(length - 1, position));
+                markers[index] = Math.max(markers[index], milestone);
             }
         }
 
+        String fill = hex(r, g, b);
+        String dim = hex(r / 3, g / 3, b / 3);
         StringBuilder bar = new StringBuilder("#aaaaaa[");
-        if (filled > 0) {
-            bar.append(hex(r, g, b)).append(segments, 0, filled);
-        }
-        int empty = length - filled;
-        if (empty > 0) {
-            bar.append(hex(r / 3, g / 3, b / 3)).append(segments, filled, empty);
+        String current = null;
+        for (int i = 0; i < length; i++) {
+            String colour = markers[i] == 0 ? (i < filled ? fill : dim)
+                : value >= markers[i] ? MARKER_REACHED : MARKER_AHEAD;
+            if (!colour.equals(current)) {
+                bar.append(colour);
+                current = colour;
+            }
+            bar.append(markers[i] == 0 ? SEGMENT : MARKER);
         }
         return bar.append("#aaaaaa]").toString();
     }

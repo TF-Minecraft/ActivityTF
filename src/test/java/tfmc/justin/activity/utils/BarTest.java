@@ -89,7 +89,8 @@ class BarTest {
     // ====================================
     // The milestone markers: one segment each, one before
     // round(milestone / max * length) - the segment that fills the instant
-    // the milestone is reached - keeping the colour of the run they land in.
+    // the milestone is reached - in their own colour: gold while ahead, aqua
+    // once filled, independent of the run's gradient.
     // ====================================
     @Test
     void milestonesMarkTheirSegment() {
@@ -101,12 +102,40 @@ class BarTest {
     }
 
     @Test
-    void aMarkerKeepsTheColourOfItsPosition() {
-        // value == milestone (10): that milestone's marker sits in the just-
-        // filled run and shows the filled colour; the 20 milestone is still
-        // ahead, in the unfilled run
-        assertEquals("#aaaaaa[#558000||||┃#1c2a00||||┃#aaaaaa]",
+    void aReachedMarkerIsAquaAndAnAheadMarkerIsGold() {
+        // value == milestone (10): that marker has filled; 20 is still ahead
+        assertEquals("#aaaaaa[#558000||||#55ffff┃#1c2a00||||#ffd700┃#aaaaaa]",
             Bar.render(10, 20, 10, List.of(10, 20)));
+    }
+
+    @Test
+    void aMarkerOneSegmentShortOfFilledIsStillGold() {
+        // 8/20 fills 4 segments; the 10 marker is index 4, the next to fill
+        assertEquals("#aaaaaa[#666600||||#ffd700┃#222200|||||#aaaaaa]",
+            Bar.render(8, 20, 10, List.of(10)));
+    }
+
+    @Test
+    void aMarkerTheRoundedFillCoversIsStillGoldUntilReached() {
+        // 9/20 rounds to 5 filled segments, covering the 10 marker at index 4
+        assertEquals("#aaaaaa[#5e7300||||#ffd700┃#1f2600|||||#aaaaaa]",
+            Bar.render(9, 20, 10, List.of(10)));
+    }
+
+    @Test
+    void aSharedSegmentIsReachedOnlyOnceEveryMilestoneOnItIs() {
+        // length 2, max 20: 9 and 10 both land on index 0
+        assertTrue(Bar.render(9, 20, 2, List.of(9, 10)).contains(Bar.MARKER_AHEAD + "┃"));
+        assertTrue(Bar.render(10, 20, 2, List.of(9, 10)).contains(Bar.MARKER_REACHED + "┃"));
+    }
+
+    @Test
+    void markerColoursDoNotFollowTheFillGradient() {
+        for (int value = 0; value <= 20; value++) {
+            String bar = Bar.render(value, 20, 10, List.of(10));
+            String expected = value >= 10 ? Bar.MARKER_REACHED : Bar.MARKER_AHEAD;
+            assertTrue(bar.contains(expected + "┃"), "value " + value + ": " + bar);
+        }
     }
 
     @Test
@@ -151,11 +180,10 @@ class BarTest {
     }
 
     @Test
-    void aMarkerInTheFilledRunKeepsTheFilledColour() {
-        // Bar is entirely full, so the milestone marker sits in the filled
-        // (green) run rather than the dim unfilled one. 12/20*10 = 6.0, one
-        // segment earlier, so the marker lands at segment index 5.
-        assertEquals("#aaaaaa[#00ff00" + "|".repeat(5) + "┃" + "|".repeat(4) + "#aaaaaa]",
+    void theRunColourResumesAfterAMarker() {
+        // Bar is entirely full; 12/20*10 = 6.0, one segment earlier, so the
+        // marker lands at index 5 and the green run picks up again after it
+        assertEquals("#aaaaaa[#00ff00" + "|".repeat(5) + "#55ffff┃#00ff00" + "|".repeat(4) + "#aaaaaa]",
             Bar.render(20, 20, 10, List.of(12)));
     }
 
