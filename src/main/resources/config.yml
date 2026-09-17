@@ -534,6 +534,13 @@ click-command-cooldown-millis: 1000
 # mouse button is a hundred console commands a tick-budget has to pay for. A
 # click over the ceiling does nothing at all, exactly like one inside the
 # cooldown. Clamped to 1-200.
+#
+# A click pays for every command it dispatches, not one flat token - so with
+# click-commands-per-click: 5 below, a click running five commands costs five.
+# A click needs one token to be allowed and may then take the budget negative
+# paying for the rest, so setting this lower than click-commands-per-click
+# still works: it just means one click and then a wait, rather than nothing
+# ever running.
 click-commands-per-second: 20
 
 # Most commands one click may dispatch. The cooldown counts a click and not a

@@ -9,6 +9,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
 import tfmc.justin.activity.config.ActivityConfiguration;
 import tfmc.justin.activity.config.Messages;
+import tfmc.justin.activity.gui.ActivityGui;
 import tfmc.justin.activity.hooks.TLibsItems;
 import tfmc.justin.activity.models.ActivityDef;
 import tfmc.justin.activity.models.PlayerData;
@@ -843,7 +844,10 @@ public class ActivityManager {
                 }
                 ranAny = true;
             } catch (Throwable t) {
-                if (reportOnce(what, command)) {
+                // Keyed apart from the refusal above: the two are different
+                // failures, and sharing one key means a command that throws
+                // once and is refused ever after is never reported refused
+                if (reportOnce(what + "-threw", command)) {
                     logger.severe("A " + what + " command '" + Utils.safeForLog(String.valueOf(command))
                         + "' threw for " + Utils.safeForLog(name) + ": " + t + ". Not reported again until"
                         + " /activity reload.");
@@ -873,15 +877,17 @@ public class ActivityManager {
     // dropped, a task that is still hidden, one that configures no
     // click-commands, and every refusal of the two rate limits below.
     //
-    // Nothing is dispatched on this tick. Both the close and the dispatch are
-    // scheduled together for the next one, close first: config.yml promises
-    // the menu is gone before the command runs, so a command that opens a GUI
-    // of its own keeps it. Done the other way round - the documented case -
-    // the close lands a tick later on whatever window the command opened and
-    // shuts that instead. The close is also skipped unless the player is
-    // still looking at the very view he clicked, so a player who closed the
-    // menu himself in the meantime does not have some later inventory closed
-    // out from under him.
+    // Nothing is dispatched on this tick: the close and the dispatch are both
+    // scheduled for the next one, by runClickCommandsNow below.
+    //
+    // So "true" here means scheduled, not dispatched - and the caller's click
+    // sound plays on this tick, before the console has been asked anything.
+    // Deliberate: the sound is the GUI's acknowledgement that the click was
+    // accepted rather than refused by a rate limit, and that is exactly what
+    // is known now. Waiting a tick to make it the result of the dispatch
+    // would cost perceived responsiveness on the one control in this menu
+    // that does something, and would still not mean much - a command the
+    // console refuses counts as run here, so "dispatched" is not "worked".
     // ====================================
     public boolean runClickCommands(Player player, int slot) {
         PlayerData data = tasks(player.getUniqueId());
@@ -931,31 +937,64 @@ public class ActivityManager {
             config.clickCommandCooldownMillis() * 1_000_000L)) {
             return false;
         }
-        clickBudget(now, config.clickCommandsPerSecond(), true);
+        clickBudget(now, config.clickCommandsPerSecond(), commands.size(), true);
 
-        InventoryView clicked = player.getOpenInventory();
+        return schedule(() -> runClickCommandsNow(player, commands, id, CONSOLE));
+    }
+
+    // ====================================
+    // The tick after the click: close the menu, then dispatch. In that order
+    // because config.yml promises the menu is gone before the command runs,
+    // so a command that opens a GUI of its own keeps it; done the other way
+    // round the close lands on whatever window the command opened and shuts
+    // that instead.
+    //
+    // The window is identified by its holder and not by comparing the
+    // InventoryView the click came from: nothing in Bukkit promises
+    // getOpenInventory() hands back the same object twice, and a container
+    // that returns a fresh wrapper per call would leave the menu silently
+    // never closing. Asking the same question ActivityGui.onClick asks means
+    // a player who closed the menu himself in the meantime keeps whatever he
+    // opened instead, and a player who reopened the activity menu has that
+    // one closed - which is the wanted outcome anyway.
+    //
+    // Package-private and taking the console call rather than reaching for
+    // Bukkit, so the ordering and the audit line can be driven headless - the
+    // same seam dispatchCommands uses.
+    // ====================================
+    void runClickCommandsNow(Player player, List<String> commands, String id, Predicate<String> console) {
+        InventoryView open = player.getOpenInventory();
+        if (open != null && open.getTopInventory().getHolder() instanceof ActivityGui.Marker) {
+            player.closeInventory();
+        }
+
         Logger logger = plugin.getLogger();
         String name = player.getName();
         UUID uuid = player.getUniqueId();
 
-        return schedule(() -> {
-            if (player.getOpenInventory() == clicked) {
-                player.closeInventory();
-            }
-            dispatchCommands(player, commands, "click", logger, command -> {
-                boolean ran = CONSOLE.test(command);
-                // ====================================
-                // The audit line every staff command already writes, for the
-                // one console dispatch a player can set off himself. A
-                // console-dispatched command is not written to the server log
-                // the way a player-issued one is, so without this nothing
-                // links the player to what he caused.
-                // ====================================
+        dispatchCommands(player, commands, "click", logger, command -> {
+            // ====================================
+            // The audit line every staff command already writes, for the one
+            // console dispatch a player can set off himself. A
+            // console-dispatched command is not written to the server log the
+            // way a player-issued one is, so without this nothing links the
+            // player to what he caused.
+            //
+            // Emitted from a finally so a command that throws still leaves a
+            // per-player trace - that being exactly the case an operator
+            // would be investigating, and the one the once-per-uptime severe
+            // above says the least about.
+            // ====================================
+            String result = "threw";
+            try {
+                boolean ran = console.test(command);
+                result = ran ? "done" : "refused";
+                return ran;
+            } finally {
                 logger.info("ACTIVITY-AUDIT sender=" + Utils.quotedForLog(name) + " uuid=" + uuid
                     + " action=click-command activity=" + Utils.quotedForLog(id)
-                    + " command=" + Utils.quotedForLog(command) + " result=" + (ran ? "done" : "refused"));
-                return ran;
-            });
+                    + " command=" + Utils.quotedForLog(command) + " result=" + result);
+            }
         });
     }
 
@@ -1012,8 +1051,26 @@ public class ActivityManager {
     // number it sustains. Peeked with take=false and spent with take=true.
     // Package-private and taking its clock reading so it can be pinned
     // without a clock to wait on.
+    //
+    // A token is a command and not a click: config.yml documents the knob as
+    // a ceiling on commands, and a click dispatching five of them costs the
+    // console five commands' worth of main thread.
+    //
+    // 'cost' is what a take spends, and the bucket is allowed to go negative
+    // paying it - the gate is one whole token, not 'cost' of them. Refusing a
+    // click outright when it wants more than the bucket holds would make a
+    // legal configuration (click-commands-per-second below
+    // click-commands-per-click) silently never run anything, forever, with no
+    // diagnostic. Overdrawing instead keeps the long-run rate at exactly
+    // 'perSecond': the debt has to be refilled before the next click is
+    // allowed, and it is bounded by one click's cap (at most 50), so the
+    // bucket always recovers.
     // ====================================
     boolean clickBudget(long now, int perSecond, boolean take) {
+        return clickBudget(now, perSecond, 1, take);
+    }
+
+    boolean clickBudget(long now, int perSecond, int cost, boolean take) {
         if (!clickTokensPrimed) {
             clickTokensPrimed = true;
             clickTokensAt = now;
@@ -1025,7 +1082,7 @@ public class ActivityManager {
             return false;
         }
         if (take) {
-            clickTokens -= 1;
+            clickTokens -= cost;
         }
         return true;
     }

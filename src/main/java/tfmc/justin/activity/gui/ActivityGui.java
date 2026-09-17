@@ -56,7 +56,13 @@ public class ActivityGui implements Listener {
         this.manager = manager;
     }
 
-    private static final class Marker implements InventoryHolder {
+    // ====================================
+    // What makes an open window "the activity menu". Public because the
+    // manager asks the same question a tick after a click, to decide whether
+    // the window it is about to close is still ours - identity of the
+    // InventoryView is not something Bukkit promises.
+    // ====================================
+    public static final class Marker implements InventoryHolder {
 
         private Inventory inventory;
 
