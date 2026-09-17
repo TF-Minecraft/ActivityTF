@@ -59,6 +59,40 @@ public final class TestManagers {
         }
     }
 
+    // ====================================
+    // What a reload dropping an activity leaves behind: the loaded set minus
+    // one id, installed the same way manager() installs it. Here rather than
+    // in a test, so the field name lives in exactly one place.
+    // ====================================
+    public static void unload(ActivityManager manager, String id) {
+        ActivityConfiguration config = manager.getConfiguration();
+        Map<String, ActivityDef> remaining = new LinkedHashMap<>();
+        for (ActivityDef def : config.activities()) {
+            if (!def.id().equals(id)) {
+                remaining.put(def.id(), def);
+            }
+        }
+        try {
+            set(config, "activities", remaining);
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    // ====================================
+    // A spent budget or a full bar without a server to award the points on:
+    // headless, anything that actually credits a point reaches
+    // Bukkit.getPlayer, so a cap is set up by lowering the limit instead.
+    // ====================================
+    public static void limits(ActivityManager manager, int barMax, int dailyMax) {
+        try {
+            set(manager.getConfiguration(), "barMax", barMax);
+            set(manager.getConfiguration(), "dailyMax", dailyMax);
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     private static JavaPlugin stubPlugin() {
         try {
             ReflectionFactory rf = ReflectionFactory.getReflectionFactory();

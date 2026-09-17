@@ -1,5 +1,7 @@
 package tfmc.justin.activity.listeners;
 
+import tfmc.justin.activity.config.ActivityConfiguration;
+
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.HashMap;
@@ -29,22 +31,24 @@ class FractionCarry {
 
     private final Map<UUID, Map<String, BigDecimal>> carry = new HashMap<>();
 
-    // The day every banked fraction belongs to - see add()
-    private String day;
+    // The week and day every banked fraction belongs to - see add()
+    private ActivityConfiguration.Keys keys;
 
     // ====================================
     // Adds this event's value to the player's leftover for the activity and
     // returns the whole points to record now (0 if there are none yet).
     //
-    // Fractions never cross a day boundary: the daily counters they feed are
-    // wiped at the rollover, and a player who stays online through midnight
-    // would otherwise carry yesterday's sub-point into today. The first event
-    // of a new day drops every banked fraction, for every player.
+    // Fractions never cross a rollover: the daily counters they feed are wiped
+    // at one, and a player who stays online through it would otherwise carry
+    // the old cycle's sub-point into the new one. Both keys are watched, not
+    // just the day: the week flips at the configured reset hour, which wipes
+    // the counters while the day key is unchanged. The first event after
+    // either key moves drops every banked fraction, for every player.
     // ====================================
-    int add(UUID uuid, String activityId, double value, String dayKey) {
-        if (!dayKey.equals(day)) {
+    int add(UUID uuid, String activityId, double value, ActivityConfiguration.Keys currentKeys) {
+        if (!currentKeys.equals(keys)) {
             carry.clear();
-            day = dayKey;
+            keys = currentKeys;
         }
 
         Map<String, BigDecimal> byActivity = carry.computeIfAbsent(uuid, key -> new HashMap<>());

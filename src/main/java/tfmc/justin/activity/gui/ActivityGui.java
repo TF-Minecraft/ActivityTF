@@ -93,18 +93,30 @@ public class ActivityGui implements Listener {
     // reload has since removed.
     // ====================================
     private ItemStack taskItem(ActivityConfiguration config, Messages messages, PlayerData data, int slot) {
-        List<String> tasks = data.tasks();
-        if (slot >= tasks.size()) {
+        String id = taskIdAt(config, data, slot);
+        if (id == null) {
             return null;
         }
-        ActivityDef def = config.activity(tasks.get(slot));
-        if (def == null) {
-            return null;
-        }
+        ActivityDef def = config.activity(id);
         if (!data.isRevealed(def.id())) {
             return item(Material.GRAY_DYE, messages.get("gui.hidden-task-name"), List.of());
         }
         return activityItem(config, messages, def, data);
+    }
+
+    // ====================================
+    // Which activity a task slot shows, or null when it shows filler: a slot
+    // beyond what could be drawn, and one holding an activity a reload has
+    // since removed, both have nothing to paint. Package-private and pure so
+    // the seven-slot paint decision can be tested without a live inventory.
+    // ====================================
+    static String taskIdAt(ActivityConfiguration config, PlayerData data, int slot) {
+        List<String> tasks = data.tasks();
+        if (slot < 0 || slot >= tasks.size()) {
+            return null;
+        }
+        String id = tasks.get(slot);
+        return config.activity(id) == null ? null : id;
     }
 
     // ====================================
@@ -295,6 +307,13 @@ public class ActivityGui implements Listener {
         PlayerData data = manager.tasks(player.getUniqueId());
         Inventory top = event.getView().getTopInventory();
         if (reveal.drawChanged()) {
+            // The draw only moves at a rollover or a reload, both of which
+            // wipe or rescale what the two bars show - repainting the tasks
+            // alone would leave a fresh draw beside a stale "10/10" daily bar
+            // and a claim button that no longer does anything
+            Messages messages = config.messages();
+            top.setItem(DAILY_BAR_SLOT, dailyBarItem(config, messages, data));
+            top.setItem(BAR_SLOT, barItem(config, messages, data));
             for (int slot = 0; slot < TASK_SLOTS.length; slot++) {
                 top.setItem(TASK_SLOTS[slot], taskOrFiller(config, data, slot));
             }

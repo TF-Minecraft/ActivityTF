@@ -1,6 +1,7 @@
 package tfmc.justin.activity.listeners;
 
 import org.junit.jupiter.api.Test;
+import tfmc.justin.activity.config.ActivityConfiguration.Keys;
 import tfmc.justin.activity.listeners.FractionCarry.Credit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -8,8 +9,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 // Only the fraction arithmetic: the listeners themselves need a running server
 class FractionCarryTest {
 
-    // The day every fraction in these tests is banked on
-    private static final String DAY = "2026-09-17";
+    // The cycle every fraction in these tests is banked on
+    private static final Keys DAY = new Keys("2026-W38", "2026-09-17");
+
+    // The same week, the next day
+    private static final Keys NEXT_DAY = new Keys("2026-W38", "2026-09-18");
 
     @Test
     void wholeAndFractionalXpFloors() {
@@ -217,8 +221,25 @@ class FractionCarryTest {
 
         assertEquals(0, carry.add(player, "market_sale", 0.9, DAY));
         // 0.9 + 0.9 would be worth one on the same day
-        assertEquals(0, carry.add(player, "market_sale", 0.9, "2026-09-18"));
-        assertEquals(1, carry.add(player, "market_sale", 0.1, "2026-09-18"));
+        assertEquals(0, carry.add(player, "market_sale", 0.9, NEXT_DAY));
+        assertEquals(1, carry.add(player, "market_sale", 0.1, NEXT_DAY));
+    }
+
+    // ====================================
+    // The week key flips at the configured reset hour, which wipes the daily
+    // counters while the day key is unchanged - a fraction banked minutes
+    // before the reset must not pay out into the new week.
+    // ====================================
+    @Test
+    void aFractionNeverCrossesAWeekBoundaryEither() {
+        FractionCarry carry = new FractionCarry();
+        java.util.UUID player = java.util.UUID.randomUUID();
+        Keys nextWeek = new Keys("2026-W39", DAY.day());
+
+        assertEquals(0, carry.add(player, "market_sale", 0.9, DAY));
+        // Same day, new week: the bank is gone, so 0.9 is still short of one
+        assertEquals(0, carry.add(player, "market_sale", 0.9, nextWeek));
+        assertEquals(1, carry.add(player, "market_sale", 0.1, nextWeek));
     }
 
     // Every player's bank is dropped, not just the one whose event ran first
@@ -231,7 +252,7 @@ class FractionCarryTest {
         assertEquals(0, carry.add(one, "market_sale", 0.5, DAY));
         assertEquals(0, carry.add(two, "market_sale", 0.5, DAY));
 
-        assertEquals(0, carry.add(one, "market_sale", 0.5, "2026-09-18"));
-        assertEquals(0, carry.add(two, "market_sale", 0.5, "2026-09-18"));
+        assertEquals(0, carry.add(one, "market_sale", 0.5, NEXT_DAY));
+        assertEquals(0, carry.add(two, "market_sale", 0.5, NEXT_DAY));
     }
 }

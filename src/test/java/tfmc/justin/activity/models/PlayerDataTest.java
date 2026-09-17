@@ -456,6 +456,45 @@ class PlayerDataTest {
     }
 
     // ====================================
+    // Which cap swallowed the points, so /activity add can name it instead of
+    // reporting a success nobody was credited for.
+    // ====================================
+    @Test
+    void aCreditedPointReportsPlainSuccess() {
+        assertEquals(Recorded.RECORDED, record(data(), VOTE, 1).outcome());
+    }
+
+    // Part-way to the next point is a success too - nothing capped it
+    @Test
+    void partialProgressTowardsTheNextPointIsNotACap() {
+        assertEquals(Recorded.RECORDED, record(data(), INSTRUMENT, 1).outcome());
+    }
+
+    @Test
+    void anActivityAtItsOwnDailyCapSaysSo() {
+        PlayerData data = data();
+        record(data, VOTE, 5);
+
+        assertEquals(Recorded.ACTIVITY_CAP, record(data, VOTE, 1).outcome());
+    }
+
+    @Test
+    void aSpentDailyBudgetSaysSo() {
+        PlayerData data = data();
+
+        assertEquals(Recorded.RECORDED, data.record(3, UNCAPPED, MAX, 3, MILESTONES).outcome());
+        assertEquals(Recorded.DAILY_MAX, data.record(1, UNCAPPED, MAX, 3, MILESTONES).outcome());
+    }
+
+    @Test
+    void aFullWeeklyBarSaysSo() {
+        PlayerData data = data();
+
+        assertEquals(Recorded.RECORDED, data.record(MAX, UNCAPPED, MAX, DAILY_MAX, MILESTONES).outcome());
+        assertEquals(Recorded.WEEKLY_MAX, data.record(1, UNCAPPED, MAX, DAILY_MAX, MILESTONES).outcome());
+    }
+
+    // ====================================
     // PlayerData.due: the static helper claim() and claimable() both go
     // through. Milestones [10, 20] throughout.
     // ====================================

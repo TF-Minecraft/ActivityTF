@@ -41,12 +41,18 @@ class ActivityCommandTest {
         assertTrue(ActivityCommand.forced(add("--force")));
     }
 
+    // The flag is exact: the one argument that decides whether the gate runs
+    // is not left to a case-insensitive guess at what was meant
     @Test
-    void forceIsCaseInsensitiveAndNothingElseCountsAsIt() {
-        assertTrue(ActivityCommand.forced(add("--FORCE")));
+    void onlyTheExactFlagCountsAsForce() {
+        assertFalse(ActivityCommand.forced(add("--FORCE")));
+        assertFalse(ActivityCommand.forced(add("--Force")));
         assertFalse(ActivityCommand.forced(add("force")));
         assertFalse(ActivityCommand.forced(add("-f")));
         assertFalse(ActivityCommand.forced(add("")));
+
+        // ...and a miscased flag is a usage error, not a quiet gated add
+        assertFalse(ActivityCommand.wellFormedAdd(add("--FORCE")));
     }
 
     @Test
@@ -139,6 +145,59 @@ class ActivityCommandTest {
         assertEquals(Outcome.UNKNOWN_ACTIVITY, command(manager).add(player, "nope", 1, true));
     }
 
+    // ====================================
+    // A cap that swallows the points is not a success: the count goes in, no
+    // point reaches the bar, and the admin is told which cap did it. Set up
+    // by lowering the limit, since awarding a point headlessly would reach
+    // Bukkit.getPlayer.
+    // ====================================
+    @Test
+    void aSpentDailyBudgetIsReportedRatherThanCountedAsAdded() {
+        ActivityManager manager = TestManagers.manager(
+            new ActivityDef("vote", "Vote", Material.PAPER, null, 1, 1, 0));
+        TestManagers.limits(manager, 50, 0);
+        UUID player = UUID.randomUUID();
+
+        assertEquals(Outcome.CAPPED_DAILY, command(manager).add(player, "vote", 5, true));
+        // The count still went in - only the points were lost
+        assertEquals(5, manager.getStore().get(player).count("vote"));
+        assertEquals(0, manager.getStore().get(player).points());
+    }
+
+    @Test
+    void aFullWeeklyBarIsReportedRatherThanCountedAsAdded() {
+        ActivityManager manager = TestManagers.manager(
+            new ActivityDef("vote", "Vote", Material.PAPER, null, 1, 1, 0));
+        TestManagers.limits(manager, 0, 10);
+        UUID player = UUID.randomUUID();
+
+        assertEquals(Outcome.CAPPED_WEEKLY, command(manager).add(player, "vote", 5, true));
+        assertEquals(0, manager.getStore().get(player).points());
+    }
+
+    @Test
+    void anActivityThatHasGivenAllItCanTodayIsReported() {
+        ActivityManager manager = TestManagers.manager(
+            new ActivityDef("vote", "Vote", Material.PAPER, null, 1, 1, 1));
+        // A full bar keeps the point off it, so the cap can be reached headless
+        TestManagers.limits(manager, 0, 10);
+        UUID player = UUID.randomUUID();
+        ActivityCommand command = command(manager);
+
+        // The first add is what meets the activity's own daily cap of 1
+        assertEquals(Outcome.CAPPED_WEEKLY, command.add(player, "vote", 1, true));
+        assertEquals(Outcome.CAPPED_ACTIVITY, command.add(player, "vote", 1, true));
+    }
+
+    // A count part-way to its next point is a plain success, not a cap
+    @Test
+    void partialProgressTowardsTheNextPointIsStillAdded() {
+        ActivityManager manager = manager();
+        UUID player = UUID.randomUUID();
+
+        assertEquals(Outcome.ADDED, command(manager).add(player, "vote", 1, true));
+    }
+
     // Each outcome has to have something to say, and it has to be in the
     // shipped file - a missing key reaches the admin as a raw path
     @Test
@@ -148,6 +207,9 @@ class ActivityCommandTest {
 
         assertEquals("admin.add-done", Outcome.ADDED.messageKey());
         assertEquals("admin.add-not-a-task", Outcome.NOT_A_TASK.messageKey());
+        assertEquals("admin.add-capped-activity", Outcome.CAPPED_ACTIVITY.messageKey());
+        assertEquals("admin.add-capped-daily", Outcome.CAPPED_DAILY.messageKey());
+        assertEquals("admin.add-capped-weekly", Outcome.CAPPED_WEEKLY.messageKey());
         assertEquals("admin.unknown-activity", Outcome.UNKNOWN_ACTIVITY.messageKey());
 
         for (Outcome outcome : Outcome.values()) {

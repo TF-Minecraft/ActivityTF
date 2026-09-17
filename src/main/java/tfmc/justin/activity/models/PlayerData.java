@@ -124,15 +124,27 @@ public class PlayerData {
         int earned = def.worth(after) - def.worth(before);
         // Everything past today's budget is lost outright - it must not reach
         // the weekly bar, today or later
-        earned = Math.min(earned, Math.max(0, dailyMax - dailyPoints));
+        int budget = Math.max(0, dailyMax - dailyPoints);
+        if (earned > 0 && budget <= 0) {
+            return new RecordResult(0, 0, Recorded.DAILY_MAX);
+        }
+        earned = Math.min(earned, budget);
         if (earned <= 0) {
-            return new RecordResult(0, 0);
+            // Either the activity has nothing more to give today, or the count
+            // is simply part-way to its next point - which is a plain success
+            return new RecordResult(0, 0,
+                def.dailyCap() > 0 && def.worth(before) >= def.dailyCap()
+                    ? Recorded.ACTIVITY_CAP : Recorded.RECORDED);
         }
         int pointsBefore = points;
         addPoints(earned, max);
         dailyPoints += points - pointsBefore;
+        if (points == pointsBefore) {
+            return new RecordResult(0, 0, Recorded.WEEKLY_MAX);
+        }
 
-        return new RecordResult(points - pointsBefore, due(points, pointsBefore, milestones).size());
+        return new RecordResult(points - pointsBefore, due(points, pointsBefore, milestones).size(),
+            Recorded.RECORDED);
     }
 
     public void addPoints(int p, int max) {

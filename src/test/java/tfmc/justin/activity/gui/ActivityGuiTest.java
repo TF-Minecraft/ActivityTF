@@ -2,14 +2,20 @@ package tfmc.justin.activity.gui;
 
 import org.bukkit.Material;
 import org.junit.jupiter.api.Test;
+import tfmc.justin.activity.config.ActivityConfiguration;
+import tfmc.justin.activity.managers.ActivityManager;
+import tfmc.justin.activity.managers.TestManagers;
 import tfmc.justin.activity.models.ActivityDef;
 import tfmc.justin.activity.models.PlayerData;
 import tfmc.justin.activity.utils.Bar;
 
 import java.lang.reflect.Field;
 import java.util.Arrays;
+import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // ====================================
@@ -145,6 +151,56 @@ class ActivityGuiTest {
         }
         // A click outside any inventory
         assertEquals(-1, ActivityGui.taskSlot(-999));
+    }
+
+    // ====================================
+    // What each of the seven task slots paints, which is what both build()
+    // and the repaint after a reveal click walk. A slot with no task in it
+    // has to come back null, so the caller can put filler there instead of
+    // leaving whatever was in the slot before.
+    // ====================================
+    private static ActivityManager threeLoaded() {
+        return TestManagers.manager(
+            new ActivityDef("a", "A", Material.PAPER, null, 1, 1, 0),
+            new ActivityDef("b", "B", Material.PAPER, null, 1, 1, 0),
+            new ActivityDef("c", "C", Material.PAPER, null, 1, 1, 0));
+    }
+
+    private static PlayerData drawnWith(List<String> tasks) {
+        return new PlayerData(0, 0, "2026-W38", "2026-09-17", 0, java.util.Map.of(), tasks, Set.of());
+    }
+
+    @Test
+    void everySlotInTheDrawPaintsItsOwnTask() {
+        ActivityConfiguration config = threeLoaded().getConfiguration();
+        PlayerData data = drawnWith(List.of("a", "b", "c"));
+
+        assertEquals("a", ActivityGui.taskIdAt(config, data, 0));
+        assertEquals("b", ActivityGui.taskIdAt(config, data, 1));
+        assertEquals("c", ActivityGui.taskIdAt(config, data, 2));
+    }
+
+    @Test
+    void aSlotPastTheEndOfTheDrawPaintsFiller() {
+        ActivityConfiguration config = threeLoaded().getConfiguration();
+        PlayerData data = drawnWith(List.of("a", "b", "c"));
+
+        for (int slot = 3; slot < PlayerData.TASKS_PER_DAY; slot++) {
+            assertNull(ActivityGui.taskIdAt(config, data, slot), "slot " + slot);
+        }
+        assertNull(ActivityGui.taskIdAt(config, data, -1));
+    }
+
+    // A reload that dropped an activity leaves its id in a draw read off disk
+    @Test
+    void aSlotHoldingAnActivityNobodyLoadedPaintsFiller() {
+        ActivityManager manager = threeLoaded();
+        TestManagers.unload(manager, "b");
+        PlayerData data = drawnWith(List.of("a", "b", "c"));
+
+        assertEquals("a", ActivityGui.taskIdAt(manager.getConfiguration(), data, 0));
+        assertNull(ActivityGui.taskIdAt(manager.getConfiguration(), data, 1));
+        assertEquals("c", ActivityGui.taskIdAt(manager.getConfiguration(), data, 2));
     }
 
     // The two named controls: the daily bar is display-only, and filler is

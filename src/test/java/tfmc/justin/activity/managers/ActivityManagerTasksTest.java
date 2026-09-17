@@ -4,6 +4,7 @@ import org.bukkit.Material;
 import org.junit.jupiter.api.Test;
 import tfmc.justin.activity.models.ActivityDef;
 import tfmc.justin.activity.models.PlayerData;
+import tfmc.justin.activity.models.Recorded;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -156,8 +157,8 @@ class ActivityManagerTasksTest {
         String hidden = manager.tasks(uuid).tasks().get(0);
         String other = undrawn(manager, uuid, 20);
 
-        assertTrue(manager.recordActionUngated(uuid, hidden, 1));
-        assertTrue(manager.recordActionUngated(uuid, other, 1));
+        assertEquals(Recorded.RECORDED, manager.recordActionUngated(uuid, hidden, 1));
+        assertEquals(Recorded.RECORDED, manager.recordActionUngated(uuid, other, 1));
 
         assertEquals(1, manager.tasks(uuid).count(hidden));
         assertEquals(1, manager.tasks(uuid).count(other));
@@ -168,8 +169,8 @@ class ActivityManagerTasksTest {
         ActivityManager manager = TestManagers.manager(defs(20));
         UUID uuid = UUID.randomUUID();
 
-        assertFalse(manager.recordAction(uuid, "nope", 1));
-        assertFalse(manager.recordActionUngated(uuid, "nope", 1));
+        assertEquals(Recorded.UNKNOWN, manager.recordAction(uuid, "nope", 1));
+        assertEquals(Recorded.UNKNOWN, manager.recordActionUngated(uuid, "nope", 1));
         assertFalse(manager.isTracked(uuid, "nope"));
     }
 
@@ -182,7 +183,7 @@ class ActivityManagerTasksTest {
         ActivityManager manager = TestManagers.manager(defs(20));
         UUID uuid = UUID.randomUUID();
 
-        assertTrue(manager.recordAction(uuid, "a0", 1));
+        assertEquals(Recorded.NOT_A_TASK, manager.recordAction(uuid, "a0", 1));
 
         assertNull(manager.getStore().peek(uuid), "the record path created a players.yml row");
     }
@@ -213,29 +214,45 @@ class ActivityManagerTasksTest {
     // they saw. reveal() has to say so - the GUI repaints every task slot on
     // it rather than just the clicked one.
     // ====================================
-    @SuppressWarnings("unchecked")
-    private static void unload(ActivityManager manager, String id) throws ReflectiveOperationException {
-        java.lang.reflect.Field field = manager.getConfiguration().getClass()
-            .getDeclaredField("activities");
-        field.setAccessible(true);
-        ((java.util.Map<String, ActivityDef>) field.get(manager.getConfiguration())).remove(id);
-    }
-
     @Test
-    void aDrawChangedMidClickIsReported() throws ReflectiveOperationException {
+    void aDrawChangedMidClickIsReported() {
         ActivityManager manager = TestManagers.manager(defs(20));
         UUID uuid = UUID.randomUUID();
         String dropped = manager.tasks(uuid).tasks().get(0);
 
-        unload(manager, dropped);
+        TestManagers.unload(manager, dropped);
         ActivityManager.Reveal reveal = manager.reveal(uuid, 0);
 
         assertTrue(reveal.drawChanged(), "a compacted draw was not reported");
         List<String> tasks = manager.tasks(uuid).tasks();
         assertEquals(PlayerData.TASKS_PER_DAY, tasks.size());
         assertFalse(tasks.contains(dropped));
-        // Whatever slot 0 now holds is what was revealed, not what was clicked
-        assertEquals(tasks.get(0), reveal.revealedId());
+        // The clicked id is gone, so nothing was revealed - the slot now holds
+        // a task the player never asked about
+        assertNull(reveal.revealedId());
+        for (String task : tasks) {
+            assertFalse(manager.getStore().get(uuid).isRevealed(task), task + " was revealed by proxy");
+        }
+    }
+
+    // ====================================
+    // The id is what is revealed, not the index: a reload that dropped an
+    // earlier task compacts the draw, so the clicked id has moved down a slot
+    // by the time the reveal lands.
+    // ====================================
+    @Test
+    void aCompactedDrawStillRevealsTheClickedTask() {
+        ActivityManager manager = TestManagers.manager(defs(20));
+        UUID uuid = UUID.randomUUID();
+        List<String> before = List.copyOf(manager.tasks(uuid).tasks());
+        String clicked = before.get(3);
+
+        TestManagers.unload(manager, before.get(0));
+        ActivityManager.Reveal reveal = manager.reveal(uuid, 3);
+
+        assertTrue(reveal.drawChanged());
+        assertEquals(clicked, reveal.revealedId());
+        assertTrue(manager.getStore().get(uuid).isRevealed(clicked));
     }
 
     @Test

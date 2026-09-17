@@ -63,7 +63,7 @@ public class ProfessionXpListener implements Listener {
             return;
         }
         int amount = carry.add(uuid, activityId, event.getExperience(),
-            manager.getConfiguration().currentKeys().day());
+            manager.getConfiguration().currentKeys());
         if (amount > 0) {
             manager.recordAction(uuid, activityId, amount);
         }
