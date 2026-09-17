@@ -261,21 +261,7 @@ public class ActivityGui implements Listener {
         int today = def.worth(count);
 
         List<String> lore = new ArrayList<>();
-        // Three cases, since a plain count % every reads wrong at the edges:
-        // capped activities fill across the whole daily budget (every * cap)
-        // and stay full once capped; uncapped ones cycle every 'every' count;
-        // an uncapped 'every: 1' has no meaningful cycle, so no bar is shown.
-        // 'every' and 'daily-cap' are small config ints (clamped >= 1 / >= 0
-        // in ActivityConfiguration), so every * cap cannot overflow an int.
-        String progress;
-        if (def.dailyCap() > 0) {
-            int budget = def.every() * def.dailyCap();
-            progress = Bar.render(Math.min(count, budget), budget, PROGRESS_BAR_LENGTH);
-        } else if (def.every() > 1) {
-            progress = Bar.render(count % def.every(), def.every(), PROGRESS_BAR_LENGTH);
-        } else {
-            progress = null;
-        }
+        String progress = progressBar(def, count);
         if (progress != null) {
             lore.add(messages.get("gui.activity-lore-progress", "%bar%", Utils.colorize(progress)));
         }
@@ -284,6 +270,26 @@ public class ActivityGui implements Listener {
             : messages.get("gui.activity-lore-today", "%today%", today));
 
         return item(iconStack(config, def.icon(), def.iconPath()), Utils.colorize(def.display()), lore);
+    }
+
+    // ====================================
+    // Progress toward the NEXT point, not the whole day: once the daily cap is
+    // reached the bar is shown full rather than reset to empty. Below the cap
+    // it is count % every out of every, so it fills and restarts once per
+    // point earned. An uncapped 'every: 1' has no meaningful partial progress
+    // (every count is already a whole point), so no bar is shown; capped at
+    // every: 1 still shows full, same as any other capped activity.
+    // Package-private and static so a test can check it without a live
+    // Bukkit inventory.
+    // ====================================
+    static String progressBar(ActivityDef def, int count) {
+        if (def.dailyCap() > 0 && def.worth(count) >= def.dailyCap()) {
+            return Bar.render(1, 1, PROGRESS_BAR_LENGTH);
+        }
+        if (def.every() > 1) {
+            return Bar.render(count % def.every(), def.every(), PROGRESS_BAR_LENGTH);
+        }
+        return null;
     }
 
     // ====================================
