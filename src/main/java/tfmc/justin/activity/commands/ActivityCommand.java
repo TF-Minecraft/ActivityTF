@@ -116,7 +116,7 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
     }
 
     private void handleAdd(CommandSender sender, String[] args) {
-        if (args.length < 4) {
+        if (!wellFormedAdd(args)) {
             sender.sendMessage(messages().get("admin.usage"));
             return;
         }
@@ -147,18 +147,66 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
             return;
         }
 
-        UUID uuid = target.getUniqueId();
-        // Gated like any listener unless --force was asked for, so a console
-        // intake path cannot quietly hand out points for a task the player
-        // never drew or revealed
-        if (!(forced(args) ? manager.recordActionUngated(uuid, def.id(), count)
-            : manager.recordAction(uuid, def.id(), count))) {
-            sender.sendMessage(messages().get("admin.unknown-activity", "%activity%", args[2]));
-            return;
+        Outcome outcome = add(target.getUniqueId(), def.id(), count, forced(args));
+        sender.sendMessage(switch (outcome) {
+            case ADDED -> messages().get(outcome.messageKey(),
+                "%count%", count, "%activity%", def.id(), "%player%", name(target, args[1]));
+            case NOT_A_TASK -> messages().get(outcome.messageKey(),
+                "%activity%", def.id(), "%player%", name(target, args[1]));
+            case UNKNOWN_ACTIVITY -> messages().get(outcome.messageKey(), "%activity%", args[2]);
+        });
+    }
+
+    // ====================================
+    // What a /activity add did, and the message that says so. The gated path
+    // is asked whether the activity would earn anything for this player
+    // BEFORE it is recorded: the record path answers "refused" and "credited"
+    // the same way, so without this an admin adding to a task the player has
+    // not revealed today - or to an offline player with no row at all - was
+    // told it worked.
+    // ====================================
+    enum Outcome {
+        ADDED("admin.add-done"),
+        NOT_A_TASK("admin.add-not-a-task"),
+        UNKNOWN_ACTIVITY("admin.unknown-activity");
+
+        private final String messageKey;
+
+        Outcome(String messageKey) {
+            this.messageKey = messageKey;
         }
 
-        sender.sendMessage(messages().get("admin.add-done",
-            "%count%", count, "%activity%", def.id(), "%player%", name(target, args[1])));
+        String messageKey() {
+            return messageKey;
+        }
+    }
+
+    // ====================================
+    // The add decision itself, split out so it can be tested without a
+    // server. Gated like any listener unless --force was asked for, so a
+    // console intake path cannot quietly hand out points for a task the
+    // player never drew or revealed.
+    // ====================================
+    Outcome add(UUID uuid, String activityId, int count, boolean force) {
+        if (force) {
+            return manager.recordActionUngated(uuid, activityId, count)
+                ? Outcome.ADDED : Outcome.UNKNOWN_ACTIVITY;
+        }
+        if (!manager.isTracked(uuid, activityId)) {
+            return manager.getConfiguration().activity(activityId) == null
+                ? Outcome.UNKNOWN_ACTIVITY : Outcome.NOT_A_TASK;
+        }
+        return manager.recordAction(uuid, activityId, count) ? Outcome.ADDED : Outcome.UNKNOWN_ACTIVITY;
+    }
+
+    // ====================================
+    // add takes exactly player, activity, count and at most the one trailing
+    // --force. Anything else in that position - '--froce', 'force', a stray
+    // word after it - used to parse as a plain gated add, so a typo silently
+    // changed what the command did. Package-private for the test.
+    // ====================================
+    static boolean wellFormedAdd(String[] args) {
+        return args.length == 4 || (args.length == 5 && forced(args));
     }
 
     // Whether 'add' was asked to skip the daily-task gate. Package-private

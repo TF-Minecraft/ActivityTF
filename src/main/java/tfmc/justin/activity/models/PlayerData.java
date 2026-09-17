@@ -214,10 +214,11 @@ public class PlayerData {
             return changed;
         }
 
+        // The refill is a fresh draw out of what is not already held: at most
+        // TASKS_PER_DAY ids come back, which is always enough to top up
         List<String> pool = new ArrayList<>(known);
         pool.removeAll(tasks);
-        Collections.shuffle(pool, random);
-        for (String id : pool) {
+        for (String id : draw(pool, random)) {
             if (tasks.size() >= TASKS_PER_DAY) {
                 break;
             }

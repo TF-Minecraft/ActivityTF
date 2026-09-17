@@ -43,7 +43,8 @@ public class MarketSaleListener implements Listener {
             return;
         }
 
-        int denar = carry.add(event.getPlayer().getUniqueId(), "market_sale", event.getPrice());
+        int denar = carry.add(event.getPlayer().getUniqueId(), "market_sale", event.getPrice(),
+            manager.getConfiguration().currentKeys().day());
         if (denar > 0) {
             manager.recordAction(event.getPlayer().getUniqueId(), "market_sale", denar);
         }

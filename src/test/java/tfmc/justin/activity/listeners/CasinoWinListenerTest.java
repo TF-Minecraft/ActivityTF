@@ -15,7 +15,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 // ====================================
 // Same technique as MarketSaleListenerTest: CasinoWinListener's constructor
@@ -82,7 +82,7 @@ class CasinoWinListenerTest {
     void twoHalfDenarWinsCreditAWholeDenarForARevealedTask() {
         ActivityManager manager = manager();
         UUID uuid = UUID.randomUUID();
-        assertTrue(manager.reveal(uuid, 0));
+        assertNotNull(manager.reveal(uuid, 0).revealedId());
         CasinoWinListener listener = new CasinoWinListener(manager);
         Player player = stubPlayer(uuid);
 
@@ -104,7 +104,7 @@ class CasinoWinListenerTest {
         assertEquals(0, manager.tasks(uuid).count("casino_win"));
 
         // Revealed only now: the two skipped halves must not still be waiting
-        assertTrue(manager.reveal(uuid, 0));
+        assertNotNull(manager.reveal(uuid, 0).revealedId());
         listener.onPlayerWonMoney(win(player, 0.5));
 
         assertEquals(0, manager.tasks(uuid).count("casino_win"));
@@ -116,7 +116,7 @@ class CasinoWinListenerTest {
     void quittingClearsTheCarrySoALaterHalfWinCreditsNothing() {
         ActivityManager manager = manager();
         UUID uuid = UUID.randomUUID();
-        assertTrue(manager.reveal(uuid, 0));
+        assertNotNull(manager.reveal(uuid, 0).revealedId());
         CasinoWinListener listener = new CasinoWinListener(manager);
         Player player = stubPlayer(uuid);
 

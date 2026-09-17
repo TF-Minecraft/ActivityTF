@@ -562,16 +562,38 @@ public class ActivityConfiguration {
             }
         }
 
-        long dailyCeiling = dailyCeiling(caps, activities.size(), dailyMax);
-        long weekly = dailyCeiling * 7;
-        String boundBy = dailyCeiling < dailyMax ? "per-activity daily-caps" : "bar.daily-max";
-
-        int first = milestones.get(0);
-        if (weekly < first) {
-            plugin.getLogger().warning("A day's seven drawn tasks are capped at " + dailyCeiling
-                + " points, so " + weekly + " a week (bound by " + boundBy + ") - a player cannot count"
-                + " on reaching the first reward at " + first + ".");
+        String warning = unreachableWarning(caps, activities.size(), dailyMax, milestones.get(0));
+        if (warning != null) {
+            plugin.getLogger().warning(warning);
         }
+    }
+
+    // ====================================
+    // The warning text, or null when the first reward is reachable. Pure so
+    // both the arithmetic and what it says about it can be tested.
+    //
+    // The bound is named off what the caps alone would allow, so a sum that
+    // lands exactly on bar.daily-max is not reported as bound by daily-max
+    // alone - both numbers have to change to lift it. The task count is the
+    // draw's real size, which is every loaded activity when fewer than
+    // TASKS_PER_DAY are loaded.
+    // ====================================
+    static String unreachableWarning(List<Integer> dailyCaps, int activityCount, int dailyMax,
+                                     int firstMilestone) {
+        long capCeiling = dailyCeiling(dailyCaps, activityCount, Integer.MAX_VALUE);
+        long dailyCeiling = Math.min(capCeiling, dailyMax);
+        long weekly = dailyCeiling * 7;
+        if (weekly >= firstMilestone) {
+            return null;
+        }
+
+        String boundBy = capCeiling < dailyMax ? "per-activity daily-caps"
+            : capCeiling > dailyMax ? "bar.daily-max"
+            : "per-activity daily-caps and bar.daily-max";
+
+        return "A day's " + Math.min(activityCount, PlayerData.TASKS_PER_DAY) + " drawn tasks are capped at "
+            + dailyCeiling + " points, so " + weekly + " a week (bound by " + boundBy + ") - a player"
+            + " cannot count on reaching the first reward at " + firstMilestone + ".";
     }
 
     // ====================================

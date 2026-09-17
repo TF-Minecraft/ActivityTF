@@ -26,3 +26,4 @@ admin:
   out-of-range: "&cCount must be between 1 and %max%."
   reset-done: "&aReset weekly activity of %player%."
   add-done: "&aAdded %count% to %activity% for %player%."
+  add-not-a-task: "&cAdded nothing: %activity% is not one of %player%'s revealed tasks today. Use --force to credit it anyway."

@@ -245,27 +245,40 @@ public class ActivityManager {
     // ====================================
     public PlayerData tasks(UUID uuid) {
         PlayerData data = store.get(uuid);
-        if (data.ensureTasks(config.activities().stream().map(ActivityDef::id).toList(),
-            ThreadLocalRandom.current())) {
+        if (ensureTasks(data)) {
             store.markDirty();
         }
         return data;
     }
 
+    private boolean ensureTasks(PlayerData data) {
+        return data.ensureTasks(config.activities().stream().map(ActivityDef::id).toList(),
+            ThreadLocalRandom.current());
+    }
+
     // ====================================
-    // Reveals the task in this slot (0-based). False when the slot is empty,
-    // already revealed, or holds an activity a reload has since removed.
+    // What a reveal click did: the id actually revealed (null when the slot
+    // was empty, already revealed, or holds an activity a reload has since
+    // removed), and whether making the draw good moved the tasks around.
+    // A caller drawing the draw has to repaint every slot when it did - the
+    // slot the player clicked is no longer the one they saw.
     // ====================================
-    public boolean reveal(UUID uuid, int slot) {
-        PlayerData data = tasks(uuid);
-        if (slot < 0 || slot >= data.tasks().size() || config.activity(data.tasks().get(slot)) == null) {
-            return false;
+    public record Reveal(String revealedId, boolean drawChanged) {
+    }
+
+    // Reveals the task in this slot (0-based).
+    public Reveal reveal(UUID uuid, int slot) {
+        PlayerData data = store.get(uuid);
+        boolean drawChanged = ensureTasks(data);
+
+        boolean revealed = slot >= 0 && slot < data.tasks().size()
+            && config.activity(data.tasks().get(slot)) != null
+            && data.reveal(slot);
+
+        if (drawChanged || revealed) {
+            store.markDirty();
         }
-        if (!data.reveal(slot)) {
-            return false;
-        }
-        store.markDirty();
-        return true;
+        return new Reveal(revealed ? data.tasks().get(slot) : null, drawChanged);
     }
 
     // ====================================

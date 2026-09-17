@@ -275,4 +275,42 @@ class ActivityConfigurationTest {
     void fewerActivitiesThanADrawAreStillBoundedByTheirCaps() {
         assertEquals(3, ActivityConfiguration.dailyCeiling(caps(3, 1), 3, 10));
     }
+
+    // ====================================
+    // What the warning says about the ceiling it found. Both bounds have to
+    // be named when the caps land exactly on bar.daily-max: lifting either
+    // one alone changes nothing.
+    // ====================================
+    @Test
+    void capsBelowDailyMaxAreNamedAsTheBound() {
+        String warning = ActivityConfiguration.unreachableWarning(caps(40, 1), 40, 10, 100);
+        assertTrue(warning.contains("bound by per-activity daily-caps)"), warning);
+    }
+
+    @Test
+    void dailyMaxAloneIsNamedWhenNothingIsCapped() {
+        String warning = ActivityConfiguration.unreachableWarning(List.of(), 20, 5, 100);
+        assertTrue(warning.contains("bound by bar.daily-max)"), warning);
+    }
+
+    @Test
+    void capsThatLandExactlyOnDailyMaxNameBoth() {
+        String warning = ActivityConfiguration.unreachableWarning(caps(7, 1), 7, 7, 100);
+        assertTrue(warning.contains("bound by per-activity daily-caps and bar.daily-max)"), warning);
+    }
+
+    // The draw is every loaded activity when fewer than seven are loaded, and
+    // the warning must not claim seven of them
+    @Test
+    void theWarningCountsTheDrawItNotSeven() {
+        assertTrue(ActivityConfiguration.unreachableWarning(caps(3, 1), 3, 10, 100)
+            .startsWith("A day's 3 drawn tasks"));
+        assertTrue(ActivityConfiguration.unreachableWarning(caps(40, 1), 40, 10, 100)
+            .startsWith("A day's 7 drawn tasks"));
+    }
+
+    @Test
+    void aReachableFirstRewardWarnsAboutNothing() {
+        assertNull(ActivityConfiguration.unreachableWarning(caps(40, 5), 40, 10, 10));
+    }
 }

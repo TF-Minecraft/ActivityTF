@@ -29,9 +29,24 @@ class FractionCarry {
 
     private final Map<UUID, Map<String, BigDecimal>> carry = new HashMap<>();
 
+    // The day every banked fraction belongs to - see add()
+    private String day;
+
+    // ====================================
     // Adds this event's value to the player's leftover for the activity and
-    // returns the whole points to record now (0 if there are none yet)
-    int add(UUID uuid, String activityId, double value) {
+    // returns the whole points to record now (0 if there are none yet).
+    //
+    // Fractions never cross a day boundary: the daily counters they feed are
+    // wiped at the rollover, and a player who stays online through midnight
+    // would otherwise carry yesterday's sub-point into today. The first event
+    // of a new day drops every banked fraction, for every player.
+    // ====================================
+    int add(UUID uuid, String activityId, double value, String dayKey) {
+        if (!dayKey.equals(day)) {
+            carry.clear();
+            day = dayKey;
+        }
+
         Map<String, BigDecimal> byActivity = carry.computeIfAbsent(uuid, key -> new HashMap<>());
         Credit credit = credit(byActivity.getOrDefault(activityId, BigDecimal.ZERO), value);
         byActivity.put(activityId, credit.exact());

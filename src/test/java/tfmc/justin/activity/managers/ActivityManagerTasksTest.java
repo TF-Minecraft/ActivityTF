@@ -110,7 +110,7 @@ class ActivityManagerTasksTest {
         UUID uuid = UUID.randomUUID();
         String task = manager.tasks(uuid).tasks().get(0);
 
-        assertTrue(manager.reveal(uuid, 0));
+        assertNotNull(manager.reveal(uuid, 0).revealedId());
         assertTrue(manager.isTracked(uuid, task));
         manager.recordAction(uuid, task, 1);
 
@@ -123,7 +123,7 @@ class ActivityManagerTasksTest {
         UUID uuid = UUID.randomUUID();
         PlayerData data = manager.tasks(uuid);
 
-        assertTrue(manager.reveal(uuid, 2));
+        assertNotNull(manager.reveal(uuid, 2).revealedId());
 
         for (int slot = 0; slot < data.tasks().size(); slot++) {
             assertEquals(slot == 2, data.isRevealed(data.tasks().get(slot)), "slot " + slot);
@@ -135,8 +135,8 @@ class ActivityManagerTasksTest {
         ActivityManager manager = TestManagers.manager(defs(20));
         UUID uuid = UUID.randomUUID();
 
-        assertTrue(manager.reveal(uuid, 0));
-        assertFalse(manager.reveal(uuid, 0));
+        assertNotNull(manager.reveal(uuid, 0).revealedId());
+        assertNull(manager.reveal(uuid, 0).revealedId());
     }
 
     @Test
@@ -144,8 +144,8 @@ class ActivityManagerTasksTest {
         ActivityManager manager = TestManagers.manager(defs(3));
         UUID uuid = UUID.randomUUID();
 
-        assertFalse(manager.reveal(uuid, 5));
-        assertFalse(manager.reveal(uuid, -1));
+        assertNull(manager.reveal(uuid, 5).revealedId());
+        assertNull(manager.reveal(uuid, -1).revealedId());
     }
 
     // /activity add is the admin's testing aid and is not gated
@@ -205,5 +205,45 @@ class ActivityManagerTasksTest {
 
         assertEquals(PlayerData.TASKS_PER_DAY, manager.tasks(uuid).tasks().size());
         assertNotNull(manager.getStore().peek(uuid));
+    }
+
+    // ====================================
+    // A reload that drops one of the drawn activities compacts the draw and
+    // tops it back up, so the slot the player clicked is no longer the one
+    // they saw. reveal() has to say so - the GUI repaints every task slot on
+    // it rather than just the clicked one.
+    // ====================================
+    @SuppressWarnings("unchecked")
+    private static void unload(ActivityManager manager, String id) throws ReflectiveOperationException {
+        java.lang.reflect.Field field = manager.getConfiguration().getClass()
+            .getDeclaredField("activities");
+        field.setAccessible(true);
+        ((java.util.Map<String, ActivityDef>) field.get(manager.getConfiguration())).remove(id);
+    }
+
+    @Test
+    void aDrawChangedMidClickIsReported() throws ReflectiveOperationException {
+        ActivityManager manager = TestManagers.manager(defs(20));
+        UUID uuid = UUID.randomUUID();
+        String dropped = manager.tasks(uuid).tasks().get(0);
+
+        unload(manager, dropped);
+        ActivityManager.Reveal reveal = manager.reveal(uuid, 0);
+
+        assertTrue(reveal.drawChanged(), "a compacted draw was not reported");
+        List<String> tasks = manager.tasks(uuid).tasks();
+        assertEquals(PlayerData.TASKS_PER_DAY, tasks.size());
+        assertFalse(tasks.contains(dropped));
+        // Whatever slot 0 now holds is what was revealed, not what was clicked
+        assertEquals(tasks.get(0), reveal.revealedId());
+    }
+
+    @Test
+    void anUnchangedDrawIsNotReportedAsChanged() {
+        ActivityManager manager = TestManagers.manager(defs(20));
+        UUID uuid = UUID.randomUUID();
+        manager.tasks(uuid);
+
+        assertFalse(manager.reveal(uuid, 0).drawChanged());
     }
 }

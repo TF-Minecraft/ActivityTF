@@ -113,7 +113,7 @@ public class ActivityGui implements Listener {
     // half-empty. Clicks on it are already cancelled by onClick.
     // ====================================
     private void fillEmptySlots(Inventory inventory, Messages messages) {
-        ItemStack filler = item(Material.GRAY_STAINED_GLASS_PANE, messages.get("gui.filler-name"), List.of());
+        ItemStack filler = filler(messages);
         for (int slot = 0; slot < SIZE; slot++) {
             if (inventory.getItem(slot) == null) {
                 inventory.setItem(slot, filler);
@@ -271,21 +271,48 @@ public class ActivityGui implements Listener {
         }
 
         int task = taskSlot(event.getRawSlot());
-        if (task >= 0 && manager.reveal(player.getUniqueId(), task)) {
+        if (task < 0) {
+            return;
+        }
+
+        ActivityManager.Reveal reveal = manager.reveal(player.getUniqueId(), task);
+        if (reveal.revealedId() != null) {
             clickSound(player);
             player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1f, 1f);
-            // ====================================
-            // Just the one slot on the open view, like the claim path:
-            // reopening the inventory from inside a click event is discouraged
-            // by Bukkit and would drop whatever is on the player's cursor.
-            // ====================================
-            ActivityConfiguration config = manager.getConfiguration();
-            ItemStack revealed = taskItem(config, config.messages(),
-                manager.tasks(player.getUniqueId()), task);
-            if (revealed != null) {
-                event.getView().getTopInventory().setItem(event.getRawSlot(), revealed);
-            }
+        } else if (!reveal.drawChanged()) {
+            return;
         }
+
+        // ====================================
+        // Slots on the open view, never a reopen: reopening the inventory from
+        // inside a click event is discouraged by Bukkit and would drop
+        // whatever is on the player's cursor. Just the clicked slot normally -
+        // but a draw that was compacted or topped up mid-click (a reload
+        // dropped an activity, the day rolled over, /activity reset ran) has
+        // moved every task after the change, so then all seven are repainted.
+        // ====================================
+        ActivityConfiguration config = manager.getConfiguration();
+        PlayerData data = manager.tasks(player.getUniqueId());
+        Inventory top = event.getView().getTopInventory();
+        if (reveal.drawChanged()) {
+            for (int slot = 0; slot < TASK_SLOTS.length; slot++) {
+                top.setItem(TASK_SLOTS[slot], taskOrFiller(config, data, slot));
+            }
+        } else {
+            top.setItem(event.getRawSlot(), taskOrFiller(config, data, task));
+        }
+    }
+
+    // A repaint must leave nothing stale behind, so a slot with no task in it
+    // gets the same filler build() would have put there
+    private ItemStack taskOrFiller(ActivityConfiguration config, PlayerData data, int slot) {
+        Messages messages = config.messages();
+        ItemStack task = taskItem(config, messages, data, slot);
+        return task != null ? task : filler(messages);
+    }
+
+    private ItemStack filler(Messages messages) {
+        return item(Material.GRAY_STAINED_GLASS_PANE, messages.get("gui.filler-name"), List.of());
     }
 
     // The task index this raw slot holds, or -1 for any other slot.

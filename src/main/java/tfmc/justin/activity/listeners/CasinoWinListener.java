@@ -45,7 +45,8 @@ public class CasinoWinListener implements Listener {
             return;
         }
 
-        int denar = carry.add(event.getPlayer().getUniqueId(), "casino_win", event.getProfit());
+        int denar = carry.add(event.getPlayer().getUniqueId(), "casino_win", event.getProfit(),
+            manager.getConfiguration().currentKeys().day());
         if (denar > 0) {
             manager.recordAction(event.getPlayer().getUniqueId(), "casino_win", denar);
         }

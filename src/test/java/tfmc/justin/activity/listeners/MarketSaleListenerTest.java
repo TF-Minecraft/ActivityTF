@@ -15,7 +15,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 // ====================================
 // MarketSaleListener needs a live server for a real ActivityManager (its
@@ -83,7 +83,7 @@ class MarketSaleListenerTest {
     void twoHalfDenarSalesCreditAWholeDenarForARevealedTask() {
         ActivityManager manager = manager();
         UUID uuid = UUID.randomUUID();
-        assertTrue(manager.reveal(uuid, 0));
+        assertNotNull(manager.reveal(uuid, 0).revealedId());
         MarketSaleListener listener = new MarketSaleListener(manager);
         Player player = stubPlayer(uuid);
 
@@ -105,7 +105,7 @@ class MarketSaleListenerTest {
         assertEquals(0, manager.tasks(uuid).count("market_sale"));
 
         // Revealed only now: the two skipped halves must not still be waiting
-        assertTrue(manager.reveal(uuid, 0));
+        assertNotNull(manager.reveal(uuid, 0).revealedId());
         listener.onMarketSale(sale(player, 0.5));
 
         assertEquals(0, manager.tasks(uuid).count("market_sale"));
@@ -117,7 +117,7 @@ class MarketSaleListenerTest {
     void quittingClearsTheCarrySoALaterHalfSaleCreditsNothing() {
         ActivityManager manager = manager();
         UUID uuid = UUID.randomUUID();
-        assertTrue(manager.reveal(uuid, 0));
+        assertNotNull(manager.reveal(uuid, 0).revealedId());
         MarketSaleListener listener = new MarketSaleListener(manager);
         Player player = stubPlayer(uuid);
 
