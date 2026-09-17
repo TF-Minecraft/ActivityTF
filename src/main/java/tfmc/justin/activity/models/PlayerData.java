@@ -233,10 +233,12 @@ public class PlayerData {
     public void reroll(List<String> newTasks, int max) {
         int before = points;
         points = Math.min(max, Math.max(claimedPoints, points - dailyPoints));
-        // Never negative (a stored points above bar.max can refund more than
-        // today earned) and never above what it already was, so it stays
-        // inside dailyMax exactly as far as it already was
-        dailyPoints = Math.max(0, dailyPoints - (before - points));
+        // The refund is clamped to zero before it is subtracted: if a reroll
+        // ever RAISES points (claimedPoints sitting above a bar.max that was
+        // lowered and then raised back), before - points is negative and
+        // must not be allowed to increase dailyPoints instead.
+        int refund = Math.max(0, before - points);
+        dailyPoints = Math.max(0, dailyPoints - refund);
         daily.clear();
         clearTasks();
         tasks.addAll(newTasks);

@@ -159,7 +159,7 @@ class ActivityManagerRerollTest {
             ActivityManager manager = TestManagers.manager(defs(20));
             TestManagers.guarantee(manager, "a3");
             TestManagers.storeLoaded(manager);
-        TestManagers.rerollsPerDay(manager, 1);
+            TestManagers.rerollsPerDay(manager, 1);
             UUID uuid = UUID.randomUUID();
             manager.tasks(uuid);
 

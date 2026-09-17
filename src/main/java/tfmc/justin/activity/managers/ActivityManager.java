@@ -17,7 +17,9 @@ import tfmc.justin.activity.utils.Utils;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.regex.Pattern;
@@ -48,7 +50,7 @@ public class ActivityManager {
 
     // A store that never loaded refuses every save for the rest of the
     // session, so saying so once per session is enough
-    private boolean warnedStoreNotLoaded;
+    private final Set<String> warnedStoreNotLoaded = new HashSet<>();
 
     // Same idea for an empty reward pool, which a player can hit at click rate
     // - said once per load rather than once per click
@@ -307,14 +309,15 @@ public class ActivityManager {
     // ====================================
     // True when players.yml was never read, in which case the store refuses
     // every save for the rest of the session and nothing that must survive a
-    // restart may be done. Says so once per session, however many callers ask.
+    // restart may be done. Says so once per session per distinct 'refusing'
+    // context, however many callers ask - reroll and reward-claim refusals
+    // are warned about separately so one does not silence the other.
     // ====================================
     private boolean storeNeverLoaded(String refusing) {
         if (store.isLoaded()) {
             return false;
         }
-        if (!warnedStoreNotLoaded) {
-            warnedStoreNotLoaded = true;
+        if (warnedStoreNotLoaded.add(refusing)) {
             plugin.getLogger().severe(refusing + ": " + PlayerStore.FILE
                 + " was never loaded, so nothing done here could be saved.");
         }

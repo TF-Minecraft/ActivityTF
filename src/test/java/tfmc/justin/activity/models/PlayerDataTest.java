@@ -924,6 +924,38 @@ class PlayerDataTest {
         assertEquals(4, data.dailyPoints());
     }
 
+    // Stored points above the bar max: the refund the reroll computes (12)
+    // is larger than dailyPoints (5). Without the Math.max(0, ...) floor on
+    // the refund itself, dailyPoints would go negative here.
+    @Test
+    void aRefundLargerThanDailyPointsFloorsAtZero() {
+        PlayerData data = new PlayerData(20, 5, "w", "d", 0, Map.of(),
+            List.of("a1"), List.of());
+
+        data.reroll(List.of("a2"), 8);
+
+        assertEquals(8, data.points());
+        assertEquals(0, data.dailyPoints());
+    }
+
+    // ====================================
+    // Pins the exact regression from the bug report: bar.max was lowered and
+    // then raised back after claimedPoints (80) was already banked against
+    // the higher max, leaving stored points (60) below claimedPoints. The
+    // reroll then RAISES points (60 -> 80), so before - points is negative.
+    // dailyPoints must stay unchanged, not increase.
+    // ====================================
+    @Test
+    void aRerollThatRaisesPointsDoesNotIncreaseDailyPoints() {
+        PlayerData data = new PlayerData(60, 10, "w", "d", 80, Map.of(),
+            List.of("a1"), List.of());
+
+        data.reroll(List.of("a2"), 100);
+
+        assertEquals(80, data.points());
+        assertEquals(10, data.dailyPoints());
+    }
+
     // No points earned today means a reroll changes no points at all
     @Test
     void aRerollWithNoDailyPointsChangesNoPoints() {

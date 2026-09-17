@@ -382,6 +382,9 @@ public class ActivityGui implements Listener {
         }
 
         switch (manager.reroll(player.getUniqueId())) {
+            // Unreachable: the rerollsPerDay() <= 0 guard above already
+            // returns on this exact condition. Kept so the switch stays
+            // exhaustive over Rerolled without a default branch.
             case DISABLED -> player.sendMessage(messages.get("reroll-disabled"));
             case FAILED -> player.sendMessage(messages.get("reroll-failed"));
             case NONE_LEFT -> player.sendMessage(messages.get("reroll-none-left"));
