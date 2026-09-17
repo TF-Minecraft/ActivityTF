@@ -122,4 +122,38 @@ class ActivityGuiTest {
         ActivityDef def = activity("a", 1, 1, 2);
         assertEquals(Bar.render(1, 1, 20), ActivityGui.progressBar(def, 2));
     }
+
+    // ====================================
+    // Click routing. onClick itself needs a live InventoryClickEvent, so what
+    // is checked here is the one decision it makes about a raw slot: which
+    // task, if any, the slot stands for.
+    // ====================================
+    @Test
+    void theTaskRowRoutesToTaskZeroThroughSix() {
+        for (int raw = 10; raw <= 16; raw++) {
+            assertEquals(raw - 10, ActivityGui.taskSlot(raw), "raw slot " + raw);
+        }
+    }
+
+    @Test
+    void everyOtherSlotRoutesToNothing() {
+        for (int raw = 0; raw <= 9; raw++) {
+            assertEquals(-1, ActivityGui.taskSlot(raw), "raw slot " + raw);
+        }
+        for (int raw = 17; raw <= 26; raw++) {
+            assertEquals(-1, ActivityGui.taskSlot(raw), "raw slot " + raw);
+        }
+        // A click outside any inventory
+        assertEquals(-1, ActivityGui.taskSlot(-999));
+    }
+
+    // The two named controls: the daily bar is display-only, and filler is
+    // never a task
+    @Test
+    void theDailyBarAndFillerRouteToNoTask() throws ReflectiveOperationException {
+        assertEquals(-1, ActivityGui.taskSlot(slot("DAILY_BAR_SLOT")));
+        // Slot 0 and slot 26 are always filler in a built view
+        assertEquals(-1, ActivityGui.taskSlot(0));
+        assertEquals(-1, ActivityGui.taskSlot(26));
+    }
 }

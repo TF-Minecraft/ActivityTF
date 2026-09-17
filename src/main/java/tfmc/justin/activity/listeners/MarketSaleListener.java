@@ -39,6 +39,7 @@ public class MarketSaleListener implements Listener {
 
         // A hidden or undrawn task must not bank a fraction either
         if (!manager.isTracked(event.getPlayer().getUniqueId(), "market_sale")) {
+            carry.forget(event.getPlayer().getUniqueId(), "market_sale");
             return;
         }
 

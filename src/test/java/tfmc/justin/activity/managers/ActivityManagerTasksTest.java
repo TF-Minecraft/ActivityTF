@@ -13,6 +13,8 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // ====================================
@@ -169,5 +171,39 @@ class ActivityManagerTasksTest {
         assertFalse(manager.recordAction(uuid, "nope", 1));
         assertFalse(manager.recordActionUngated(uuid, "nope", 1));
         assertFalse(manager.isTracked(uuid, "nope"));
+    }
+
+    // ====================================
+    // No draw is made off the record path: a listener event for a player who
+    // has not opened the GUI today must leave no row behind in players.yml.
+    // ====================================
+    @Test
+    void aListenerEventForAPlayerWithNoDrawCreatesNoRow() {
+        ActivityManager manager = TestManagers.manager(defs(20));
+        UUID uuid = UUID.randomUUID();
+
+        assertTrue(manager.recordAction(uuid, "a0", 1));
+
+        assertNull(manager.getStore().peek(uuid), "the record path created a players.yml row");
+    }
+
+    @Test
+    void isTrackedIsFalseAndCreatesNoRowBeforeTheFirstDraw() {
+        ActivityManager manager = TestManagers.manager(defs(20));
+        UUID uuid = UUID.randomUUID();
+
+        assertFalse(manager.isTracked(uuid, "a0"));
+
+        assertNull(manager.getStore().peek(uuid), "isTracked created a players.yml row");
+    }
+
+    // The GUI paths are the ones allowed to draw, and only they create the row
+    @Test
+    void openingTheGuiIsWhatDraws() {
+        ActivityManager manager = TestManagers.manager(defs(20));
+        UUID uuid = UUID.randomUUID();
+
+        assertEquals(PlayerData.TASKS_PER_DAY, manager.tasks(uuid).tasks().size());
+        assertNotNull(manager.getStore().peek(uuid));
     }
 }

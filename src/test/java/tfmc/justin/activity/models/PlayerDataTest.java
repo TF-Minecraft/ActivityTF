@@ -10,6 +10,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PlayerDataTest {
@@ -629,5 +630,55 @@ class PlayerDataTest {
         assertEquals(List.of("vote", "quest"), data.tasks());
         assertTrue(data.isRevealed("quest"));
         assertFalse(data.isRevealed("stranger"));
+    }
+
+    // ====================================
+    // An activity removed by /activity reload leaves a dead id in the draw.
+    // The next use drops it, discards its revealed flag and tops the draw back
+    // up out of what is still loaded - never below TASKS_PER_DAY while there
+    // are ids left to draw.
+    // ====================================
+    @Test
+    void aRemovedActivityIsDroppedAndTheDrawToppedBackUp() {
+        PlayerData data = new PlayerData(0, 0, WEEK, DAY, 0, java.util.Map.of(),
+            List.of("a0", "gone", "a1", "a2", "a3", "a4", "a5"), List.of("gone", "a1"));
+
+        assertTrue(data.ensureTasks(ids(30), new Random(3)));
+
+        assertEquals(PlayerData.TASKS_PER_DAY, data.tasks().size());
+        assertFalse(data.tasks().contains("gone"), "a removed activity stays in the draw");
+        assertEquals(data.tasks().size(), new HashSet<>(data.tasks()).size(), "the top-up repeats an id");
+        assertTrue(ids(30).containsAll(data.tasks()));
+        // The survivors keep their order; the refill lands at the end
+        assertEquals(List.of("a0", "a1", "a2", "a3", "a4", "a5"), data.tasks().subList(0, 6));
+    }
+
+    @Test
+    void aRefilledSlotIsUnrevealedAndTheDroppedFlagIsDiscarded() {
+        PlayerData data = new PlayerData(0, 0, WEEK, DAY, 0, java.util.Map.of(),
+            List.of("a0", "gone", "a1", "a2", "a3", "a4", "a5"), List.of("gone", "a1"));
+
+        data.ensureTasks(ids(30), new Random(3));
+
+        assertEquals(Set.of("a1"), data.revealed());
+        assertFalse(data.isRevealed("gone"));
+        assertFalse(data.isRevealed(data.tasks().get(6)), "the refilled slot is revealed");
+    }
+
+    // Nothing left to draw from: the draw just shrinks rather than looping
+    @Test
+    void aDrawCannotBeToppedUpPastWhatIsLoaded() {
+        PlayerData data = new PlayerData(0, 0, WEEK, DAY, 0, java.util.Map.of(),
+            List.of("a0", "gone", "a1"), List.of());
+
+        assertTrue(data.ensureTasks(ids(2), new Random(3)));
+        assertEquals(List.of("a0", "a1"), data.tasks());
+    }
+
+    @Test
+    void aDrawnListCannotBeMutatedByItsCaller() {
+        List<String> drawn = PlayerData.draw(ids(30), new Random(7));
+
+        assertThrows(UnsupportedOperationException.class, () -> drawn.add("a99"));
     }
 }

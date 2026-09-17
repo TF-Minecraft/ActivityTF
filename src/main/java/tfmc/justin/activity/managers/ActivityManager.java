@@ -173,8 +173,8 @@ public class ActivityManager {
         return record(uuid, activityId, amount, true);
     }
 
-    // /activity add only: skips the daily-task gate on purpose, so an admin
-    // can credit any activity while testing, drawn or not
+    // /activity add --force only: skips the daily-task gate on purpose, so an
+    // admin can credit any activity while testing, drawn or not
     public boolean recordActionUngated(UUID uuid, String activityId, int amount) {
         return record(uuid, activityId, amount, false);
     }
@@ -185,8 +185,14 @@ public class ActivityManager {
             return false;
         }
 
-        PlayerData data = tasks(uuid);
-        if (gated && !data.isRevealed(activityId)) {
+        // ====================================
+        // The gated path never draws and never creates a row: a listener
+        // firing for a player who has not opened the GUI today must not pin
+        // that player in players.yml forever. No draw yet means no revealed
+        // task, which means nothing to record.
+        // ====================================
+        PlayerData data = gated ? store.rolled(uuid) : store.get(uuid);
+        if (gated && (data == null || !data.isRevealed(activityId))) {
             return true;
         }
 
@@ -223,19 +229,24 @@ public class ActivityManager {
     // Whether this activity would earn anything for this player right now:
     // it is loaded and one of their revealed tasks today. Listeners that
     // carry fractions ask this first, so no fraction banks up for a task
-    // that is hidden or was never drawn.
+    // that is hidden or was never drawn. Like the record path it neither
+    // draws nor creates a row - a player with no draw yet is simply false.
     // ====================================
     public boolean isTracked(UUID uuid, String activityId) {
-        return config.activity(activityId) != null && tasks(uuid).isRevealed(activityId);
+        PlayerData data = store.rolled(uuid);
+        return config.activity(activityId) != null && data != null && data.isRevealed(activityId);
     }
 
-    // The player's data with today's tasks drawn, drawing them now if this
-    // is the first time today they are needed
+    // ====================================
+    // The player's data with today's draw made good: drawn if this is the
+    // first time today it is needed, and topped back up if a reload removed
+    // one of the activities in it. Only the GUI paths (open and reveal) come
+    // here, so no listener event can create an entry.
+    // ====================================
     public PlayerData tasks(UUID uuid) {
         PlayerData data = store.get(uuid);
-        if (data.tasks().isEmpty()
-            && data.ensureTasks(config.activities().stream().map(ActivityDef::id).toList(),
-                ThreadLocalRandom.current())) {
+        if (data.ensureTasks(config.activities().stream().map(ActivityDef::id).toList(),
+            ThreadLocalRandom.current())) {
             store.markDirty();
         }
         return data;

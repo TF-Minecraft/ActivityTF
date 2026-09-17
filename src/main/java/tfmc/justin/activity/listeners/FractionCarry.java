@@ -43,6 +43,19 @@ class FractionCarry {
         carry.remove(uuid);
     }
 
+    // ====================================
+    // Dropped whenever the daily-task gate refuses the activity, which is the
+    // cheapest way to keep a fraction banked while the task was revealed from
+    // paying out days later when it is drawn and revealed again - the gate is
+    // asked on every event, so this runs on the first refused one.
+    // ====================================
+    void forget(UUID uuid, String activityId) {
+        Map<String, BigDecimal> byActivity = carry.get(uuid);
+        if (byActivity != null && byActivity.remove(activityId) != null && byActivity.isEmpty()) {
+            carry.remove(uuid);
+        }
+    }
+
     // Whole points to record now, and the fraction left over for next time
     record Credit(int amount, BigDecimal exact) {
 

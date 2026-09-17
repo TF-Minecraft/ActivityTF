@@ -274,12 +274,23 @@ public class ActivityGui implements Listener {
         if (task >= 0 && manager.reveal(player.getUniqueId(), task)) {
             clickSound(player);
             player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1f, 1f);
-            player.openInventory(build(player));
+            // ====================================
+            // Just the one slot on the open view, like the claim path:
+            // reopening the inventory from inside a click event is discouraged
+            // by Bukkit and would drop whatever is on the player's cursor.
+            // ====================================
+            ActivityConfiguration config = manager.getConfiguration();
+            ItemStack revealed = taskItem(config, config.messages(),
+                manager.tasks(player.getUniqueId()), task);
+            if (revealed != null) {
+                event.getView().getTopInventory().setItem(event.getRawSlot(), revealed);
+            }
         }
     }
 
-    // The task index this raw slot holds, or -1 for any other slot
-    private static int taskSlot(int rawSlot) {
+    // The task index this raw slot holds, or -1 for any other slot.
+    // Package-private so the click routing can be tested without a server.
+    static int taskSlot(int rawSlot) {
         for (int slot = 0; slot < TASK_SLOTS.length; slot++) {
             if (TASK_SLOTS[slot] == rawSlot) {
                 return slot;

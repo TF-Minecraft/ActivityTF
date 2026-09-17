@@ -243,4 +243,65 @@ class PlayerStoreTest {
         assertFalse(data.isRevealed("removed"));
         assertTrue(data.isRevealed("quest"));
     }
+
+    // ====================================
+    // A draw is all a row needs to be worth keeping: the player has been
+    // handed today's tasks and a restart must not re-roll them.
+    // ====================================
+    @Test
+    void aDrawOnlyEntryIsStillWritten() {
+        UUID id = UUID.randomUUID();
+        PlayerData data = new PlayerData(0, 0, "2026-09-07", "2026-09-09", 0, Map.of(),
+            List.of("vote", "quest"), List.of());
+
+        YamlConfiguration yaml = PlayerStore.snapshot(Map.of(id, data));
+
+        assertEquals(List.of("vote", "quest"), yaml.getStringList("players." + id + ".tasks"));
+    }
+
+    // ====================================
+    // revealed() is a hash set, so its iteration order is not the order the
+    // ids went in - written as-is it would churn the file between saves.
+    // ====================================
+    @Test
+    void revealedIsWrittenSortedSoTheFileDoesNotChurn() {
+        UUID id = UUID.randomUUID();
+        List<String> tasks = List.of("vote", "quest", "mine", "fish", "cook", "craft", "sell");
+        PlayerData one = new PlayerData(0, 0, "2026-09-07", "2026-09-09", 0, Map.of(), tasks, tasks);
+        PlayerData two = new PlayerData(0, 0, "2026-09-07", "2026-09-09", 0, Map.of(), tasks,
+            List.of("sell", "craft", "cook", "fish", "mine", "quest", "vote"));
+
+        List<String> first = PlayerStore.snapshot(Map.of(id, one)).getStringList("players." + id + ".revealed");
+        List<String> second = PlayerStore.snapshot(Map.of(id, two)).getStringList("players." + id + ".revealed");
+
+        assertEquals(List.of("cook", "craft", "fish", "mine", "quest", "sell", "vote"), first);
+        assertEquals(first, second);
+    }
+
+    // ====================================
+    // Disk and memory must end up with the same draw when an activity is
+    // removed: the read path drops the dead id, the in-memory path drops it
+    // too, and both are topped back up to TASKS_PER_DAY on next use.
+    // ====================================
+    @Test
+    void aDrawWithARemovedActivityAgreesBetweenDiskAndMemory() {
+        List<String> stored = List.of("a0", "gone", "a1", "a2", "a3", "a4", "a5");
+        List<String> loadedIds = List.of("a0", "a1", "a2", "a3", "a4", "a5", "a6", "a7");
+
+        ConfigurationSection root = new YamlConfiguration().createSection("players");
+        UUID id = UUID.randomUUID();
+        ConfigurationSection entry = root.createSection(id.toString());
+        entry.set("tasks", stored);
+        PlayerData fromDisk = PlayerStore.readEntry(root, id.toString(), BAR_MAX, DAILY_MAX,
+            loadedIds::contains);
+
+        PlayerData inMemory = new PlayerData(0, 0, "2026-09-07", "2026-09-09", 0, Map.of(), stored, List.of());
+
+        fromDisk.ensureTasks(loadedIds, new java.util.Random(1));
+        inMemory.ensureTasks(loadedIds, new java.util.Random(1));
+
+        assertEquals(PlayerData.TASKS_PER_DAY, fromDisk.tasks().size());
+        assertEquals(fromDisk.tasks(), inMemory.tasks());
+        assertFalse(fromDisk.tasks().contains("gone"));
+    }
 }

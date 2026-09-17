@@ -8,6 +8,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 import tfmc.justin.activity.hooks.TLibsItems;
 import tfmc.justin.activity.models.ActivityDef;
+import tfmc.justin.activity.models.PlayerData;
 import tfmc.justin.activity.models.RewardEntry;
 
 import tfmc.justin.activity.utils.ItemPath;
@@ -542,32 +543,57 @@ public class ActivityConfiguration {
     }
 
     // ====================================
-    // Seven days of every capped activity, itself capped by bar.daily-max, is
-    // the ceiling - if that is under the first milestone nothing can ever be
-    // claimed. bar.daily-max alone bounds every day even when an activity is
-    // uncapped, so it is always the fallback ceiling.
+    // A player can only earn from the TASKS_PER_DAY activities drawn for them,
+    // so the daily ceiling is the worst draw they can get: the lowest
+    // TASKS_PER_DAY daily-caps, itself capped by bar.daily-max. Seven days of
+    // that is the weekly ceiling - if it is under the first milestone, an
+    // unlucky week can never be claimed on.
+    //
+    // Too few capped activities to fill a draw means an uncapped one is always
+    // in it, and then only bar.daily-max bounds the day. Fewer loaded
+    // activities than TASKS_PER_DAY still bounds, since the draw is then all
+    // of them.
     // ====================================
     private void warnIfBarUnreachable() {
-        long dailyCapSum = 0;
-        boolean allCapped = true;
+        List<Integer> caps = new ArrayList<>();
         for (ActivityDef def : activities.values()) {
-            if (def.dailyCap() == 0) {
-                allCapped = false;
-                break;
+            if (def.dailyCap() > 0) {
+                caps.add(def.dailyCap());
             }
-            dailyCapSum += def.dailyCap();
         }
 
-        long dailyCeiling = allCapped ? Math.min(dailyCapSum, dailyMax) : dailyMax;
+        long dailyCeiling = dailyCeiling(caps, activities.size(), dailyMax);
         long weekly = dailyCeiling * 7;
-        String boundBy = allCapped && dailyCapSum <= dailyMax ? "per-activity daily-caps" : "bar.daily-max";
+        String boundBy = dailyCeiling < dailyMax ? "per-activity daily-caps" : "bar.daily-max";
 
         int first = milestones.get(0);
         if (weekly < first) {
-            plugin.getLogger().warning("All activities together are capped at " + weekly
-                + " points a week (bound by " + boundBy + ") - nobody can reach the first reward at "
-                + first + ".");
+            plugin.getLogger().warning("A day's seven drawn tasks are capped at " + dailyCeiling
+                + " points, so " + weekly + " a week (bound by " + boundBy + ") - a player cannot count"
+                + " on reaching the first reward at " + first + ".");
         }
+    }
+
+    // ====================================
+    // The arithmetic above, pure so it can be tested: the daily-caps of the
+    // capped activities (in any order), how many activities are loaded in
+    // total, and bar.daily-max. Package-private for the test.
+    // ====================================
+    static long dailyCeiling(List<Integer> dailyCaps, int activityCount, int dailyMax) {
+        List<Integer> caps = new ArrayList<>(dailyCaps);
+        caps.sort(null);
+
+        // Too few capped activities to fill a draw on their own: every draw
+        // holds at least one uncapped activity, so only bar.daily-max bounds it
+        if (caps.size() < PlayerData.TASKS_PER_DAY && caps.size() != activityCount) {
+            return dailyMax;
+        }
+
+        long sum = 0;
+        for (int i = 0; i < Math.min(PlayerData.TASKS_PER_DAY, caps.size()); i++) {
+            sum += caps.get(i);
+        }
+        return Math.min(sum, dailyMax);
     }
 
     // ====================================

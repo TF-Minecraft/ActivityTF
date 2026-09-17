@@ -169,4 +169,36 @@ class FractionCarryTest {
         assertEquals(0, carry.add(player, "market_sale", 0.1));
         assertEquals(1, carry.add(player, "market_sale", 0.7));
     }
+
+    // ====================================
+    // The gate refusing an activity drops what it had banked, so a fraction
+    // from a day the task was revealed cannot pay out days later when it is
+    // drawn and revealed again. Other activities keep theirs.
+    // ====================================
+    @Test
+    void aRefusedActivityLosesItsCarryButTheOthersKeepTheirs() {
+        FractionCarry carry = new FractionCarry();
+        java.util.UUID player = java.util.UUID.randomUUID();
+
+        assertEquals(0, carry.add(player, "market_sale", 0.9));
+        assertEquals(0, carry.add(player, "casino_win", 0.9));
+
+        carry.forget(player, "market_sale");
+
+        // Banked fraction gone: 0.9 on a clean carry is still short of a point
+        assertEquals(0, carry.add(player, "market_sale", 0.9));
+        // Untouched: 0.9 + 0.9 is worth one
+        assertEquals(1, carry.add(player, "casino_win", 0.9));
+    }
+
+    @Test
+    void forgettingAnActivityNobodyBankedIsHarmless() {
+        FractionCarry carry = new FractionCarry();
+        java.util.UUID player = java.util.UUID.randomUUID();
+
+        carry.forget(player, "market_sale");
+        assertEquals(0, carry.add(player, "market_sale", 0.5));
+        carry.forget(player, "casino_win");
+        assertEquals(1, carry.add(player, "market_sale", 0.5));
+    }
 }

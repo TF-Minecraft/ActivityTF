@@ -37,8 +37,11 @@ public class CasinoWinListener implements Listener {
             return;
         }
 
-        // A hidden or undrawn task must not bank a fraction either
+        // A hidden or undrawn task must not bank a fraction either - and
+        // whatever it banked while it was revealed is dropped here, so it
+        // cannot pay out on a later day the task comes back
         if (!manager.isTracked(event.getPlayer().getUniqueId(), "casino_win")) {
+            carry.forget(event.getPlayer().getUniqueId(), "casino_win");
             return;
         }
 

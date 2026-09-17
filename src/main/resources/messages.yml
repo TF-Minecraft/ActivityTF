@@ -16,7 +16,7 @@ gui:
   filler-name: "&8 "
 placeholder: { done: "&a✔", not-done: "&c✘" }
 admin:
-  usage: "&eUsage: /activity <reload|reset <player>|add <player> <activity> <count>>"
+  usage: "&eUsage: /activity <reload|reset <player>|add <player> <activity> <count> [--force]>"
   no-permission: "&cNo permission."
   players-only: "&cPlayers only."
   reloaded: "&aactivity reloaded."

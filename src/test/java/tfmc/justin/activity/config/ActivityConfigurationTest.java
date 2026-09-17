@@ -230,4 +230,49 @@ class ActivityConfigurationTest {
         assertEquals(1, professions.size());
         assertEquals("second", ActivityConfiguration.professionActivity(professions, "crafter"));
     }
+
+    // ====================================
+    // The bar-unreachable ceiling. A player only ever earns from the seven
+    // tasks drawn for them, so the day is bounded by the seven lowest
+    // daily-caps rather than by every activity's cap added up.
+    // ====================================
+    private static List<Integer> caps(int count, int cap) {
+        List<Integer> caps = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            caps.add(cap);
+        }
+        return caps;
+    }
+
+    @Test
+    void theDailyCeilingIsTheSevenLowestCapsNotAllOfThem() {
+        // 40 activities at daily-cap 1 with bar.daily-max 10: only seven can
+        // be drawn, so seven is the day's ceiling - not 10, and not 40
+        assertEquals(7, ActivityConfiguration.dailyCeiling(caps(40, 1), 40, 10));
+    }
+
+    @Test
+    void theDailyCeilingTakesTheLowestCapsNotTheFirstOnes() {
+        List<Integer> caps = new ArrayList<>(List.of(9, 9, 9, 1, 1, 1, 1, 1, 1, 1));
+        assertEquals(7, ActivityConfiguration.dailyCeiling(caps, 10, 100));
+    }
+
+    @Test
+    void theDailyCeilingNeverExceedsDailyMax() {
+        assertEquals(10, ActivityConfiguration.dailyCeiling(caps(40, 5), 40, 10));
+    }
+
+    // An uncapped activity is in every draw once there are too few capped
+    // ones to fill one, and then only bar.daily-max bounds the day
+    @Test
+    void tooFewCappedActivitiesFallsBackToDailyMax() {
+        assertEquals(10, ActivityConfiguration.dailyCeiling(caps(6, 1), 40, 10));
+    }
+
+    // Fewer loaded activities than a draw holds: the draw is all of them, so
+    // their caps still bound the day
+    @Test
+    void fewerActivitiesThanADrawAreStillBoundedByTheirCaps() {
+        assertEquals(3, ActivityConfiguration.dailyCeiling(caps(3, 1), 3, 10));
+    }
 }

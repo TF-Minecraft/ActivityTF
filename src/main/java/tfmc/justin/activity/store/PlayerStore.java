@@ -18,6 +18,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -190,7 +191,10 @@ public class PlayerStore {
         int dailyPoints = Math.max(0, Math.min(entry.getInt("daily-points"), dailyMax));
 
         // A task whose activity was removed from config.yml is dropped; the
-        // rest keep their order and revealed state
+        // rest keep their order and revealed state. The short draw is topped
+        // back up by PlayerData.ensureTasks the next time it is used, which is
+        // also what happens to a draw that was already in memory - both sides
+        // end up with the same rule.
         List<String> tasks = new ArrayList<>(entry.getStringList("tasks"));
         tasks.removeIf(known.negate());
 
@@ -381,7 +385,10 @@ public class PlayerStore {
             yaml.set(path + ".daily-points", data.dailyPoints());
             yaml.set(path + ".daily", new LinkedHashMap<>(data.daily()));
             yaml.set(path + ".tasks", new ArrayList<>(data.tasks()));
-            yaml.set(path + ".revealed", new ArrayList<>(data.revealed()));
+            // Sorted, because revealed() is a hash set whose iteration order
+            // would otherwise reshuffle this list between saves and churn the
+            // file for no change at all
+            yaml.set(path + ".revealed", new ArrayList<>(new TreeSet<>(data.revealed())));
         }
         return yaml;
     }

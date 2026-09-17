@@ -24,11 +24,17 @@ import java.util.UUID;
 // ====================================
 // /activity opens the GUI; the subcommands are admin-only.
 // 'add' doubles as the intake path for ConditionalEvents and anything else
-// that can dispatch a console command.
+// that can dispatch a console command, so it goes through the same daily-task
+// gate a listener does: nothing is credited unless the activity is one of the
+// player's revealed tasks today. A trailing --force skips the gate, for
+// testing and for correcting a player by hand.
 // ====================================
 public class ActivityCommand implements CommandExecutor, TabCompleter {
 
     private static final List<String> SUBCOMMANDS = Arrays.asList("reload", "reset", "add");
+
+    // The one optional trailing argument 'add' takes
+    private static final String FORCE = "--force";
 
     // Well above any real day's activity, low enough that no arithmetic
     // downstream can be pushed anywhere near overflowing
@@ -142,15 +148,23 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
         }
 
         UUID uuid = target.getUniqueId();
-        // Bypasses the daily-task gate: a testing aid, so any activity can be
-        // credited whether or not it is one of the player's revealed tasks
-        if (!manager.recordActionUngated(uuid, def.id(), count)) {
+        // Gated like any listener unless --force was asked for, so a console
+        // intake path cannot quietly hand out points for a task the player
+        // never drew or revealed
+        if (!(forced(args) ? manager.recordActionUngated(uuid, def.id(), count)
+            : manager.recordAction(uuid, def.id(), count))) {
             sender.sendMessage(messages().get("admin.unknown-activity", "%activity%", args[2]));
             return;
         }
 
         sender.sendMessage(messages().get("admin.add-done",
             "%count%", count, "%activity%", def.id(), "%player%", name(target, args[1])));
+    }
+
+    // Whether 'add' was asked to skip the daily-task gate. Package-private
+    // so the one argument that changes what add does can be tested.
+    static boolean forced(String[] args) {
+        return args.length > 4 && args[4].equalsIgnoreCase(FORCE);
     }
 
     // ====================================
@@ -195,6 +209,10 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
                 names.add(player.getName());
             }
             return filter(names, args[1]);
+        }
+
+        if (args.length == 5 && sub.equals("add")) {
+            return filter(List.of(FORCE), args[4]);
         }
 
         if (args.length == 3 && sub.equals("add")) {

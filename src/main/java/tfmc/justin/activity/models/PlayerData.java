@@ -3,6 +3,7 @@ package tfmc.justin.activity.models;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -193,16 +194,37 @@ public class PlayerData {
     public static List<String> draw(Collection<String> ids, Random random) {
         List<String> pool = new ArrayList<>(ids);
         Collections.shuffle(pool, random);
-        return pool.subList(0, Math.min(TASKS_PER_DAY, pool.size()));
+        return List.copyOf(pool.subList(0, Math.min(TASKS_PER_DAY, pool.size())));
     }
 
-    // Draws today's tasks if none are drawn yet. True if it drew anything.
+    // ====================================
+    // Brings the draw in line with what is actually loaded: an id whose
+    // activity a reload has removed is dropped along with its revealed flag,
+    // and the draw is then topped back up to TASKS_PER_DAY with ids it does
+    // not already hold. Survivors keep their order (the list compacts, so a
+    // drop shifts the slots after it); a refilled task is always unrevealed.
+    // True if anything changed, which is what the caller saves on.
+    // ====================================
     public boolean ensureTasks(Collection<String> ids, Random random) {
-        if (!tasks.isEmpty()) {
-            return false;
+        Set<String> known = new HashSet<>(ids);
+        boolean changed = tasks.removeIf(id -> !known.contains(id));
+        changed |= revealed.removeIf(id -> !tasks.contains(id));
+
+        if (tasks.size() >= TASKS_PER_DAY) {
+            return changed;
         }
-        tasks.addAll(draw(ids, random));
-        return !tasks.isEmpty();
+
+        List<String> pool = new ArrayList<>(known);
+        pool.removeAll(tasks);
+        Collections.shuffle(pool, random);
+        for (String id : pool) {
+            if (tasks.size() >= TASKS_PER_DAY) {
+                break;
+            }
+            tasks.add(id);
+            changed = true;
+        }
+        return changed;
     }
 
     // Reveals the task in this slot. False for an empty slot or one already
