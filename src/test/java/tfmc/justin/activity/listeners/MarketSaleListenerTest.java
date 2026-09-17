@@ -1,16 +1,21 @@
 package tfmc.justin.activity.listeners;
 
 import net.tfminecraft.events.MarketSaleEvent;
+import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.junit.jupiter.api.Test;
+import tfmc.justin.activity.managers.ActivityManager;
+import tfmc.justin.activity.managers.TestManagers;
+import tfmc.justin.activity.models.ActivityDef;
 
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Proxy;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 // ====================================
 // MarketSaleListener needs a live server for a real ActivityManager (its
@@ -63,32 +68,63 @@ class MarketSaleListenerTest {
         assertDoesNotThrow(() -> listener.onMarketSale(sale(player, Double.NaN)));
     }
 
-    // Sanity check that the NPE-as-witness approach above actually detects a
-    // credit: two 0.5 sales for the same player DO earn a whole point, which
-    // requires the null manager and blows up - proving the guard tests above
-    // are not vacuously passing
+    // ====================================
+    // The daily-task gate, on a real manager (see TestManagers): a revealed
+    // task banks its fractions and gets credited; a hidden one banks nothing
+    // at all, so revealing it later does not hand over what was skipped.
+    // ====================================
+    // 'every: 2' on purpose: a single denar counts but awards no point, which
+    // keeps the record path away from Bukkit.getPlayer(), unreachable headless
+    private static ActivityManager manager() {
+        return TestManagers.manager(new ActivityDef("market_sale", "market_sale", Material.EMERALD, null, 2, 1, 0));
+    }
+
     @Test
-    void twoHalfDenarSalesDoReachTheManager() {
-        MarketSaleListener listener = new MarketSaleListener(null);
-        Player player = stubPlayer(UUID.randomUUID());
+    void twoHalfDenarSalesCreditAWholeDenarForARevealedTask() {
+        ActivityManager manager = manager();
+        UUID uuid = UUID.randomUUID();
+        assertNotNull(manager.reveal(uuid, 0).revealedId());
+        MarketSaleListener listener = new MarketSaleListener(manager);
+        Player player = stubPlayer(uuid);
 
         listener.onMarketSale(sale(player, 0.5));
-        assertThrows(NullPointerException.class, () -> listener.onMarketSale(sale(player, 0.5)));
+        listener.onMarketSale(sale(player, 0.5));
+
+        assertEquals(1, manager.tasks(uuid).count("market_sale"));
+    }
+
+    @Test
+    void aHiddenTaskBanksNoFractionAtAll() {
+        ActivityManager manager = manager();
+        UUID uuid = UUID.randomUUID();
+        MarketSaleListener listener = new MarketSaleListener(manager);
+        Player player = stubPlayer(uuid);
+
+        listener.onMarketSale(sale(player, 0.5));
+        listener.onMarketSale(sale(player, 0.5));
+        assertEquals(0, manager.tasks(uuid).count("market_sale"));
+
+        // Revealed only now: the two skipped halves must not still be waiting
+        assertNotNull(manager.reveal(uuid, 0).revealedId());
+        listener.onMarketSale(sale(player, 0.5));
+
+        assertEquals(0, manager.tasks(uuid).count("market_sale"));
     }
 
     // The carry is per-player: a leftover 0.5 from a quitting player must not
     // still be sitting there once they are gone
     @Test
     void quittingClearsTheCarrySoALaterHalfSaleCreditsNothing() {
-        MarketSaleListener listener = new MarketSaleListener(null);
+        ActivityManager manager = manager();
         UUID uuid = UUID.randomUUID();
+        assertNotNull(manager.reveal(uuid, 0).revealedId());
+        MarketSaleListener listener = new MarketSaleListener(manager);
         Player player = stubPlayer(uuid);
 
         listener.onMarketSale(sale(player, 0.5));
         listener.onQuit(new PlayerQuitEvent(player, (String) null));
+        listener.onMarketSale(sale(player, 0.5));
 
-        // If the carry had survived, this second 0.5 would complete a whole
-        // point and try to record it on the null manager
-        assertDoesNotThrow(() -> listener.onMarketSale(sale(player, 0.5)));
+        assertEquals(0, manager.tasks(uuid).count("market_sale"));
     }
 }

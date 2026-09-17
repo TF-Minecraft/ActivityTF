@@ -13,6 +13,7 @@ import tfmc.justin.activity.gui.ActivityGui;
 import tfmc.justin.activity.managers.ActivityManager;
 import tfmc.justin.activity.models.ActivityDef;
 import tfmc.justin.activity.models.PlayerData;
+import tfmc.justin.activity.models.Recorded;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -24,11 +25,17 @@ import java.util.UUID;
 // ====================================
 // /activity opens the GUI; the subcommands are admin-only.
 // 'add' doubles as the intake path for ConditionalEvents and anything else
-// that can dispatch a console command.
+// that can dispatch a console command, so it goes through the same daily-task
+// gate a listener does: nothing is credited unless the activity is one of the
+// player's revealed tasks today. A trailing --force skips the gate, for
+// testing and for correcting a player by hand.
 // ====================================
 public class ActivityCommand implements CommandExecutor, TabCompleter {
 
     private static final List<String> SUBCOMMANDS = Arrays.asList("reload", "reset", "add");
+
+    // The one optional trailing argument 'add' takes
+    private static final String FORCE = "--force";
 
     // Well above any real day's activity, low enough that no arithmetic
     // downstream can be pushed anywhere near overflowing
@@ -110,19 +117,13 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
     }
 
     private void handleAdd(CommandSender sender, String[] args) {
-        if (args.length < 4) {
+        if (!wellFormedAdd(args)) {
             sender.sendMessage(messages().get("admin.usage"));
             return;
         }
 
         OfflinePlayer target = resolve(sender, args[1]);
         if (target == null) {
-            return;
-        }
-
-        ActivityDef def = manager.getConfiguration().activity(args[2]);
-        if (def == null) {
-            sender.sendMessage(messages().get("admin.unknown-activity", "%activity%", args[2]));
             return;
         }
 
@@ -141,14 +142,85 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
             return;
         }
 
-        UUID uuid = target.getUniqueId();
-        if (!manager.recordAction(uuid, def.id(), count)) {
-            sender.sendMessage(messages().get("admin.unknown-activity", "%activity%", args[2]));
-            return;
+        Outcome outcome = add(target.getUniqueId(), args[2], count, forced(args));
+        sender.sendMessage(switch (outcome) {
+            case ADDED, CAPPED_ACTIVITY, CAPPED_DAILY, CAPPED_WEEKLY -> messages().get(outcome.messageKey(),
+                "%count%", count, "%activity%", args[2], "%player%", name(target, args[1]));
+            case NOT_A_TASK -> messages().get(outcome.messageKey(),
+                "%activity%", args[2], "%player%", name(target, args[1]));
+            case UNKNOWN_ACTIVITY -> messages().get(outcome.messageKey(), "%activity%", args[2]);
+        });
+    }
+
+    // ====================================
+    // What a /activity add did, and the message that says so. Every way an
+    // add can come to nothing gets its own line: a task the player has not
+    // revealed today (or an offline player with no row at all) records
+    // nothing, and a spent daily budget, a full weekly bar or an activity
+    // that has already given all it can today record the count but credit no
+    // points - all of which used to be reported as a plain success.
+    // ====================================
+    enum Outcome {
+        ADDED("admin.add-done"),
+        NOT_A_TASK("admin.add-not-a-task"),
+        CAPPED_ACTIVITY("admin.add-capped-activity"),
+        CAPPED_DAILY("admin.add-capped-daily"),
+        CAPPED_WEEKLY("admin.add-capped-weekly"),
+        UNKNOWN_ACTIVITY("admin.unknown-activity");
+
+        private final String messageKey;
+
+        Outcome(String messageKey) {
+            this.messageKey = messageKey;
         }
 
-        sender.sendMessage(messages().get("admin.add-done",
-            "%count%", count, "%activity%", def.id(), "%player%", name(target, args[1])));
+        String messageKey() {
+            return messageKey;
+        }
+    }
+
+    // ====================================
+    // The add decision itself, split out so it can be tested without a
+    // server. Gated like any listener unless --force was asked for, so a
+    // console intake path cannot quietly hand out points for a task the
+    // player never drew or revealed. The record path itself is what decides
+    // between an unknown id, a refused gate and a cap - this only names the
+    // message for what it reports.
+    // ====================================
+    Outcome add(UUID uuid, String activityId, int count, boolean force) {
+        Recorded recorded = force
+            ? manager.recordActionUngated(uuid, activityId, count)
+            : manager.recordAction(uuid, activityId, count);
+
+        return switch (recorded) {
+            case RECORDED -> Outcome.ADDED;
+            case NOT_A_TASK -> Outcome.NOT_A_TASK;
+            case ACTIVITY_CAP -> Outcome.CAPPED_ACTIVITY;
+            case DAILY_MAX -> Outcome.CAPPED_DAILY;
+            case WEEKLY_MAX -> Outcome.CAPPED_WEEKLY;
+            case UNKNOWN -> Outcome.UNKNOWN_ACTIVITY;
+        };
+    }
+
+    // ====================================
+    // add takes exactly player, activity, count and at most the one trailing
+    // --force. Anything else in that position - '--froce', 'force', a stray
+    // word after it - used to parse as a plain gated add, so a typo silently
+    // changed what the command did. Package-private for the test.
+    // ====================================
+    static boolean wellFormedAdd(String[] args) {
+        return args.length == 4 || (args.length == 5 && forced(args));
+    }
+
+    // ====================================
+    // Whether 'add' was asked to skip the daily-task gate. Exact match: the
+    // one argument that changes what the command does is not worth leaving
+    // ambiguous, so '--FORCE' is a typo like any other and falls out of
+    // wellFormedAdd as a usage error rather than quietly skipping the gate.
+    // Package-private so it can be tested.
+    // ====================================
+    static boolean forced(String[] args) {
+        return args.length > 4 && args[4].equals(FORCE);
     }
 
     // ====================================
@@ -193,6 +265,10 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
                 names.add(player.getName());
             }
             return filter(names, args[1]);
+        }
+
+        if (args.length == 5 && sub.equals("add")) {
+            return filter(List.of(FORCE), args[4]);
         }
 
         if (args.length == 3 && sub.equals("add")) {

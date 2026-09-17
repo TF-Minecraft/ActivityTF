@@ -12,13 +12,17 @@ import java.io.IOException;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Predicate;
 
 // ====================================
 // players.yml. Everything lives in memory and is mutated on the main thread:
@@ -138,15 +142,17 @@ public class PlayerStore {
             return;
         }
 
-        players.put(uuid, parse(entry, config.barMax(), config.dailyMax()));
+        players.put(uuid, parse(entry, config.barMax(), config.dailyMax(), id -> config.activity(id) != null));
     }
 
     // ====================================
     // Test seam over the instance path above: the same "skip this row" rules -
     // a missing section or a key that is not a UUID - reported as null rather
     // than as a warning, so they can be exercised without a JavaPlugin.
+    // 'known' says which activity ids are loaded; any other task id is dropped.
     // ====================================
-    static PlayerData readEntry(ConfigurationSection root, String key, int barMax, int dailyMax) {
+    static PlayerData readEntry(ConfigurationSection root, String key, int barMax, int dailyMax,
+                                Predicate<String> known) {
         ConfigurationSection entry = root.getConfigurationSection(key);
         if (entry == null) {
             return null;
@@ -158,13 +164,14 @@ public class PlayerStore {
             return null;
         }
 
-        return parse(entry, barMax, dailyMax);
+        return parse(entry, barMax, dailyMax, known);
     }
 
     // ====================================
     // One entry's values, with the key already dealt with by the caller.
     // ====================================
-    private static PlayerData parse(ConfigurationSection entry, int barMax, int dailyMax) {
+    private static PlayerData parse(ConfigurationSection entry, int barMax, int dailyMax,
+                                    Predicate<String> known) {
         Map<String, Integer> daily = new HashMap<>();
         ConfigurationSection dailySection = entry.getConfigurationSection("daily");
         if (dailySection != null) {
@@ -183,8 +190,16 @@ public class PlayerStore {
         int claimedPoints = Math.max(0, Math.min(entry.getInt("claimed-points"), points));
         int dailyPoints = Math.max(0, Math.min(entry.getInt("daily-points"), dailyMax));
 
+        // A task whose activity was removed from config.yml is dropped; the
+        // rest keep their order and revealed state. The short draw is topped
+        // back up by PlayerData.ensureTasks the next time it is used, which is
+        // also what happens to a draw that was already in memory - both sides
+        // end up with the same rule.
+        List<String> tasks = new ArrayList<>(entry.getStringList("tasks"));
+        tasks.removeIf(known.negate());
+
         return new PlayerData(points, dailyPoints, entry.getString("week", ""), entry.getString("day", ""),
-            claimedPoints, daily);
+            claimedPoints, daily, tasks, entry.getStringList("revealed"));
     }
 
     // ====================================
@@ -355,8 +370,9 @@ public class PlayerStore {
             // and writing one per joiner grows the file for no reason.
             // dailyPoints() == 0 is implied by daily().isEmpty() (and vice
             // versa) but is checked explicitly too - belt and braces.
+            // Today's draw is kept too, or a restart would re-roll it.
             if (data.points() == 0 && data.claimedPoints() == 0 && data.dailyPoints() == 0
-                && data.daily().isEmpty()) {
+                && data.daily().isEmpty() && data.tasks().isEmpty()) {
                 continue;
             }
 
@@ -368,6 +384,11 @@ public class PlayerStore {
             yaml.set(path + ".claimed-points", data.claimedPoints());
             yaml.set(path + ".daily-points", data.dailyPoints());
             yaml.set(path + ".daily", new LinkedHashMap<>(data.daily()));
+            yaml.set(path + ".tasks", new ArrayList<>(data.tasks()));
+            // Sorted, because revealed() is a hash set whose iteration order
+            // would otherwise reshuffle this list between saves and churn the
+            // file for no change at all
+            yaml.set(path + ".revealed", new ArrayList<>(new TreeSet<>(data.revealed())));
         }
         return yaml;
     }

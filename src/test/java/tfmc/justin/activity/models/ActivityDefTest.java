@@ -9,11 +9,10 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 class ActivityDefTest {
 
     @Test
-    void iconPathAndGroupCanBeNull() {
-        ActivityDef def = new ActivityDef("vote", "Vote", Material.PAPER, null, 3, 2, 5, null);
+    void iconPathCanBeNull() {
+        ActivityDef def = new ActivityDef("vote", "Vote", Material.PAPER, null, 3, 2, 5);
 
         assertNull(def.iconPath());
-        assertNull(def.group());
         assertEquals("vote", def.id());
         assertEquals("Vote", def.display());
         assertEquals(Material.PAPER, def.icon());
@@ -23,11 +22,10 @@ class ActivityDefTest {
     }
 
     @Test
-    void theFullConstructorRoundTripsIconPathAndGroup() {
+    void theFullConstructorRoundTripsIconPath() {
         ActivityDef def = new ActivityDef("vote", "Vote", Material.PAPER, "m.item.ballot",
-            1, 1, 5, "voting");
+            1, 1, 5);
 
         assertEquals("m.item.ballot", def.iconPath());
-        assertEquals("voting", def.group());
     }
 }

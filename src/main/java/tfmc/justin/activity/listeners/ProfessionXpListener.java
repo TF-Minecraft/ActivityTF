@@ -55,7 +55,15 @@ public class ProfessionXpListener implements Listener {
         }
 
         UUID uuid = player.getUniqueId();
-        int amount = carry.add(uuid, activityId, event.getExperience());
+        // A hidden or undrawn task must not bank a fraction either - and
+        // whatever it banked while it was revealed is dropped here, so it
+        // cannot pay out on a later day the task comes back
+        if (!manager.isTracked(uuid, activityId)) {
+            carry.forget(uuid, activityId);
+            return;
+        }
+        int amount = carry.add(uuid, activityId, event.getExperience(),
+            manager.getConfiguration().currentKeys());
         if (amount > 0) {
             manager.recordAction(uuid, activityId, amount);
         }

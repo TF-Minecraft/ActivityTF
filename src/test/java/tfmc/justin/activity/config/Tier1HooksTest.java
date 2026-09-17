@@ -102,8 +102,6 @@ class Tier1HooksTest {
                     "activities." + id + ".station should be '<station>/<recipe>', was: " + station);
             assertTrue(claimed.add(station),
                     "two station activities claim '" + station + "' - only the last one would be fed");
-            assertEquals("stations", activities.getString(id + ".group"),
-                    "activities." + id + ".group should be 'stations'");
         }
     }
 

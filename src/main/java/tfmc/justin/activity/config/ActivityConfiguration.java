@@ -8,7 +8,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 import tfmc.justin.activity.hooks.TLibsItems;
 import tfmc.justin.activity.models.ActivityDef;
-import tfmc.justin.activity.models.GroupDef;
+import tfmc.justin.activity.models.PlayerData;
 import tfmc.justin.activity.models.RewardEntry;
 
 import tfmc.justin.activity.utils.ItemPath;
@@ -18,7 +18,6 @@ import tfmc.justin.activity.utils.Weeks;
 import java.time.DayOfWeek;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -38,7 +37,7 @@ public class ActivityConfiguration {
     private final Messages messages;
 
     // ====================================
-    // Insertion-ordered: the GUI lays activities out in config order.
+    // Insertion-ordered, the order config.yml lists them in.
     // Volatile and replaced wholesale on reload rather than cleared and
     // refilled, because PlaceholderAPI reads it from other threads and must
     // never see a half-rebuilt map.
@@ -46,18 +45,18 @@ public class ActivityConfiguration {
     private volatile Map<String, ActivityDef> activities = new LinkedHashMap<>();
 
     // ====================================
-    // Insertion-ordered for the same reason: the GUI gives each group a tile
-    // in the grid, in config order. Loaded before the activities, which are
-    // validated against it.
-    // ====================================
-    private volatile Map<String, GroupDef> groups = new LinkedHashMap<>();
-
-    // ====================================
     // Crafted material -> the activity id its 'craft:' key belongs to. Built
     // once here so CraftListener answers an event with one map lookup instead
     // of walking every activity. Replaced wholesale on reload, same as above.
     // ====================================
     private volatile Map<Material, String> craftActivities = new HashMap<>();
+
+    // ====================================
+    // The ids marked 'daily-guaranteed: true', in config order - the ones the
+    // daily draw always hands out. Immutable and replaced wholesale on reload
+    // for the same reason as the maps around it.
+    // ====================================
+    private volatile List<String> guaranteedActivities = List.of();
 
     // ====================================
     // The same thing for the 'craft:' keys written as a TLibs m.<type>.<id>
@@ -154,10 +153,9 @@ public class ActivityConfiguration {
         resetDay = parseDay(config.getString("reset.day", "MONDAY"));
         resetHour = Math.max(0, Math.min(23, config.getInt("reset.hour", 0)));
 
-        // Reset here rather than in loadActivities: both sections can carry an
-        // m. path and the one warning about them is logged after both are read
+        // Reset here rather than in loadActivities: the one warning about m.
+        // paths is logged after the section is read
         pluginPathConfigured = false;
-        loadGroups(config.getConfigurationSection("groups"));
         loadActivities(config.getConfigurationSection("activities"));
 
         // ====================================
@@ -200,54 +198,6 @@ public class ActivityConfiguration {
         warnIfBarUnreachable();
     }
 
-    // ====================================
-    // The GUI's group tiles. A group carries nothing but a tile item, so
-    // there is nothing here that can be wrong beyond an icon - only the count
-    // is checked, since the grid has room for GroupDef.MAX_GROUPS of them.
-    // Ids are lower-cased and trimmed here, and the same is done to an
-    // activity's 'group' before it is looked up below, so 'Server' and
-    // 'server' are the same group rather than a silent mismatch.
-    // ====================================
-    private void loadGroups(ConfigurationSection section) {
-        Map<String, GroupDef> loaded = new LinkedHashMap<>();
-        if (section == null) {
-            plugin.getLogger().warning("config.yml has no 'groups' section - every activity belongs to an"
-                + " unknown group and the GUI will be empty.");
-            groups = loaded;
-            return;
-        }
-
-        for (String id : section.getKeys(false)) {
-            ConfigurationSection entry = section.getConfigurationSection(id);
-            if (entry == null) {
-                plugin.getLogger().warning("groups." + id + " is not a section - ignoring it.");
-                continue;
-            }
-
-            String key = id.trim().toLowerCase(Locale.ROOT);
-            if (loaded.containsKey(key)) {
-                plugin.getLogger().warning("groups." + id + " collides with an earlier group '" + key
-                    + "' after lower-casing - ignoring it.");
-                continue;
-            }
-            String iconValue = entry.getString("material", "PAPER");
-            String path = "groups." + id + ".material";
-            loaded.put(key, new GroupDef(
-                key,
-                entry.getString("display", id),
-                ItemPath.isPluginPath(iconValue) ? Material.PAPER : material(iconValue, path),
-                iconPath(iconValue, path)
-            ));
-        }
-
-        if (loaded.size() > GroupDef.MAX_GROUPS) {
-            plugin.getLogger().warning("config.yml defines " + loaded.size() + " groups but the GUI has room for "
-                + GroupDef.MAX_GROUPS + " - the rest are not shown.");
-        }
-
-        groups = loaded;
-    }
-
     private void loadActivities(ConfigurationSection section) {
         if (section == null) {
             plugin.getLogger().warning("config.yml has no 'activities' section - the bar can never fill.");
@@ -256,6 +206,7 @@ public class ActivityConfiguration {
             craftPaths = List.of();
             professionActivities = Map.of();
             stationActivities = Map.of();
+            guaranteedActivities = List.of();
             return;
         }
 
@@ -264,32 +215,11 @@ public class ActivityConfiguration {
         List<Map.Entry<String, String>> paths = new ArrayList<>();
         Map<String, String> professions = new LinkedHashMap<>();
         Map<String, String> stations = new LinkedHashMap<>();
+        List<String> guaranteed = new ArrayList<>();
         for (String id : section.getKeys(false)) {
             ConfigurationSection entry = section.getConfigurationSection(id);
             if (entry == null) {
-                plugin.getLogger().warning("Activity '" + id + "' is not a configuration section, so it has no"
-                    + " 'group' - the GUI has nowhere to draw it, so it is dropped entirely and nothing will ever"
-                    + " be credited to it.");
-                continue;
-            }
-
-            // ====================================
-            // The GUI lays activities out group by group, so an activity with
-            // no group, or one naming a group that does not exist, has nowhere
-            // to be drawn. Checked first so it is reported even when the
-            // activity also fails a later check, rather than being dropped
-            // silently once the first 'continue' below fires.
-            // ====================================
-            String group = entry.getString("group");
-            if (group == null || group.isBlank()) {
-                plugin.getLogger().warning("Activity '" + id + "' has no 'group' - the GUI has nowhere to draw"
-                    + " it, so it is dropped entirely and nothing will ever be credited to it.");
-                continue;
-            }
-            String groupKey = group.trim().toLowerCase(Locale.ROOT);
-            if (!groups.containsKey(groupKey)) {
-                plugin.getLogger().warning("Activity '" + id + "' is in group '" + Utils.safeForLog(group)
-                    + "', which is not defined under 'groups' - the GUI has nowhere to draw it, so it is"
+                plugin.getLogger().warning("Activity '" + id + "' is not a configuration section - it is"
                     + " dropped entirely and nothing will ever be credited to it.");
                 continue;
             }
@@ -319,8 +249,7 @@ public class ActivityConfiguration {
                 iconPath,
                 Math.max(1, wholeNumber(entry, id, "every", 1)),
                 points,
-                dailyCap,
-                groupKey
+                dailyCap
             ));
 
             loadCraft(crafts, paths, entry.getString("craft"), id);
@@ -346,19 +275,23 @@ public class ActivityConfiguration {
             }
 
             loadStation(stations, entry, id);
+
+            if (flag(entry, id, "daily-guaranteed", false)) {
+                guaranteed.add(id);
+            }
         }
 
         // ====================================
-        // A group's page has one grid, so anything past GroupDef.MAX_ACTIVITIES
-        // in it is dropped from the GUI. A startup-time mistake, said once at
-        // startup - not once per /activity.
+        // More guaranteed activities than there are task slots: the draw can
+        // only hold TASKS_PER_DAY of them, so every other activity in the file
+        // becomes undrawable. Worth one line at load - it is almost certainly
+        // not what the admin meant.
         // ====================================
-        for (String groupId : groups.keySet()) {
-            long size = loaded.values().stream().filter(def -> groupId.equals(def.group())).count();
-            if (size > GroupDef.MAX_ACTIVITIES) {
-                plugin.getLogger().warning("Group '" + groupId + "' has " + size + " activities but its GUI page"
-                    + " has room for " + GroupDef.MAX_ACTIVITIES + " - the rest are not shown.");
-            }
+        if (guaranteed.size() > PlayerData.TASKS_PER_DAY) {
+            plugin.getLogger().warning(guaranteed.size() + " activities are marked daily-guaranteed but only "
+                + PlayerData.TASKS_PER_DAY + " tasks are handed out a day - every draw is "
+                + PlayerData.TASKS_PER_DAY + " of them picked at random and no other activity can"
+                + " ever be drawn.");
         }
 
         // One assignment publishes the whole set
@@ -367,6 +300,7 @@ public class ActivityConfiguration {
         craftPaths = List.copyOf(paths);
         professionActivities = professions;
         stationActivities = stations;
+        guaranteedActivities = List.copyOf(guaranteed);
     }
 
     // ====================================
@@ -546,6 +480,20 @@ public class ActivityConfiguration {
         return entry.getInt(key, fallback);
     }
 
+    // ====================================
+    // Optional boolean activity key. A value that is not a boolean is the
+    // admin's typo - it is named and the fallback is used, the same way
+    // wholeNumber() handles a non-number.
+    // ====================================
+    private boolean flag(ConfigurationSection entry, String id, String key, boolean fallback) {
+        if (entry.contains(key) && !entry.isBoolean(key)) {
+            plugin.getLogger().warning("activities." + id + "." + key + " is not true or false ('"
+                + entry.get(key) + "') - using " + fallback + ".");
+            return fallback;
+        }
+        return entry.getBoolean(key, fallback);
+    }
+
     // A bar of 0 glyphs is invisible and one of 5000 does not fit in a lore
     // line, so the value is pinned to something that can actually be rendered
     private int barLength(int length) {
@@ -636,32 +584,79 @@ public class ActivityConfiguration {
     }
 
     // ====================================
-    // Seven days of every capped activity, itself capped by bar.daily-max, is
-    // the ceiling - if that is under the first milestone nothing can ever be
-    // claimed. bar.daily-max alone bounds every day even when an activity is
-    // uncapped, so it is always the fallback ceiling.
+    // A player can only earn from the TASKS_PER_DAY activities drawn for them,
+    // so the daily ceiling is the worst draw they can get: the lowest
+    // TASKS_PER_DAY daily-caps, itself capped by bar.daily-max. Seven days of
+    // that is the weekly ceiling - if it is under the first milestone, an
+    // unlucky week can never be claimed on.
+    //
+    // Too few capped activities to fill a draw means an uncapped one is always
+    // in it, and then only bar.daily-max bounds the day. Fewer loaded
+    // activities than TASKS_PER_DAY still bounds, since the draw is then all
+    // of them.
     // ====================================
     private void warnIfBarUnreachable() {
-        long dailyCapSum = 0;
-        boolean allCapped = true;
+        List<Integer> caps = new ArrayList<>();
         for (ActivityDef def : activities.values()) {
-            if (def.dailyCap() == 0) {
-                allCapped = false;
-                break;
+            if (def.dailyCap() > 0) {
+                caps.add(def.dailyCap());
             }
-            dailyCapSum += def.dailyCap();
         }
 
-        long dailyCeiling = allCapped ? Math.min(dailyCapSum, dailyMax) : dailyMax;
+        String warning = unreachableWarning(caps, activities.size(), dailyMax, milestones.get(0));
+        if (warning != null) {
+            plugin.getLogger().warning(warning);
+        }
+    }
+
+    // ====================================
+    // The warning text, or null when the first reward is reachable. Pure so
+    // both the arithmetic and what it says about it can be tested.
+    //
+    // The bound is named off what the caps alone would allow, so a sum that
+    // lands exactly on bar.daily-max is not reported as bound by daily-max
+    // alone - both numbers have to change to lift it. The task count is the
+    // draw's real size, which is every loaded activity when fewer than
+    // TASKS_PER_DAY are loaded.
+    // ====================================
+    static String unreachableWarning(List<Integer> dailyCaps, int activityCount, int dailyMax,
+                                     int firstMilestone) {
+        long capCeiling = dailyCeiling(dailyCaps, activityCount, Integer.MAX_VALUE);
+        long dailyCeiling = Math.min(capCeiling, dailyMax);
         long weekly = dailyCeiling * 7;
-        String boundBy = allCapped && dailyCapSum <= dailyMax ? "per-activity daily-caps" : "bar.daily-max";
-
-        int first = milestones.get(0);
-        if (weekly < first) {
-            plugin.getLogger().warning("All activities together are capped at " + weekly
-                + " points a week (bound by " + boundBy + ") - nobody can reach the first reward at "
-                + first + ".");
+        if (weekly >= firstMilestone) {
+            return null;
         }
+
+        String boundBy = capCeiling < dailyMax ? "per-activity daily-caps"
+            : capCeiling > dailyMax ? "bar.daily-max"
+            : "per-activity daily-caps and bar.daily-max";
+
+        return "A day's " + Math.min(activityCount, PlayerData.TASKS_PER_DAY) + " drawn tasks are capped at "
+            + dailyCeiling + " points, so " + weekly + " a week (bound by " + boundBy + ") - a player"
+            + " cannot count on reaching the first reward at " + firstMilestone + ".";
+    }
+
+    // ====================================
+    // The arithmetic above, pure so it can be tested: the daily-caps of the
+    // capped activities (in any order), how many activities are loaded in
+    // total, and bar.daily-max. Package-private for the test.
+    // ====================================
+    static long dailyCeiling(List<Integer> dailyCaps, int activityCount, int dailyMax) {
+        List<Integer> caps = new ArrayList<>(dailyCaps);
+        caps.sort(null);
+
+        // Too few capped activities to fill a draw on their own: every draw
+        // holds at least one uncapped activity, so only bar.daily-max bounds it
+        if (caps.size() < PlayerData.TASKS_PER_DAY && caps.size() != activityCount) {
+            return dailyMax;
+        }
+
+        long sum = 0;
+        for (int i = 0; i < Math.min(PlayerData.TASKS_PER_DAY, caps.size()); i++) {
+            sum += caps.get(i);
+        }
+        return Math.min(sum, dailyMax);
     }
 
     // ====================================
@@ -728,13 +723,14 @@ public class ActivityConfiguration {
         return new ArrayList<>(activities.values());
     }
 
-    // Insertion-ordered, one GUI tile each
-    public Map<String, GroupDef> groups() {
-        return Collections.unmodifiableMap(groups);
-    }
-
     public ActivityDef activity(String id) {
         return activities.get(id);
+    }
+
+    // The ids marked 'daily-guaranteed', in config order. Every one of them
+    // is in every player's draw for the day.
+    public List<String> guaranteed() {
+        return guaranteedActivities;
     }
 
     // ====================================

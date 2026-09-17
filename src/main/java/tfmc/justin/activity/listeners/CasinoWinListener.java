@@ -37,7 +37,16 @@ public class CasinoWinListener implements Listener {
             return;
         }
 
-        int denar = carry.add(event.getPlayer().getUniqueId(), "casino_win", event.getProfit());
+        // A hidden or undrawn task must not bank a fraction either - and
+        // whatever it banked while it was revealed is dropped here, so it
+        // cannot pay out on a later day the task comes back
+        if (!manager.isTracked(event.getPlayer().getUniqueId(), "casino_win")) {
+            carry.forget(event.getPlayer().getUniqueId(), "casino_win");
+            return;
+        }
+
+        int denar = carry.add(event.getPlayer().getUniqueId(), "casino_win", event.getProfit(),
+            manager.getConfiguration().currentKeys());
         if (denar > 0) {
             manager.recordAction(event.getPlayer().getUniqueId(), "casino_win", denar);
         }

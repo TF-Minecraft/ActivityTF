@@ -2,41 +2,19 @@ reset:
   day: MONDAY      # server timezone
   hour: 0          # 0-23
 
-# The /activity window shows one clickable tile per group below; clicking one
-# opens a page of that group's activities. Groups are shown in the order
-# written here, activities in the order written under 'activities'.
-# At most 28 groups and at most 28 activities per group fit; anything past
-# that is reported at load and simply not drawn.
-# display: the tile's name, and the page's title. material: its icon, same
-# three forms as an activity's material below.
-# Group ids are case-insensitive: an activity's 'group: Server' matches a
-# 'server:' key here.
-groups:
-  server:
-    display: "#e6ca40&lServer"
-    material: NETHER_STAR
-  crafting:
-    display: "#e6ca40&lCrafting"
-    material: CRAFTING_TABLE
-  stations:
-    display: "#e6ca40&lStations"
-    material: BLAST_FURNACE
-  roleplay:
-    display: "#e6ca40&lRoleplay"
-    material: NAME_TAG
-  factions:
-    display: "#e6ca40&lFactions"
-    material: IRON_SWORD
-
+# Seven of these are drawn at random for each player every day and shown in
+# /activity; a task earns nothing until the player clicks it to reveal it.
 # Every 'every' actions → earn 'points'. 'daily-cap' = most points one
 # activity can add per day (0 = no cap). Bar caps at bar.max; bar.daily-max
 # caps what can reach it on any single day, first.
-# vote: one point per vote site.
+# daily-guaranteed: optional, default false. An activity marked true is in
+#   every player's draw every day, at a random slot like any other task; the
+#   remaining slots are filled at random as usual. Marking more than seven
+#   activities guaranteed is reported at load - the draw would then be seven of
+#   them and nothing else could ever be drawn.
+# vote: one point per vote site, and always one of the day's tasks.
 # playtime: 'every' counts minutes online - see the playtime section at the
 #   bottom, and read what afk-minutes does and does not do before relying on it.
-# group: required, one of the ids under 'groups' above - it is the page the
-#   activity is drawn on. An activity with no group, or with one that is not
-#   defined, is reported at load and left out entirely.
 # material: the GUI icon, and craft: the item this activity counts crafts of.
 #   Both accept the same three forms:
 #     IRON_INGOT        a bare vanilla Material name
@@ -99,35 +77,31 @@ groups:
 #   the extra 'station' is reported at load and ignored.
 activities:
   vote:
-    group: server
     display: "#e6ca40&lVoting"
     material: v.paper
     every: 1
     points: 1
     daily-cap: 5
+    daily-guaranteed: true
   geiger:
-    group: roleplay
     display: "#e6ca40&lRadioactive Sources"
     material: SPYGLASS
     every: 3
     points: 1
     daily-cap: 1
   archaeology_find:
-    group: roleplay
     display: "#e6ca40&lArchaeology"
     material: BRUSH
     every: 3
     points: 1
     daily-cap: 2
   instrument:
-    group: roleplay
     display: "#e6ca40&lMusical Instruments"
     material: NOTE_BLOCK
     every: 20
     points: 1
     daily-cap: 1
   playtime:
-    group: server
     display: "#e6ca40&lTime Played"
     material: CLOCK
     every: 60          # 60 counted minutes => 1 point
@@ -135,7 +109,6 @@ activities:
     daily-cap: 3
   # MarketBlock: denar earned selling to the market block ('every' is denar)
   market_sale:
-    group: server
     display: "#e6ca40&lMarket Sales"
     material: EMERALD
     every: 25          # 25 denar earned => 1 point
@@ -143,14 +116,12 @@ activities:
     daily-cap: 2
   # Games: denar won at the card tables ('every' is denar, net of stake, before tax)
   casino_win:
-    group: server
     display: "#e6ca40&lCasino Winnings"
     material: GOLD_NUGGET
     every: 25
     points: 1
     daily-cap: 2
   craft_diamond_block:
-    group: crafting
     display: "#e6ca40&lCraft Diamond Blocks"
     material: DIAMOND_BLOCK
     every: 3
@@ -158,7 +129,6 @@ activities:
     daily-cap: 1
     craft: DIAMOND_BLOCK
   craft_golden_carrot:
-    group: crafting
     display: "#e6ca40&lCraft Golden Carrots"
     material: v.golden_carrot
     every: 16
@@ -166,7 +136,6 @@ activities:
     daily-cap: 1
     craft: GOLDEN_CARROT
   craft_anvil:
-    group: crafting
     display: "#e6ca40&lCraft Anvils"
     material: ANVIL
     every: 1
@@ -175,7 +144,6 @@ activities:
     craft: ANVIL
   # RPCharacters: in-character chat messages
   ic_chat:
-    group: roleplay
     display: "#e6ca40&lRoleplay Chat"
     material: WRITABLE_BOOK
     every: 30
@@ -183,7 +151,6 @@ activities:
     daily-cap: 2
   # RPCharacters: injured (as the target, not the attacker)
   injured:
-    group: roleplay
     display: "#e6ca40&lInjure Yourself"
     material: BONE
     every: 1
@@ -191,7 +158,6 @@ activities:
     daily-cap: 5
   # InteractibleFurniture: furniture placed in the world
   furniture_place:
-    group: roleplay
     display: "#e6ca40&lPlace Furniture"
     material: BARREL
     every: 5
@@ -199,7 +165,6 @@ activities:
     daily-cap: 1
   # VFBuilders: a vehicle finished at a construction station
   vehicle_build:
-    group: roleplay
     display: "#e6ca40&lBuild Vehicles"
     material: MINECART
     every: 1
@@ -207,7 +172,6 @@ activities:
     daily-cap: 2
   # SimpleFactions: every participant of every ended battle
   battle_joined:
-    group: factions
     display: "#e6ca40&lFaction Battles"
     material: IRON_SWORD
     every: 1
@@ -215,7 +179,6 @@ activities:
     daily-cap: 3
   # AdvancedCrafting: items and alloys crafted at its stations
   advcraft_item:
-    group: crafting
     display: "#e6ca40&lAdvanced Crafting"
     material: SMITHING_TABLE
     every: 5
@@ -223,7 +186,6 @@ activities:
     daily-cap: 2
   # Cooking: dishes finished at pots, stations and crafting boards
   cook_dish:
-    group: crafting
     display: "#e6ca40&lCook Dishes"
     material: COOKED_BEEF
     every: 5
@@ -231,7 +193,6 @@ activities:
     daily-cap: 2
   # RPCharacters: profession upgrades purchased
   profession_upgrade:
-    group: crafting
     display: "#e6ca40&lProfession Upgrade"
     material: EXPERIENCE_BOTTLE
     every: 1
@@ -240,7 +201,6 @@ activities:
   # MMOCore professions - these need MMOCore installed to be fed; without it
   # they show in /activity but can never be filled.
   profession_crafter:
-    group: crafting
     display: "#e6ca40&lCrafter XP"
     material: CRAFTING_TABLE
     every: 500       # 500 profession XP → 1 point
@@ -248,7 +208,6 @@ activities:
     daily-cap: 2
     profession: crafter
   profession_forager:
-    group: crafting
     display: "#e6ca40&lForager XP"
     material: WHEAT
     every: 500
@@ -256,7 +215,6 @@ activities:
     daily-cap: 2
     profession: forager
   profession_herborist:
-    group: crafting
     display: "#e6ca40&lHerborist XP"
     material: FERN
     every: 500
@@ -265,7 +223,6 @@ activities:
     profession: herborist
   # Ingot station
   ingot_flint:
-    group: stations
     display: "#e6ca40&lExtract Flint"
     material: FLINT
     every: 3
@@ -273,7 +230,6 @@ activities:
     daily-cap: 1
     station: ingot-station/flint
   ingot_coal:
-    group: stations
     display: "#e6ca40&lMake Coal"
     material: COAL
     every: 3
@@ -282,7 +238,6 @@ activities:
     station: ingot-station/coal
   # Tool station
   tool_iron_pickaxe:
-    group: stations
     display: "#e6ca40&lForge Iron Pickaxes"
     material: IRON_PICKAXE
     every: 1
@@ -290,7 +245,6 @@ activities:
     daily-cap: 1
     station: tool-station/iron-pickaxe
   tool_iron_axe:
-    group: stations
     display: "#e6ca40&lForge Iron Axes"
     material: IRON_AXE
     every: 1
@@ -299,7 +253,6 @@ activities:
     station: tool-station/iron-axe
   # Block station
   block_andesite:
-    group: stations
     display: "#e6ca40&lCut Andesite"
     material: ANDESITE
     every: 2
@@ -307,7 +260,6 @@ activities:
     daily-cap: 1
     station: block-station/andesite
   block_clay:
-    group: stations
     display: "#e6ca40&lCut Clay"
     material: CLAY
     every: 2
@@ -316,7 +268,6 @@ activities:
     station: block-station/clay
   # Forester station
   forester_arrow:
-    group: stations
     display: "#e6ca40&lFletch Arrows"
     material: ARROW
     every: 2
@@ -324,7 +275,6 @@ activities:
     daily-cap: 1
     station: forester-station/arrow
   forester_string:
-    group: stations
     display: "#e6ca40&lSpin String"
     material: STRING
     every: 2
@@ -333,7 +283,6 @@ activities:
     station: forester-station/string
   # Alchemy station
   alchemy_minor_health:
-    group: stations
     display: "#e6ca40&lBrew Minor Health"
     material: POTION
     every: 2
@@ -341,7 +290,6 @@ activities:
     daily-cap: 1
     station: alchemy-station/minor-health
   alchemy_powder:
-    group: stations
     display: "#e6ca40&lGrind Alchemy Powder"
     material: GLOWSTONE_DUST
     every: 2
@@ -350,7 +298,6 @@ activities:
     station: alchemy-station/alchemy-powder
   # Instrument station
   instrument_iron_lute:
-    group: stations
     display: "#e6ca40&lBuild Iron Lutes"
     material: NOTE_BLOCK
     every: 1
@@ -358,7 +305,6 @@ activities:
     daily-cap: 1
     station: instrument-station/iron-lute
   instrument_steel_lute:
-    group: stations
     display: "#e6ca40&lBuild Steel Lutes"
     material: JUKEBOX
     every: 1
@@ -367,7 +313,6 @@ activities:
     station: instrument-station/steel-lute
   # Research station
   research_scribe_paper:
-    group: stations
     display: "#e6ca40&lScribe Paper"
     material: PAPER
     every: 2
@@ -375,7 +320,6 @@ activities:
     daily-cap: 1
     station: research-station/scribe-paper
   research_bronze:
-    group: stations
     display: "#e6ca40&lResearch Bronze"
     material: COPPER_INGOT
     every: 1
@@ -384,7 +328,6 @@ activities:
     station: research-station/r-bronze
   # Medicine station
   medicine_herb_mixture:
-    group: stations
     display: "#e6ca40&lMix Herbs"
     material: FERN
     every: 2
@@ -392,7 +335,6 @@ activities:
     daily-cap: 1
     station: medicine-station/herb-mixture
   medicine_splint:
-    group: stations
     display: "#e6ca40&lMake Splints"
     material: STICK
     every: 1
@@ -401,7 +343,6 @@ activities:
     station: medicine-station/splint
   # Engineer station
   engineer_bullet_box:
-    group: stations
     display: "#e6ca40&lPack Bullet Boxes"
     material: IRON_NUGGET
     every: 1
@@ -409,7 +350,6 @@ activities:
     daily-cap: 1
     station: engineer-station/bullet-box
   engineer_fuel:
-    group: stations
     display: "#e6ca40&lRefine Fuel"
     material: COAL_BLOCK
     every: 2
@@ -418,7 +358,6 @@ activities:
     station: engineer-station/fuel
   # Fishing station
   fishing_rod:
-    group: stations
     display: "#e6ca40&lMake Fishing Rods"
     material: FISHING_ROD
     every: 1
@@ -426,7 +365,6 @@ activities:
     daily-cap: 1
     station: fishing-station/fishing-rod
   fishing_iron_hook:
-    group: stations
     display: "#e6ca40&lForge Iron Hooks"
     material: TRIPWIRE_HOOK
     every: 2
@@ -435,7 +373,6 @@ activities:
     station: fishing-station/iron-hook
   # Magic station
   magic_basic_handle:
-    group: stations
     display: "#e6ca40&lCarve Basic Handles"
     material: STICK
     every: 1
@@ -443,7 +380,6 @@ activities:
     daily-cap: 1
     station: magic-station/basic-handle
   magic_iron_core:
-    group: stations
     display: "#e6ca40&lCast Iron Cores"
     material: IRON_INGOT
     every: 1
@@ -452,7 +388,6 @@ activities:
     station: magic-station/iron-core
   # Animal station
   animal_universal_feed:
-    group: stations
     display: "#e6ca40&lMix Universal Feed"
     material: WHEAT
     every: 2
@@ -460,7 +395,6 @@ activities:
     daily-cap: 1
     station: animal-station/universal-feed
   animal_whistle:
-    group: stations
     display: "#e6ca40&lCraft Animal Whistles"
     material: GOAT_HORN
     every: 1

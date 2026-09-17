@@ -9,6 +9,7 @@ import tfmc.justin.activity.config.Messages;
 import tfmc.justin.activity.models.ActivityDef;
 import tfmc.justin.activity.models.PlayerData;
 import tfmc.justin.activity.models.RecordResult;
+import tfmc.justin.activity.models.Recorded;
 import tfmc.justin.activity.models.RewardEntry;
 import tfmc.justin.activity.store.PlayerStore;
 import tfmc.justin.activity.utils.Utils;
@@ -160,29 +161,55 @@ public class ActivityManager {
     }
 
     // ====================================
-    // Record progress towards an activity. Returns false for an unknown id or
-    // a non-positive amount, so the admin command can say which it was;
-    // callers that cannot act on it (events, the API) just ignore the result.
+    // Record progress towards an activity. What came of it is returned so the
+    // admin command can say so - an unknown id, a refused gate and a cap that
+    // swallowed the points all read as failures to an admin, and only this
+    // method can tell them apart. Callers that cannot act on it (events, the
+    // API) just ignore the result.
+    //
+    // The daily-task gate lives here: every listener, the playtime tick and
+    // the API come through this method, and an activity that is not one of
+    // the player's revealed tasks today records nothing at all.
     // ====================================
-    public boolean recordAction(UUID uuid, String activityId, int amount) {
+    public Recorded recordAction(UUID uuid, String activityId, int amount) {
+        return record(uuid, activityId, amount, true);
+    }
+
+    // /activity add --force only: skips the daily-task gate on purpose, so an
+    // admin can credit any activity while testing, drawn or not
+    public Recorded recordActionUngated(UUID uuid, String activityId, int amount) {
+        return record(uuid, activityId, amount, false);
+    }
+
+    private Recorded record(UUID uuid, String activityId, int amount, boolean gated) {
         ActivityDef def = config.activity(activityId);
         if (def == null || amount <= 0) {
-            return false;
+            return Recorded.UNKNOWN;
         }
 
-        PlayerData data = store.get(uuid);
+        // ====================================
+        // The gated path never draws and never creates a row: a listener
+        // firing for a player who has not opened the GUI today must not pin
+        // that player in players.yml forever. No draw yet means no revealed
+        // task, which means nothing to record.
+        // ====================================
+        PlayerData data = gated ? store.rolled(uuid) : store.get(uuid);
+        if (gated && (data == null || !data.isRevealed(activityId))) {
+            return Recorded.NOT_A_TASK;
+        }
+
         RecordResult result = data.record(amount, def, config.barMax(), config.dailyMax(), config.milestones());
         store.markDirty();
 
         // A full bar or a met daily cap awards nothing, and "+0" is worse
         // than silence
         if (result.pointsAwarded() <= 0) {
-            return true;
+            return result.outcome();
         }
 
         Player player = Bukkit.getPlayer(uuid);
         if (player == null) {
-            return true;
+            return result.outcome();
         }
 
         Messages messages = config.messages();
@@ -197,7 +224,77 @@ public class ActivityManager {
             player.sendMessage(messages.get("reward-ready"));
             playSound(player, config.barCompleteSound());
         }
-        return true;
+        return result.outcome();
+    }
+
+    // ====================================
+    // Whether this activity would earn anything for this player right now:
+    // it is loaded and one of their revealed tasks today. Listeners that
+    // carry fractions ask this first, so no fraction banks up for a task
+    // that is hidden or was never drawn. Like the record path it neither
+    // draws nor creates a row - a player with no draw yet is simply false.
+    // ====================================
+    public boolean isTracked(UUID uuid, String activityId) {
+        PlayerData data = store.rolled(uuid);
+        return config.activity(activityId) != null && data != null && data.isRevealed(activityId);
+    }
+
+    // ====================================
+    // The player's data with today's draw made good: drawn if this is the
+    // first time today it is needed, and topped back up if a reload removed
+    // one of the activities in it. Only the GUI paths (open and reveal) come
+    // here, so no listener event can create an entry.
+    // ====================================
+    public PlayerData tasks(UUID uuid) {
+        PlayerData data = store.get(uuid);
+        if (ensureTasks(data)) {
+            store.markDirty();
+        }
+        return data;
+    }
+
+    private boolean ensureTasks(PlayerData data) {
+        return data.ensureTasks(config.activities().stream().map(ActivityDef::id).toList(),
+            config.guaranteed(), ThreadLocalRandom.current());
+    }
+
+    // ====================================
+    // What a reveal click did: the id actually revealed (null when the slot
+    // was empty, already revealed, or holds an activity a reload has since
+    // removed), and whether making the draw good moved the tasks around.
+    // A caller drawing the draw has to repaint every slot when it did - the
+    // slot the player clicked is no longer the one they saw.
+    // ====================================
+    public record Reveal(String revealedId, boolean drawChanged) {
+    }
+
+    // ====================================
+    // Reveals the task in this slot (0-based).
+    //
+    // The id in the slot is read BEFORE the draw is made good, and it is that
+    // id that gets revealed: making the draw good can compact and top up the
+    // list, and applying the slot index afterwards would reveal whatever
+    // slid into the slot rather than what the player clicked. An id the
+    // top-up dropped (its activity is gone) reveals nothing. A slot that held
+    // nothing to begin with - a player whose draw is being made for the first
+    // time here - is still taken by index; there was nothing else to mean.
+    // ====================================
+    public Reveal reveal(UUID uuid, int slot) {
+        PlayerData data = store.get(uuid);
+        List<String> before = data.tasks();
+        String clicked = slot >= 0 && slot < before.size() ? before.get(slot) : null;
+
+        boolean drawChanged = ensureTasks(data);
+        int index = clicked == null ? slot : data.tasks().indexOf(clicked);
+
+        boolean revealed = index >= 0 && index < data.tasks().size()
+            && config.activity(data.tasks().get(index)) != null
+            && data.reveal(index);
+
+        if (drawChanged || revealed) {
+            store.markDirty();
+        }
+        return new Reveal(revealed ? data.tasks().get(index) : null, drawChanged);
     }
 
     // ====================================

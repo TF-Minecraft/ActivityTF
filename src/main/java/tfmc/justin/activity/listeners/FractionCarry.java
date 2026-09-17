@@ -1,5 +1,7 @@
 package tfmc.justin.activity.listeners;
 
+import tfmc.justin.activity.config.ActivityConfiguration;
+
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.HashMap;
@@ -29,9 +31,26 @@ class FractionCarry {
 
     private final Map<UUID, Map<String, BigDecimal>> carry = new HashMap<>();
 
+    // The week and day every banked fraction belongs to - see add()
+    private ActivityConfiguration.Keys keys;
+
+    // ====================================
     // Adds this event's value to the player's leftover for the activity and
-    // returns the whole points to record now (0 if there are none yet)
-    int add(UUID uuid, String activityId, double value) {
+    // returns the whole points to record now (0 if there are none yet).
+    //
+    // Fractions never cross a rollover: the daily counters they feed are wiped
+    // at one, and a player who stays online through it would otherwise carry
+    // the old cycle's sub-point into the new one. Both keys are watched, not
+    // just the day: the week flips at the configured reset hour, which wipes
+    // the counters while the day key is unchanged. The first event after
+    // either key moves drops every banked fraction, for every player.
+    // ====================================
+    int add(UUID uuid, String activityId, double value, ActivityConfiguration.Keys currentKeys) {
+        if (!currentKeys.equals(keys)) {
+            carry.clear();
+            keys = currentKeys;
+        }
+
         Map<String, BigDecimal> byActivity = carry.computeIfAbsent(uuid, key -> new HashMap<>());
         Credit credit = credit(byActivity.getOrDefault(activityId, BigDecimal.ZERO), value);
         byActivity.put(activityId, credit.exact());
@@ -41,6 +60,19 @@ class FractionCarry {
     // Nothing to carry for a player who is gone
     void forget(UUID uuid) {
         carry.remove(uuid);
+    }
+
+    // ====================================
+    // Dropped whenever the daily-task gate refuses the activity, which is the
+    // cheapest way to keep a fraction banked while the task was revealed from
+    // paying out days later when it is drawn and revealed again - the gate is
+    // asked on every event, so this runs on the first refused one.
+    // ====================================
+    void forget(UUID uuid, String activityId) {
+        Map<String, BigDecimal> byActivity = carry.get(uuid);
+        if (byActivity != null && byActivity.remove(activityId) != null && byActivity.isEmpty()) {
+            carry.remove(uuid);
+        }
     }
 
     // Whole points to record now, and the fraction left over for next time

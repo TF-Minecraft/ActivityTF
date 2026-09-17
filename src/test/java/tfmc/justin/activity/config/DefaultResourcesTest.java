@@ -3,13 +3,10 @@ package tfmc.justin.activity.config;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.junit.jupiter.api.Test;
-import tfmc.justin.activity.models.GroupDef;
 import tfmc.justin.activity.utils.Utils;
 
 import java.io.File;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -137,96 +134,6 @@ class DefaultResourcesTest {
         }
     }
 
-    // Mirrors the load-time validation in ActivityConfiguration: every
-    // activity's group must resolve to a real 'groups' key (case-insensitive),
-    // and both sides must fit the GUI window ActivityGui draws into.
-    @Test
-    void everyActivityGroupResolvesAndFitsTheGui() {
-        YamlConfiguration config = load("config.yml");
-        ConfigurationSection groupsSection = config.getConfigurationSection("groups");
-        ConfigurationSection activities = config.getConfigurationSection("activities");
-
-        assertTrue(groupsSection != null && !groupsSection.getKeys(false).isEmpty());
-        assertTrue(activities != null && !activities.getKeys(false).isEmpty());
-
-        assertTrue(groupsSection.getKeys(false).size() <= GroupDef.MAX_GROUPS,
-                "groups has more than GroupDef.MAX_GROUPS (" + GroupDef.MAX_GROUPS + ") entries");
-
-        Map<String, String> groupKeys = new HashMap<>();
-        for (String key : groupsSection.getKeys(false)) {
-            groupKeys.put(key.toLowerCase(Locale.ROOT), key);
-        }
-
-        Map<String, Integer> perGroupCount = new HashMap<>();
-        for (String key : activities.getKeys(false)) {
-            String group = activities.getString(key + ".group");
-            assertFalse(group == null || group.isBlank(), "activities." + key + ".group should not be blank");
-            String groupKey = group.trim().toLowerCase(Locale.ROOT);
-            assertTrue(groupKeys.containsKey(groupKey),
-                    "activities." + key + ".group '" + group + "' is not a key of 'groups'");
-            perGroupCount.merge(groupKey, 1, Integer::sum);
-        }
-
-        for (Map.Entry<String, Integer> entry : perGroupCount.entrySet()) {
-            assertTrue(entry.getValue() <= GroupDef.MAX_ACTIVITIES,
-                    "group '" + entry.getKey() + "' has " + entry.getValue()
-                            + " activities, more than GroupDef.MAX_ACTIVITIES (" + GroupDef.MAX_ACTIVITIES + ")");
-        }
-    }
-
-    // Locks in the order activities are drawn within each default group's page
-    // (accessible as a tile on the main screen) - the GUI keeps the order
-    // activities appear in the file, so the config's activity block order is
-    // part of the shipped behaviour.
-    @Test
-    void defaultGroupsListActivitiesInShippedOrder() {
-        YamlConfiguration config = load("config.yml");
-        ConfigurationSection activities = config.getConfigurationSection("activities");
-        assertTrue(activities != null);
-
-        assertEquals(List.of("vote", "playtime", "market_sale", "casino_win"), inGroup(activities, "server"));
-        assertEquals(List.of("craft_diamond_block", "craft_golden_carrot", "craft_anvil", "advcraft_item", "cook_dish",
-                        "profession_upgrade", "profession_crafter", "profession_forager", "profession_herborist"),
-                inGroup(activities, "crafting"));
-        assertEquals(List.of("geiger", "archaeology_find", "instrument", "ic_chat", "injured", "furniture_place", "vehicle_build"),
-                inGroup(activities, "roleplay"));
-        assertEquals(List.of("battle_joined"), inGroup(activities, "factions"));
-        assertEquals(List.of("ingot_flint", "ingot_coal", "tool_iron_pickaxe", "tool_iron_axe",
-                        "block_andesite", "block_clay", "forester_arrow", "forester_string",
-                        "alchemy_minor_health", "alchemy_powder", "instrument_iron_lute", "instrument_steel_lute",
-                        "research_scribe_paper", "research_bronze", "medicine_herb_mixture", "medicine_splint",
-                        "engineer_bullet_box", "engineer_fuel", "fishing_rod", "fishing_iron_hook",
-                        "magic_basic_handle", "magic_iron_core", "animal_universal_feed", "animal_whistle"),
-                inGroup(activities, "stations"));
-    }
-
-    private static List<String> inGroup(ConfigurationSection activities, String group) {
-        List<String> result = new java.util.ArrayList<>();
-        for (String key : activities.getKeys(false)) {
-            String activityGroup = activities.getString(key + ".group");
-            if (activityGroup != null && group.equalsIgnoreCase(activityGroup.trim())) {
-                result.add(key);
-            }
-        }
-        return result;
-    }
-
-    @Test
-    void everyGroupMaterialResolves() {
-        YamlConfiguration config = load("config.yml");
-        ConfigurationSection groupsSection = config.getConfigurationSection("groups");
-
-        assertTrue(groupsSection != null && !groupsSection.getKeys(false).isEmpty());
-        for (String key : groupsSection.getKeys(false)) {
-            String material = groupsSection.getString(key + ".material");
-            assertFalse(material == null || material.isBlank(),
-                    "groups." + key + ".material should not be blank");
-            assertTrue(tfmc.justin.activity.utils.ItemPath.material(material) != null
-                            || tfmc.justin.activity.utils.ItemPath.pluginPath(material) != null,
-                    "groups." + key + ".material is neither a Material nor an item path: " + material);
-        }
-    }
-
     // The shipped milestones must parse as a list of ints: written inline with
     // a trailing comment, a typo here reads as an empty list and silently
     // falls back to the hardcoded defaults.
@@ -262,20 +169,6 @@ class DefaultResourcesTest {
         }
     }
 
-    // The group tile's "click to open" hint and the group view's Back button
-    // label, added with the two-level GUI - both must ship a real value, not
-    // just be present as a key.
-    @Test
-    void groupViewMessagesAreNonBlank() {
-        YamlConfiguration messages = load("messages.yml");
-
-        String clickHint = messages.getString("gui.group-lore-click");
-        String backName = messages.getString("gui.back-name");
-
-        assertFalse(clickHint == null || clickHint.isBlank(), "gui.group-lore-click should not be blank");
-        assertFalse(backName == null || backName.isBlank(), "gui.back-name should not be blank");
-    }
-
     // Every "gui.<key>" literal ActivityGui.java passes to Messages.get(...)
     // must resolve against the shipped messages.yml - read straight from the
     // source file rather than hand-copied, so a new lookup added there without
@@ -300,6 +193,18 @@ class DefaultResourcesTest {
             String value = messages.getString(key);
             assertFalse(value == null || value.isBlank(), key + " is read by ActivityGui but missing/blank in messages.yml");
         }
+    }
+
+    // The daily draw picks from every loaded activity, so the shipped file
+    // has to offer at least the seven a player is handed each day
+    @Test
+    void shippedConfigHasEnoughActivitiesForADailyDraw() {
+        YamlConfiguration config = load("config.yml");
+        ConfigurationSection activities = config.getConfigurationSection("activities");
+
+        assertTrue(activities != null
+                && activities.getKeys(false).size() >= tfmc.justin.activity.models.PlayerData.TASKS_PER_DAY,
+                "config.yml should ship at least PlayerData.TASKS_PER_DAY activities");
     }
 
     @Test

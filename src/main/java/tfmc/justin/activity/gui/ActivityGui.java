@@ -2,7 +2,6 @@ package tfmc.justin.activity.gui;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
-import org.bukkit.NamespacedKey;
 import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -13,57 +12,39 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
-import org.bukkit.persistence.PersistentDataType;
 import tfmc.justin.activity.config.ActivityConfiguration;
 import tfmc.justin.activity.hooks.TLibsItems;
 import tfmc.justin.activity.config.Messages;
 import tfmc.justin.activity.managers.ActivityManager;
 import tfmc.justin.activity.models.ActivityDef;
-import tfmc.justin.activity.models.GroupDef;
 import tfmc.justin.activity.models.PlayerData;
 import tfmc.justin.activity.utils.Bar;
 import tfmc.justin.activity.utils.Utils;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 
 // ====================================
-// Two double-chest views of the week. The main one - what /activity opens -
-// holds the bar on top and one item per group in the grid. The weekly bar is
-// also the claim button: clicking it hands over whatever milestones are due.
-// Clicking a group opens the second view: the same bar, that group's
-// activities in the same grid, and a Back button. Also the click listener -
-// a marker holder is the cheapest way to tell our inventories apart from every
-// other one, and it carries which of the two views was clicked.
+// One single-chest view of the week: the two bars on the top row, today's
+// seven drawn tasks in the middle row, filler everywhere else. The weekly bar
+// is also the claim button: clicking it hands over whatever milestones are
+// due. A task starts hidden and is revealed by clicking it; only a revealed
+// task earns anything (the gate itself lives in ActivityManager). Also the
+// click listener - a marker holder is the cheapest way to tell our inventory
+// apart from every other one.
 // ====================================
 public class ActivityGui implements Listener {
 
-    private static final int SIZE = 54;
+    private static final int SIZE = 27;
     private static final int DAILY_BAR_SLOT = 3;
     private static final int BAR_SLOT = 5;
-    private static final int BACK_SLOT = 53;
 
-    // ====================================
-    // Marketblock's grid: rows 2-5, columns 2-8, so the contents float inside
-    // a border of filler. Both views draw into it - groups on the main one,
-    // that group's activities on the other. Sized off GroupDef.MAX_GROUPS/
-    // MAX_ACTIVITIES rather than its own constants, so ActivityConfiguration
-    // can validate a config against the same numbers without importing this
-    // package.
-    // ====================================
-    private static final int[] GRID = {
-        10, 11, 12, 13, 14, 15, 16,
-        19, 20, 21, 22, 23, 24, 25,
-        28, 29, 30, 31, 32, 33, 34,
-        37, 38, 39, 40, 41, 42, 43
-    };
+    // The middle row, one slot per daily task - PlayerData.TASKS_PER_DAY of
+    // them, floating inside a border of filler
+    private static final int[] TASK_SLOTS = {10, 11, 12, 13, 14, 15, 16};
 
     // Marketblock's demand bar length - the per-activity bars match it
     private static final int PROGRESS_BAR_LENGTH = 20;
-
-    // The group id a group item carries, read back when it is clicked
-    private static final NamespacedKey GROUP_KEY = new NamespacedKey("activity", "activity_group");
 
     private final ActivityManager manager;
 
@@ -71,17 +52,9 @@ public class ActivityGui implements Listener {
         this.manager = manager;
     }
 
-    private enum View { MAIN, GROUP }
-
     private static final class Marker implements InventoryHolder {
 
-        private final View view;
-
         private Inventory inventory;
-
-        private Marker(View view) {
-            this.view = view;
-        }
 
         @Override
         public Inventory getInventory() {
@@ -92,79 +65,58 @@ public class ActivityGui implements Listener {
     public Inventory build(Player player) {
         ActivityConfiguration config = manager.getConfiguration();
         Messages messages = config.messages();
-        PlayerData data = manager.getStore().get(player.getUniqueId());
+        PlayerData data = manager.tasks(player.getUniqueId());
 
-        Inventory inventory = window(View.MAIN, Utils.colorize(config.guiTitle()));
-        inventory.setItem(DAILY_BAR_SLOT, dailyBarItem(config, messages, data));
-        inventory.setItem(BAR_SLOT, barItem(config, messages, data));
-
-        // ====================================
-        // Groups in config order. Anything past the grid's capacity has no
-        // slot and is left out; load() has already said so.
-        // ====================================
-        int slot = 0;
-        for (GroupDef group : config.groups().values()) {
-            if (slot >= GRID.length) {
-                break;
-            }
-            inventory.setItem(GRID[slot], groupItem(config, messages, group));
-            slot++;
-        }
-
-        fillEmptySlots(inventory, messages);
-
-        return inventory;
-    }
-
-    // ====================================
-    // The second level: one group's activities, in config order, plus the
-    // Back button. The bar claims here too, so a player deep in a group does
-    // not have to walk back out to take a reward.
-    // ====================================
-    public Inventory buildGroup(Player player, GroupDef group) {
-        ActivityConfiguration config = manager.getConfiguration();
-        Messages messages = config.messages();
-        PlayerData data = manager.getStore().get(player.getUniqueId());
-
-        Inventory inventory = window(View.GROUP, Utils.colorize(group.display()));
-        inventory.setItem(DAILY_BAR_SLOT, dailyBarItem(config, messages, data));
-        inventory.setItem(BAR_SLOT, barItem(config, messages, data));
-
-        List<ActivityDef> page = pageOf(config.activities(), group.id());
-        for (int slot = 0; slot < page.size(); slot++) {
-            inventory.setItem(GRID[slot], activityItem(config, messages, page.get(slot), data));
-        }
-
-        inventory.setItem(BACK_SLOT, item(Material.BARRIER, messages.get("gui.back-name"), List.of()));
-
-        fillEmptySlots(inventory, messages);
-
-        return inventory;
-    }
-
-    private Inventory window(View view, String title) {
-        Marker marker = new Marker(view);
-        Inventory inventory = Bukkit.createInventory(marker, SIZE, title);
+        Marker marker = new Marker();
+        Inventory inventory = Bukkit.createInventory(marker, SIZE, Utils.colorize(config.guiTitle()));
         marker.inventory = inventory;
+
+        inventory.setItem(DAILY_BAR_SLOT, dailyBarItem(config, messages, data));
+        inventory.setItem(BAR_SLOT, barItem(config, messages, data));
+
+        for (int slot = 0; slot < TASK_SLOTS.length; slot++) {
+            ItemStack task = taskItem(config, messages, data, slot);
+            if (task != null) {
+                inventory.setItem(TASK_SLOTS[slot], task);
+            }
+        }
+
+        fillEmptySlots(inventory, messages);
+
         return inventory;
     }
 
     // ====================================
-    // The activities of one group, in config order, capped at the grid's
-    // capacity. Package-private and static so a test can check the ordering
-    // and cap without building a whole GUI.
+    // One task slot: the hidden dye until it is revealed, then the activity's
+    // own item. null - which fillEmptySlots then turns into filler - covers
+    // both a slot beyond what could be drawn and one holding an activity a
+    // reload has since removed.
     // ====================================
-    static List<ActivityDef> pageOf(Collection<ActivityDef> all, String groupId) {
-        List<ActivityDef> page = new ArrayList<>();
-        for (ActivityDef def : all) {
-            if (page.size() >= GRID.length) {
-                break;
-            }
-            if (groupId.equals(def.group())) {
-                page.add(def);
-            }
+    private ItemStack taskItem(ActivityConfiguration config, Messages messages, PlayerData data, int slot) {
+        String id = taskIdAt(config, data, slot);
+        if (id == null) {
+            return null;
         }
-        return page;
+        ActivityDef def = config.activity(id);
+        if (!data.isRevealed(def.id())) {
+            return item(Material.GRAY_DYE, messages.get("gui.hidden-task-name"), List.of());
+        }
+        return activityItem(config, messages, def, data);
+    }
+
+    // ====================================
+    // Which activity a task slot shows, or null when it shows filler: a slot
+    // beyond what could be drawn, and one holding an activity a reload has
+    // since removed, both have nothing to paint. Package-private and pure so
+    // the seven-slot paint decision can be tested without a live inventory.
+    // ====================================
+    static String taskIdAt(ActivityConfiguration config, PlayerData data, int slot) {
+        List<String> tasks = data.tasks();
+        if (slot < 0 || slot >= tasks.size()) {
+            return null;
+        }
+        String id = tasks.get(slot);
+        return config.activity(id) == null ? null : id;
     }
 
     // ====================================
@@ -173,7 +125,7 @@ public class ActivityGui implements Listener {
     // half-empty. Clicks on it are already cancelled by onClick.
     // ====================================
     private void fillEmptySlots(Inventory inventory, Messages messages) {
-        ItemStack filler = item(Material.GRAY_STAINED_GLASS_PANE, messages.get("gui.filler-name"), List.of());
+        ItemStack filler = filler(messages);
         for (int slot = 0; slot < SIZE; slot++) {
             if (inventory.getItem(slot) == null) {
                 inventory.setItem(slot, filler);
@@ -227,24 +179,6 @@ public class ActivityGui implements Listener {
             List.of(Utils.colorize(bar)));
     }
 
-    // ====================================
-    // The main view's tile: an icon, a name and an invitation to click it. The
-    // group id rides along in the item's data container, the way Marketblock
-    // carries a category id, so the click handler does not have to match on a
-    // display name or a slot.
-    // ====================================
-    private ItemStack groupItem(ActivityConfiguration config, Messages messages, GroupDef group) {
-        ItemStack stack = item(iconStack(config, group.icon(), group.iconPath()), Utils.colorize(group.display()),
-            List.of(messages.get("gui.group-lore-click")));
-
-        ItemMeta meta = stack.getItemMeta();
-        if (meta != null) {
-            meta.getPersistentDataContainer().set(GROUP_KEY, PersistentDataType.STRING, group.id());
-            stack.setItemMeta(meta);
-        }
-        return stack;
-    }
-
     private ItemStack activityItem(ActivityConfiguration config, Messages messages, ActivityDef def, PlayerData data) {
         int count = data.count(def.id());
         int today = def.worth(count);
@@ -285,8 +219,7 @@ public class ActivityGui implements Listener {
     // An icon written as a TLibs item path is built by TLibs, so an MMOItems
     // icon keeps its model and texture; the name and lore below are then set
     // on it like on any other icon. TLibs missing, or the path no longer
-    // resolving, falls back to the Material. Activity icons and group labels
-    // are built the same way, so both hand their pair in here.
+    // resolving, falls back to the Material.
     // ====================================
     private ItemStack iconStack(ActivityConfiguration config, Material icon, String iconPath) {
         if (iconPath != null && config.itemPathsUsable()) {
@@ -313,22 +246,20 @@ public class ActivityGui implements Listener {
     }
 
     // ====================================
-    // Nothing in either view is takeable, so every click in them is cancelled
-    // - including shift-clicks from the player's own inventory, which is why
-    // the top inventory is what gets checked rather than the clicked slot.
-    // Which view was clicked comes off the holder, the way Marketblock reads
-    // it off MBHolder, and decides what the live controls are.
+    // Nothing in the view is takeable, so every click in it is cancelled -
+    // including shift-clicks from the player's own inventory, which is why the
+    // top inventory is what gets checked rather than the clicked slot.
     // ====================================
     @EventHandler
     public void onClick(InventoryClickEvent event) {
-        if (!(event.getView().getTopInventory().getHolder() instanceof Marker marker)) {
+        if (!(event.getView().getTopInventory().getHolder() instanceof Marker)) {
             return;
         }
         event.setCancelled(true);
 
         // Bottom-inventory clicks (the player's own inventory) and clicks
         // outside any inventory (raw slot -999) are cancelled above but must
-        // not reach mainClick/groupClick, which only make sense for a slot in
+        // not reach the controls below, which only make sense for a slot in
         // our own top inventory
         if (event.getClickedInventory() != event.getView().getTopInventory()) {
             return;
@@ -338,23 +269,9 @@ public class ActivityGui implements Listener {
             return;
         }
 
-        switch (marker.view) {
-            case MAIN -> mainClick(player, event);
-            case GROUP -> groupClick(player, event);
-        }
-    }
-
-    // ====================================
-    // The main view's two live controls: the weekly bar claims, and a group
-    // item opens that group. The item is what is asked for the group id - a
-    // config reloaded between opening and clicking can leave a tile naming a
-    // group that is gone, and that click is simply ignored.
-    // ====================================
-    private void mainClick(Player player, InventoryClickEvent event) {
         // The permission is checked on /activity, but an inventory can outlive
         // the permission that opened it - a revoked player must not still be
-        // able to claim a reward or navigate into a group from a window they
-        // left open
+        // able to claim a reward or reveal a task from a window they left open
         if (!player.hasPermission("activity.use")) {
             return;
         }
@@ -365,42 +282,72 @@ public class ActivityGui implements Listener {
             return;
         }
 
-        GroupDef group = clickedGroup(event.getCurrentItem());
-        if (group != null) {
+        int task = taskSlot(event.getRawSlot());
+        if (task < 0) {
+            return;
+        }
+
+        ActivityManager.Reveal reveal = manager.reveal(player.getUniqueId(), task);
+        if (reveal.revealedId() != null) {
             clickSound(player);
-            player.openInventory(buildGroup(player, group));
+            player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1f, 1f);
+        } else if (!reveal.drawChanged()) {
+            return;
+        }
+
+        // ====================================
+        // Slots on the open view, never a reopen: reopening the inventory from
+        // inside a click event is discouraged by Bukkit and would drop
+        // whatever is on the player's cursor. Just the clicked slot normally -
+        // but a draw that was compacted or topped up mid-click (a reload
+        // dropped an activity, the day rolled over, /activity reset ran) has
+        // moved every task after the change, so then all seven are repainted.
+        // ====================================
+        ActivityConfiguration config = manager.getConfiguration();
+        PlayerData data = manager.tasks(player.getUniqueId());
+        Inventory top = event.getView().getTopInventory();
+        if (reveal.drawChanged()) {
+            // The draw only moves at a rollover or a reload, both of which
+            // wipe or rescale what the two bars show - repainting the tasks
+            // alone would leave a fresh draw beside a stale "10/10" daily bar
+            // and a claim button that no longer does anything
+            Messages messages = config.messages();
+            top.setItem(DAILY_BAR_SLOT, dailyBarItem(config, messages, data));
+            top.setItem(BAR_SLOT, barItem(config, messages, data));
+            for (int slot = 0; slot < TASK_SLOTS.length; slot++) {
+                top.setItem(TASK_SLOTS[slot], taskOrFiller(config, data, slot));
+            }
+        } else {
+            top.setItem(event.getRawSlot(), taskOrFiller(config, data, task));
         }
     }
 
-    // The bar claims here too; Back is the only other live control
-    private void groupClick(Player player, InventoryClickEvent event) {
-        if (!player.hasPermission("activity.use")) {
-            return;
+    // A repaint must leave nothing stale behind, so a slot with no task in it
+    // gets the same filler build() would have put there
+    private ItemStack taskOrFiller(ActivityConfiguration config, PlayerData data, int slot) {
+        Messages messages = config.messages();
+        ItemStack task = taskItem(config, messages, data, slot);
+        return task != null ? task : filler(messages);
+    }
+
+    private ItemStack filler(Messages messages) {
+        return item(Material.GRAY_STAINED_GLASS_PANE, messages.get("gui.filler-name"), List.of());
+    }
+
+    // The task index this raw slot holds, or -1 for any other slot.
+    // Package-private so the click routing can be tested without a server.
+    static int taskSlot(int rawSlot) {
+        for (int slot = 0; slot < TASK_SLOTS.length; slot++) {
+            if (TASK_SLOTS[slot] == rawSlot) {
+                return slot;
+            }
         }
-        if (event.getRawSlot() == BAR_SLOT) {
-            clickSound(player);
-            claim(player, event);
-        } else if (event.getRawSlot() == BACK_SLOT) {
-            clickSound(player);
-            player.openInventory(build(player));
-        }
+        return -1;
     }
 
     // Marketblock's menu click; a successful claim still plays its own sound
     private static void clickSound(Player player) {
         player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BIT, 1f, 1f);
-    }
-
-    private GroupDef clickedGroup(ItemStack clicked) {
-        if (clicked == null) {
-            return null;
-        }
-        ItemMeta meta = clicked.getItemMeta();
-        if (meta == null) {
-            return null;
-        }
-        String id = meta.getPersistentDataContainer().get(GROUP_KEY, PersistentDataType.STRING);
-        return id == null ? null : manager.getConfiguration().groups().get(id);
     }
 
     private void claim(Player player, InventoryClickEvent event) {
