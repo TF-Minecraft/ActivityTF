@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 
@@ -824,6 +825,37 @@ class PlayerDataTest {
 
         assertFalse(data.ensureTasks(ids(30), List.of("a9"), new Random(6)));
         assertEquals(first, data.tasks());
+    }
+
+    // ====================================
+    // The one bit of reroll arithmetic worth pinning: today's points come back
+    // off the weekly bar, but never below what has already been paid out, or
+    // the same milestone would become claimable twice.
+    // ====================================
+    @Test
+    void aRerollTakesTodayBackOffTheWeeklyBarButNeverBelowWhatWasClaimed() {
+        PlayerData data = new PlayerData(12, 5, "w", "d", 10, Map.of("a1", 3),
+            List.of("a1", "a2"), List.of("a1"));
+
+        data.reroll(List.of("a3", "a4"));
+
+        assertEquals(10, data.points());
+        assertEquals(0, data.dailyPoints());
+        assertEquals(10, data.claimedPoints());
+        assertTrue(data.daily().isEmpty());
+        assertEquals(List.of("a3", "a4"), data.tasks());
+        assertTrue(data.revealed().isEmpty());
+        assertEquals(1, data.rerolls());
+    }
+
+    @Test
+    void aDayRolloverGivesTheRerollBack() {
+        PlayerData data = data();
+        data.reroll(List.of("a1"));
+        assertEquals(1, data.rerolls());
+
+        assertTrue(data.roll(WEEK, "2026-09-10"));
+        assertEquals(0, data.rerolls());
     }
 
     @Test

@@ -254,8 +254,42 @@ public class ActivityManager {
     }
 
     private boolean ensureTasks(PlayerData data) {
-        return data.ensureTasks(config.activities().stream().map(ActivityDef::id).toList(),
-            config.guaranteed(), ThreadLocalRandom.current());
+        return data.ensureTasks(activityIds(), config.guaranteed(), ThreadLocalRandom.current());
+    }
+
+    private List<String> activityIds() {
+        return config.activities().stream().map(ActivityDef::id).toList();
+    }
+
+    // What a reroll click came to - the GUI says which of these it was, and
+    // only DONE changed anything
+    public enum Rerolled {
+        DONE,
+        NONE_LEFT,
+        DISABLED
+    }
+
+    // ====================================
+    // Throws today's draw away and hands out a fresh one, taking today's
+    // points back off the weekly bar (never below what has already been paid
+    // out - see PlayerData.reroll). The draw is the same one ensureTasks
+    // makes, so daily-guaranteed activities are still guaranteed afterwards.
+    // Nothing is touched unless DONE is returned.
+    // ====================================
+    public Rerolled reroll(UUID uuid) {
+        int perDay = config.rerollsPerDay();
+        if (perDay <= 0) {
+            return Rerolled.DISABLED;
+        }
+
+        PlayerData data = store.get(uuid);
+        if (data.rerolls() >= perDay) {
+            return Rerolled.NONE_LEFT;
+        }
+
+        data.reroll(PlayerData.draw(activityIds(), config.guaranteed(), ThreadLocalRandom.current()));
+        store.markDirty();
+        return Rerolled.DONE;
     }
 
     // ====================================

@@ -124,6 +124,9 @@ public class ActivityConfiguration {
     private volatile List<Integer> milestones = List.of();
     private volatile int barLength;
 
+    // 0 disables the reroll button for everyone
+    private volatile int rerollsPerDay;
+
     private String goalCompleteSound;
     private String barCompleteSound;
 
@@ -178,6 +181,10 @@ public class ActivityConfiguration {
         // After barMax: every milestone is validated against it
         milestones = loadMilestones(config.getIntegerList("bar.milestones"));
         barLength = barLength(config.getInt("bar.length", 40));
+
+        // 0 turns rerolling off entirely, so like playtime.afk-minutes this
+        // clamp has no lower bound of 1
+        rerollsPerDay = Math.max(0, config.getInt("reroll.per-day", 1));
 
         goalCompleteSound = soundKey(config.getString("sounds.goal-complete", ""));
         barCompleteSound = soundKey(config.getString("sounds.bar-complete", ""));
@@ -842,6 +849,12 @@ public class ActivityConfiguration {
 
     public int barLength() {
         return barLength;
+    }
+
+    // How many times a day a player may throw today's draw away. 0 means the
+    // reroll button refuses everyone.
+    public int rerollsPerDay() {
+        return rerollsPerDay;
     }
 
     public String goalCompleteSound() {

@@ -50,6 +50,10 @@ public class PlayerData {
     // ====================================
     private volatile int claimedPoints;
 
+    // Rerolls of today's draw already used. Reset by every rollover, so the
+    // budget in config is per day.
+    private volatile int rerolls;
+
     public PlayerData(String weekKey, String dayKey) {
         this.weekKey = weekKey;
         this.dayKey = dayKey;
@@ -80,6 +84,15 @@ public class PlayerData {
         }
     }
 
+    // The store's constructor: same as above plus the persisted reroll count.
+    // Overloaded rather than added to the others so every existing caller that
+    // has no reroll count to give keeps working.
+    public PlayerData(int points, int dailyPoints, String weekKey, String dayKey, int claimedPoints,
+                      Map<String, Integer> daily, List<String> tasks, Collection<String> revealed, int rerolls) {
+        this(points, dailyPoints, weekKey, dayKey, claimedPoints, daily, tasks, revealed);
+        this.rerolls = rerolls;
+    }
+
     // ====================================
     // Lazy rollover, called before anything reads or writes this player.
     // A new week wipes everything; a new day only wipes the daily counters,
@@ -94,6 +107,7 @@ public class PlayerData {
             dailyPoints = 0;
             daily.clear();
             clearTasks();
+            rerolls = 0;
             this.weekKey = weekKey;
             changed = true;
         }
@@ -102,6 +116,7 @@ public class PlayerData {
             dailyPoints = 0;
             daily.clear();
             clearTasks();
+            rerolls = 0;
             this.dayKey = dayKey;
             changed = true;
         }
@@ -190,8 +205,28 @@ public class PlayerData {
         dailyPoints = 0;
         daily.clear();
         clearTasks();
+        rerolls = 0;
         this.weekKey = weekKey;
         this.dayKey = dayKey;
+    }
+
+    // ====================================
+    // Throws today away and starts it over on a fresh draw: everything today
+    // put on the weekly bar comes back off it, the counts and the draw go, and
+    // the new tasks go in unrevealed. One method rather than a handful the
+    // caller sequences, so a view of this player can never catch it half done.
+    //
+    // The weekly total never falls below claimedPoints: those points have
+    // already been paid for, and letting the bar drop under them would make
+    // the same milestone claimable a second time.
+    // ====================================
+    public void reroll(List<String> newTasks) {
+        points = Math.max(claimedPoints, points - dailyPoints);
+        dailyPoints = 0;
+        daily.clear();
+        clearTasks();
+        tasks.addAll(newTasks);
+        rerolls++;
     }
 
     private void clearTasks() {
@@ -361,6 +396,10 @@ public class PlayerData {
 
     public String dayKey() {
         return dayKey;
+    }
+
+    public int rerolls() {
+        return rerolls;
     }
 
     public int claimedPoints() {

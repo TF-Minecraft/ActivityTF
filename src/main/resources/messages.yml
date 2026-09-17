@@ -3,6 +3,10 @@ reward-ready: "&a&lREWARD READY! &7Open &f/activity &7to claim."
 reward-claimed: "&a&lCLAIMED &7You received %reward%&7."
 reward-failed: "&cYour rewards could not be handed over - tell an admin."
 reward-unconfigured: "&cRewards are not configured - tell an admin."
+reroll-done: "&aYour daily tasks have been rerolled - today's points are back off the weekly bar."
+reroll-none-left: "&cYou have already used your reroll today."
+reroll-disabled: "&cRerolling daily tasks is turned off."
+reroll-locked: "&7Rerolling daily tasks is an #823FFF&l[#8939EE&lA#9033DD&ls#972DCC&lc#9E27BB&le#A620AB&ln#AD1A9A&ld#B41489&le#BB0E78&ld#C20867&l]&7 perk - get it at &fpatreon.com/c/tfmcrp"
 gui:
   bar-name: "#e6ca40&lWeekly Activity&e: #50d990%points%&7/&f%max%"
   daily-bar-name: "#e6ca40&lDaily Activity&e: #50d990%points%&7/&f%max%"
@@ -13,6 +17,10 @@ gui:
   activity-lore-today: "#d97b66Today&e: &6%today%"
   activity-lore-today-capped: "#d97b66Today&e: &6%today%&7/&f%cap%"
   hidden-task-name: "#c9c14fClick to reveal"
+  reroll-name: "#c26ef0&lReroll Daily Tasks"
+  reroll-lore-left: "#d97b66Rerolls left today&e: &6%left%&7/&f%max%"
+  reroll-lore-locked: "#823FFF&l[#8939EE&lA#9033DD&ls#972DCC&lc#9E27BB&le#A620AB&ln#AD1A9A&ld#B41489&le#BB0E78&ld#C20867&l]&7 perk - click to find out more"
+  reroll-lore-disabled: "&8Rerolling is turned off"
   filler-name: "&8 "
 placeholder: { done: "&a✔", not-done: "&c✘" }
 admin:

@@ -198,8 +198,12 @@ public class PlayerStore {
         List<String> tasks = new ArrayList<>(entry.getStringList("tasks"));
         tasks.removeIf(known.negate());
 
+        // A negative count off a hand-edited file would read as rerolls owed;
+        // there is no upper bound to enforce here, the budget lives in config
+        int rerolls = Math.max(0, entry.getInt("rerolls"));
+
         return new PlayerData(points, dailyPoints, entry.getString("week", ""), entry.getString("day", ""),
-            claimedPoints, daily, tasks, entry.getStringList("revealed"));
+            claimedPoints, daily, tasks, entry.getStringList("revealed"), rerolls);
     }
 
     // ====================================
@@ -372,7 +376,7 @@ public class PlayerStore {
             // versa) but is checked explicitly too - belt and braces.
             // Today's draw is kept too, or a restart would re-roll it.
             if (data.points() == 0 && data.claimedPoints() == 0 && data.dailyPoints() == 0
-                && data.daily().isEmpty() && data.tasks().isEmpty()) {
+                && data.daily().isEmpty() && data.tasks().isEmpty() && data.rerolls() == 0) {
                 continue;
             }
 
@@ -383,6 +387,7 @@ public class PlayerStore {
             yaml.set(path + ".day", data.dayKey());
             yaml.set(path + ".claimed-points", data.claimedPoints());
             yaml.set(path + ".daily-points", data.dailyPoints());
+            yaml.set(path + ".rerolls", data.rerolls());
             yaml.set(path + ".daily", new LinkedHashMap<>(data.daily()));
             yaml.set(path + ".tasks", new ArrayList<>(data.tasks()));
             // Sorted, because revealed() is a hash set whose iteration order
