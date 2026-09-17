@@ -6,7 +6,6 @@ reward-unconfigured: "&cRewards are not configured - tell an admin."
 gui:
   bar-name: "#e6ca40&lWeekly Activity&e: #50d990%points%&7/&f%max%"
   daily-bar-name: "#e6ca40&lDaily Activity&e: #50d990%points%&7/&f%max%"
-  bar-lore-milestones: "#af97bdRewards at&e: #50d990%milestones% #b8906epoints"
   bar-lore-next: "#d97b66Next reward at&e: &6%points% #b8906epoints"
   bar-lore-done: "&8All rewards claimed this week"
   reward-click: "#6b9c68[#fafa16Click to claim %count% reward(s)#6b9c68]"

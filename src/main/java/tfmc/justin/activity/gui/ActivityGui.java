@@ -3,6 +3,7 @@ package tfmc.justin.activity.gui;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
+import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -192,7 +193,6 @@ public class ActivityGui implements Listener {
 
         List<String> lore = new ArrayList<>();
         lore.add(Utils.colorize(bar));
-        lore.add(messages.get("gui.bar-lore-milestones", "%milestones%", join(milestones)));
         lore.add(" ");
         if (due > 0) {
             lore.add(messages.get("gui.reward-click", "%count%", due));
@@ -218,22 +218,11 @@ public class ActivityGui implements Listener {
         return null;
     }
 
-    private static String join(List<Integer> milestones) {
-        StringBuilder joined = new StringBuilder();
-        for (int i = 0; i < milestones.size(); i++) {
-            if (i > 0) {
-                joined.append(", ");
-            }
-            joined.append(milestones.get(i));
-        }
-        return joined.toString();
-    }
-
     private ItemStack dailyBarItem(ActivityConfiguration config, Messages messages, PlayerData data) {
         int dailyPoints = Math.min(data.dailyPoints(), config.dailyMax());
         String bar = Bar.render(dailyPoints, config.dailyMax(), config.barLength());
 
-        return item(Material.CLOCK,
+        return item(Material.EXPERIENCE_BOTTLE,
             messages.get("gui.daily-bar-name", "%points%", dailyPoints, "%max%", config.dailyMax()),
             List.of(Utils.colorize(bar)));
     }
@@ -365,12 +354,14 @@ public class ActivityGui implements Listener {
         }
 
         if (event.getRawSlot() == BAR_SLOT) {
+            clickSound(player);
             claim(player, event);
             return;
         }
 
         GroupDef group = clickedGroup(event.getCurrentItem());
         if (group != null) {
+            clickSound(player);
             player.openInventory(buildGroup(player, group));
         }
     }
@@ -381,10 +372,17 @@ public class ActivityGui implements Listener {
             return;
         }
         if (event.getRawSlot() == BAR_SLOT) {
+            clickSound(player);
             claim(player, event);
         } else if (event.getRawSlot() == BACK_SLOT) {
+            clickSound(player);
             player.openInventory(build(player));
         }
+    }
+
+    // Marketblock's menu click; a successful claim still plays its own sound
+    private static void clickSound(Player player) {
+        player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BIT, 1f, 1f);
     }
 
     private GroupDef clickedGroup(ItemStack clicked) {
