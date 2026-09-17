@@ -255,6 +255,61 @@ class ActivityManagerTasksTest {
         assertTrue(manager.getStore().get(uuid).isRevealed(clicked));
     }
 
+    // ====================================
+    // A 'daily-guaranteed' activity is in every player's draw, in a slot the
+    // shuffle picks - the config warning, not the draw, is what deals with
+    // more guaranteed activities than there are slots.
+    // ====================================
+    @Test
+    void aGuaranteedActivityIsInEveryDrawAtAVaryingSlot() {
+        ActivityManager manager = TestManagers.manager(defs(20));
+        TestManagers.guarantee(manager, "a3");
+        Set<Integer> slots = new HashSet<>();
+
+        for (int i = 0; i < 200; i++) {
+            List<String> tasks = manager.tasks(UUID.randomUUID()).tasks();
+
+            assertEquals(PlayerData.TASKS_PER_DAY, tasks.size());
+            assertTrue(tasks.contains("a3"), "a guaranteed activity was left out: " + tasks);
+            slots.add(tasks.indexOf("a3"));
+        }
+
+        assertTrue(slots.size() > 1, "the guaranteed activity always landed in slot " + slots);
+    }
+
+    // A reload that drops the guaranteed activity itself: it is simply not
+    // drawable any more, and the draw is still full
+    @Test
+    void anUnloadedGuaranteedActivityIsNotDrawn() {
+        ActivityManager manager = TestManagers.manager(defs(20));
+        TestManagers.guarantee(manager, "a3");
+        TestManagers.unload(manager, "a3");
+
+        List<String> tasks = manager.tasks(UUID.randomUUID()).tasks();
+
+        assertEquals(PlayerData.TASKS_PER_DAY, tasks.size());
+        assertFalse(tasks.contains("a3"));
+    }
+
+    // ====================================
+    // Marking an activity guaranteed after a player already has today's draw
+    // must not leave them without it for the rest of the day
+    // ====================================
+    @Test
+    void anExistingDrawGainsAGuaranteedActivityOnItsNextUse() {
+        ActivityManager manager = TestManagers.manager(defs(20));
+        UUID uuid = UUID.randomUUID();
+        List<String> before = List.copyOf(manager.tasks(uuid).tasks());
+        String guaranteed = before.contains("a3") ? undrawn(manager, uuid, 20) : "a3";
+
+        TestManagers.guarantee(manager, guaranteed);
+        List<String> after = manager.tasks(uuid).tasks();
+
+        assertTrue(after.contains(guaranteed));
+        assertEquals(PlayerData.TASKS_PER_DAY, after.size());
+        assertEquals(6, after.stream().filter(before::contains).count(), "the whole draw was re-rolled");
+    }
+
     @Test
     void anUnchangedDrawIsNotReportedAsChanged() {
         ActivityManager manager = TestManagers.manager(defs(20));

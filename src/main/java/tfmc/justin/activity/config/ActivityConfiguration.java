@@ -52,6 +52,13 @@ public class ActivityConfiguration {
     private volatile Map<Material, String> craftActivities = new HashMap<>();
 
     // ====================================
+    // The ids marked 'daily-guaranteed: true', in config order - the ones the
+    // daily draw always hands out. Immutable and replaced wholesale on reload
+    // for the same reason as the maps around it.
+    // ====================================
+    private volatile List<String> guaranteedActivities = List.of();
+
+    // ====================================
     // The same thing for the 'craft:' keys written as a TLibs m.<type>.<id>
     // path: those cannot be keyed by Material, so they are walked in config
     // order and the first path the crafted item matches wins. Only reached
@@ -199,6 +206,7 @@ public class ActivityConfiguration {
             craftPaths = List.of();
             professionActivities = Map.of();
             stationActivities = Map.of();
+            guaranteedActivities = List.of();
             return;
         }
 
@@ -207,6 +215,7 @@ public class ActivityConfiguration {
         List<Map.Entry<String, String>> paths = new ArrayList<>();
         Map<String, String> professions = new LinkedHashMap<>();
         Map<String, String> stations = new LinkedHashMap<>();
+        List<String> guaranteed = new ArrayList<>();
         for (String id : section.getKeys(false)) {
             ConfigurationSection entry = section.getConfigurationSection(id);
             if (entry == null) {
@@ -266,6 +275,23 @@ public class ActivityConfiguration {
             }
 
             loadStation(stations, entry, id);
+
+            if (flag(entry, id, "daily-guaranteed", false)) {
+                guaranteed.add(id);
+            }
+        }
+
+        // ====================================
+        // More guaranteed activities than there are task slots: the draw can
+        // only hold TASKS_PER_DAY of them, so every other activity in the file
+        // becomes undrawable. Worth one line at load - it is almost certainly
+        // not what the admin meant.
+        // ====================================
+        if (guaranteed.size() > PlayerData.TASKS_PER_DAY) {
+            plugin.getLogger().warning(guaranteed.size() + " activities are marked daily-guaranteed but only "
+                + PlayerData.TASKS_PER_DAY + " tasks are handed out a day - every draw is "
+                + PlayerData.TASKS_PER_DAY + " of them picked at random and no other activity can"
+                + " ever be drawn.");
         }
 
         // One assignment publishes the whole set
@@ -274,6 +300,7 @@ public class ActivityConfiguration {
         craftPaths = List.copyOf(paths);
         professionActivities = professions;
         stationActivities = stations;
+        guaranteedActivities = List.copyOf(guaranteed);
     }
 
     // ====================================
@@ -451,6 +478,20 @@ public class ActivityConfiguration {
             return fallback;
         }
         return entry.getInt(key, fallback);
+    }
+
+    // ====================================
+    // Optional boolean activity key. A value that is not a boolean is the
+    // admin's typo - it is named and the fallback is used, the same way
+    // wholeNumber() handles a non-number.
+    // ====================================
+    private boolean flag(ConfigurationSection entry, String id, String key, boolean fallback) {
+        if (entry.contains(key) && !entry.isBoolean(key)) {
+            plugin.getLogger().warning("activities." + id + "." + key + " is not true or false ('"
+                + entry.get(key) + "') - using " + fallback + ".");
+            return fallback;
+        }
+        return entry.getBoolean(key, fallback);
     }
 
     // A bar of 0 glyphs is invisible and one of 5000 does not fit in a lore
@@ -684,6 +725,12 @@ public class ActivityConfiguration {
 
     public ActivityDef activity(String id) {
         return activities.get(id);
+    }
+
+    // The ids marked 'daily-guaranteed', in config order. Every one of them
+    // is in every player's draw for the day.
+    public List<String> guaranteed() {
+        return guaranteedActivities;
     }
 
     // ====================================

@@ -255,7 +255,7 @@ public class ActivityManager {
 
     private boolean ensureTasks(PlayerData data) {
         return data.ensureTasks(config.activities().stream().map(ActivityDef::id).toList(),
-            ThreadLocalRandom.current());
+            config.guaranteed(), ThreadLocalRandom.current());
     }
 
     // ====================================

@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -202,11 +203,32 @@ public class PlayerData {
     // Up to TASKS_PER_DAY distinct ids out of the loaded ones, in random
     // order. Fewer than that loaded: all of them. Pure so it can be tested
     // with a seeded Random.
+    //
+    // Every id in 'guaranteed' that is actually loaded is always in the draw
+    // (that is the whole point of the flag), but the finished list is shuffled
+    // as a whole, so a guaranteed task lands in a random slot rather than
+    // always the first. More guaranteed ids than slots: the draw is
+    // TASKS_PER_DAY of them, picked and ordered at random, and no other
+    // activity can get in - config warns about that at load.
     // ====================================
-    public static List<String> draw(Collection<String> ids, Random random) {
+    public static List<String> draw(Collection<String> ids, Collection<String> guaranteed, Random random) {
+        List<String> forced = new ArrayList<>(new LinkedHashSet<>(guaranteed));
+        // An id whose plugin is missing never made it into the loaded set, so
+        // it simply cannot be drawn
+        forced.retainAll(new HashSet<>(ids));
+        Collections.shuffle(forced, random);
+        if (forced.size() >= TASKS_PER_DAY) {
+            return List.copyOf(forced.subList(0, TASKS_PER_DAY));
+        }
+
         List<String> pool = new ArrayList<>(ids);
+        pool.removeAll(forced);
         Collections.shuffle(pool, random);
-        return List.copyOf(pool.subList(0, Math.min(TASKS_PER_DAY, pool.size())));
+
+        List<String> drawn = new ArrayList<>(forced);
+        drawn.addAll(pool.subList(0, Math.min(TASKS_PER_DAY - forced.size(), pool.size())));
+        Collections.shuffle(drawn, random);
+        return List.copyOf(drawn);
     }
 
     // ====================================
@@ -215,12 +237,28 @@ public class PlayerData {
     // and the draw is then topped back up to TASKS_PER_DAY with ids it does
     // not already hold. Survivors keep their order (the list compacts, so a
     // drop shifts the slots after it); a refilled task is always unrevealed.
+    // A guaranteed id that is loaded but missing from the draw is put back
+    // here too - a draw persisted before the flag existed, or one a reload
+    // dropped it out of, must not leave the player without it for the day.
+    // The rest of the draw is left alone rather than re-rolled: it is slotted
+    // in at a random position, and only when the draw is already full does it
+    // take a slot over, preferring an unrevealed one so as little progress as
+    // possible is lost.
     // True if anything changed, which is what the caller saves on.
     // ====================================
-    public boolean ensureTasks(Collection<String> ids, Random random) {
+    public boolean ensureTasks(Collection<String> ids, Collection<String> guaranteed, Random random) {
+        // First use today: one whole draw, so guaranteed tasks are placed at
+        // random rather than slotted into an existing order
+        if (tasks.isEmpty()) {
+            tasks.addAll(draw(ids, guaranteed, random));
+            return !tasks.isEmpty();
+        }
+
         Set<String> known = new HashSet<>(ids);
         boolean changed = tasks.removeIf(id -> !known.contains(id));
         changed |= revealed.removeIf(id -> !tasks.contains(id));
+
+        changed |= restoreGuaranteed(known, guaranteed, random);
 
         if (tasks.size() >= TASKS_PER_DAY) {
             return changed;
@@ -230,11 +268,50 @@ public class PlayerData {
         // TASKS_PER_DAY ids come back, which is always enough to top up
         List<String> pool = new ArrayList<>(known);
         pool.removeAll(tasks);
-        for (String id : draw(pool, random)) {
+        for (String id : draw(pool, List.of(), random)) {
             if (tasks.size() >= TASKS_PER_DAY) {
                 break;
             }
             tasks.add(id);
+            changed = true;
+        }
+        return changed;
+    }
+
+    // ====================================
+    // Puts every loaded guaranteed id the draw is missing back into it: at a
+    // random free slot while there is room, otherwise over a slot chosen at
+    // random among the unrevealed ones (all revealed: any slot), whose
+    // revealed flag goes with it. Slots already holding a guaranteed id are
+    // never taken over, so more guaranteed ids than slots settles on
+    // TASKS_PER_DAY of them instead of churning.
+    // ====================================
+    private boolean restoreGuaranteed(Set<String> known, Collection<String> guaranteed, Random random) {
+        Set<String> forced = new LinkedHashSet<>(guaranteed);
+        boolean changed = false;
+        for (String id : forced) {
+            if (!known.contains(id) || tasks.contains(id)) {
+                continue;
+            }
+            if (tasks.size() < TASKS_PER_DAY) {
+                tasks.add(random.nextInt(tasks.size() + 1), id);
+                changed = true;
+                continue;
+            }
+            List<Integer> takeable = new ArrayList<>();
+            for (int slot = 0; slot < tasks.size(); slot++) {
+                if (!forced.contains(tasks.get(slot))) {
+                    takeable.add(slot);
+                }
+            }
+            if (takeable.isEmpty()) {
+                break;
+            }
+            List<Integer> hidden = takeable.stream().filter(slot -> !revealed.contains(tasks.get(slot))).toList();
+            List<Integer> from = hidden.isEmpty() ? takeable : hidden;
+            int slot = from.get(random.nextInt(from.size()));
+            revealed.remove(tasks.get(slot));
+            tasks.set(slot, id);
             changed = true;
         }
         return changed;

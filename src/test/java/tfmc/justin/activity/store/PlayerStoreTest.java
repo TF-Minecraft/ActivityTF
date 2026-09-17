@@ -297,8 +297,8 @@ class PlayerStoreTest {
 
         PlayerData inMemory = new PlayerData(0, 0, "2026-09-07", "2026-09-09", 0, Map.of(), stored, List.of());
 
-        fromDisk.ensureTasks(loadedIds, new java.util.Random(1));
-        inMemory.ensureTasks(loadedIds, new java.util.Random(1));
+        fromDisk.ensureTasks(loadedIds, List.of(), new java.util.Random(1));
+        inMemory.ensureTasks(loadedIds, List.of(), new java.util.Random(1));
 
         assertEquals(PlayerData.TASKS_PER_DAY, fromDisk.tasks().size());
         assertEquals(fromDisk.tasks(), inMemory.tasks());

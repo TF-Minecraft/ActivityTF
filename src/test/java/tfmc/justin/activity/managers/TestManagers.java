@@ -59,6 +59,16 @@ public final class TestManagers {
         }
     }
 
+    // Marks activities 'daily-guaranteed', the same way load() would - the
+    // draw is lazy, so this counts as long as it happens before the first one
+    public static void guarantee(ActivityManager manager, String... ids) {
+        try {
+            set(manager.getConfiguration(), "guaranteedActivities", List.of(ids));
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     // ====================================
     // What a reload dropping an activity leaves behind: the loaded set minus
     // one id, installed the same way manager() installs it. Here rather than

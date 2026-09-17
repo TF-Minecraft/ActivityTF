@@ -7,7 +7,12 @@ reset:
 # Every 'every' actions → earn 'points'. 'daily-cap' = most points one
 # activity can add per day (0 = no cap). Bar caps at bar.max; bar.daily-max
 # caps what can reach it on any single day, first.
-# vote: one point per vote site.
+# daily-guaranteed: optional, default false. An activity marked true is in
+#   every player's draw every day, at a random slot like any other task; the
+#   remaining slots are filled at random as usual. Marking more than seven
+#   activities guaranteed is reported at load - the draw would then be seven of
+#   them and nothing else could ever be drawn.
+# vote: one point per vote site, and always one of the day's tasks.
 # playtime: 'every' counts minutes online - see the playtime section at the
 #   bottom, and read what afk-minutes does and does not do before relying on it.
 # material: the GUI icon, and craft: the item this activity counts crafts of.
@@ -77,6 +82,7 @@ activities:
     every: 1
     points: 1
     daily-cap: 5
+    daily-guaranteed: true
   geiger:
     display: "#e6ca40&lRadioactive Sources"
     material: SPYGLASS

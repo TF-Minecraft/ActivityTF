@@ -583,7 +583,7 @@ class PlayerDataTest {
 
     @Test
     void aDrawIsSevenDistinctIdsOutOfMany() {
-        List<String> drawn = PlayerData.draw(ids(30), new Random(7));
+        List<String> drawn = PlayerData.draw(ids(30), List.of(), new Random(7));
 
         assertEquals(PlayerData.TASKS_PER_DAY, drawn.size());
         assertEquals(drawn.size(), new HashSet<>(drawn).size());
@@ -592,28 +592,28 @@ class PlayerDataTest {
 
     @Test
     void aDrawOutOfFewerIdsTakesAllOfThem() {
-        List<String> drawn = PlayerData.draw(ids(4), new Random(7));
+        List<String> drawn = PlayerData.draw(ids(4), List.of(), new Random(7));
 
         assertEquals(4, drawn.size());
         assertEquals(new HashSet<>(ids(4)), new HashSet<>(drawn));
-        assertEquals(List.of(), PlayerData.draw(List.of(), new Random(7)));
+        assertEquals(List.of(), PlayerData.draw(List.of(), List.of(), new Random(7)));
     }
 
     @Test
     void tasksAreOnlyDrawnOnce() {
         PlayerData data = data();
 
-        assertTrue(data.ensureTasks(ids(30), new Random(1)));
+        assertTrue(data.ensureTasks(ids(30), List.of(), new Random(1)));
         List<String> first = List.copyOf(data.tasks());
 
-        assertFalse(data.ensureTasks(ids(30), new Random(2)));
+        assertFalse(data.ensureTasks(ids(30), List.of(), new Random(2)));
         assertEquals(first, data.tasks());
     }
 
     @Test
     void onlyARevealedTaskReadsAsRevealed() {
         PlayerData data = data();
-        data.ensureTasks(ids(30), new Random(1));
+        data.ensureTasks(ids(30), List.of(), new Random(1));
 
         assertTrue(data.reveal(3));
 
@@ -627,20 +627,20 @@ class PlayerDataTest {
     @Test
     void aNewDayClearsTheDrawAndEveryRevealedFlag() {
         PlayerData data = data();
-        data.ensureTasks(ids(30), new Random(1));
+        data.ensureTasks(ids(30), List.of(), new Random(1));
         data.reveal(0);
 
         assertTrue(data.roll(WEEK, "2026-09-10"));
 
         assertEquals(List.of(), data.tasks());
         assertEquals(Set.of(), data.revealed());
-        assertTrue(data.ensureTasks(ids(30), new Random(2)), "the next day draws again");
+        assertTrue(data.ensureTasks(ids(30), List.of(), new Random(2)), "the next day draws again");
     }
 
     @Test
     void aNewWeekClearsTheDrawToo() {
         PlayerData data = data();
-        data.ensureTasks(ids(30), new Random(1));
+        data.ensureTasks(ids(30), List.of(), new Random(1));
         data.reveal(0);
 
         assertTrue(data.roll("2026-09-14", DAY));
@@ -652,7 +652,7 @@ class PlayerDataTest {
     @Test
     void aResetClearsTheDraw() {
         PlayerData data = data();
-        data.ensureTasks(ids(30), new Random(1));
+        data.ensureTasks(ids(30), List.of(), new Random(1));
         data.reveal(0);
 
         data.reset(WEEK, DAY);
@@ -682,7 +682,7 @@ class PlayerDataTest {
         PlayerData data = new PlayerData(0, 0, WEEK, DAY, 0, java.util.Map.of(),
             List.of("a0", "gone", "a1", "a2", "a3", "a4", "a5"), List.of("gone", "a1"));
 
-        assertTrue(data.ensureTasks(ids(30), new Random(3)));
+        assertTrue(data.ensureTasks(ids(30), List.of(), new Random(3)));
 
         assertEquals(PlayerData.TASKS_PER_DAY, data.tasks().size());
         assertFalse(data.tasks().contains("gone"), "a removed activity stays in the draw");
@@ -697,7 +697,7 @@ class PlayerDataTest {
         PlayerData data = new PlayerData(0, 0, WEEK, DAY, 0, java.util.Map.of(),
             List.of("a0", "gone", "a1", "a2", "a3", "a4", "a5"), List.of("gone", "a1"));
 
-        data.ensureTasks(ids(30), new Random(3));
+        data.ensureTasks(ids(30), List.of(), new Random(3));
 
         assertEquals(Set.of("a1"), data.revealed());
         assertFalse(data.isRevealed("gone"));
@@ -710,13 +710,125 @@ class PlayerDataTest {
         PlayerData data = new PlayerData(0, 0, WEEK, DAY, 0, java.util.Map.of(),
             List.of("a0", "gone", "a1"), List.of());
 
-        assertTrue(data.ensureTasks(ids(2), new Random(3)));
+        assertTrue(data.ensureTasks(ids(2), List.of(), new Random(3)));
         assertEquals(List.of("a0", "a1"), data.tasks());
+    }
+
+    // ====================================
+    // A guaranteed activity is in every draw, wherever the shuffle puts it,
+    // and a draw persisted without it gains it on the next use.
+    // ====================================
+    private static Set<Integer> guaranteedSlots(List<String> ids, List<String> guaranteed, String id) {
+        Set<Integer> slots = new HashSet<>();
+        Random random = new Random(11);
+        for (int i = 0; i < 200; i++) {
+            List<String> drawn = PlayerData.draw(ids, guaranteed, random);
+            assertTrue(drawn.contains(id), "a guaranteed id was left out of the draw: " + drawn);
+            assertEquals(drawn.size(), new HashSet<>(drawn).size(), "the draw repeats an id: " + drawn);
+            slots.add(drawn.indexOf(id));
+        }
+        return slots;
+    }
+
+    @Test
+    void aGuaranteedIdIsAlwaysDrawnAtARandomSlot() {
+        Set<Integer> slots = guaranteedSlots(ids(30), List.of("a7"), "a7");
+
+        assertTrue(slots.size() > 1, "the guaranteed id always landed in slot " + slots);
+        for (Integer slot : slots) {
+            assertTrue(slot >= 0 && slot < PlayerData.TASKS_PER_DAY, "slot out of range: " + slot);
+        }
+    }
+
+    @Test
+    void theRestOfADrawIsDistinctAndNeverTheGuaranteedIdAgain() {
+        List<String> drawn = PlayerData.draw(ids(30), List.of("a7"), new Random(5));
+
+        assertEquals(PlayerData.TASKS_PER_DAY, drawn.size());
+        assertEquals(1, drawn.stream().filter("a7"::equals).count());
+        assertEquals(drawn.size(), new HashSet<>(drawn).size());
+        assertTrue(ids(30).containsAll(drawn));
+    }
+
+    @Test
+    void fewerLoadedIdsThanSlotsStillIncludesTheGuaranteedOne() {
+        List<String> drawn = PlayerData.draw(ids(3), List.of("a1"), new Random(5));
+
+        assertEquals(new HashSet<>(ids(3)), new HashSet<>(drawn));
+    }
+
+    // Its plugin is missing, so config never loaded it - nothing special happens
+    @Test
+    void aGuaranteedIdThatIsNotLoadedIsSimplyNotDrawn() {
+        List<String> drawn = PlayerData.draw(ids(30), List.of("ghost"), new Random(5));
+
+        assertEquals(PlayerData.TASKS_PER_DAY, drawn.size());
+        assertFalse(drawn.contains("ghost"));
+        assertTrue(ids(30).containsAll(drawn));
+    }
+
+    // ====================================
+    // More guaranteed ids than slots: the draw is TASKS_PER_DAY of them,
+    // randomly chosen and randomly ordered, and nothing else can get in.
+    // ====================================
+    @Test
+    void moreGuaranteedIdsThanSlotsFillTheWholeDraw() {
+        List<String> guaranteed = ids(9);
+        Set<String> seen = new HashSet<>();
+        Random random = new Random(13);
+        for (int i = 0; i < 200; i++) {
+            List<String> drawn = PlayerData.draw(ids(30), guaranteed, random);
+
+            assertEquals(PlayerData.TASKS_PER_DAY, drawn.size());
+            assertEquals(drawn.size(), new HashSet<>(drawn).size());
+            assertTrue(guaranteed.containsAll(drawn), "a non-guaranteed id got in: " + drawn);
+            seen.addAll(drawn);
+        }
+
+        assertEquals(new HashSet<>(guaranteed), seen, "some guaranteed ids were never chosen");
+    }
+
+    @Test
+    void aPersistedDrawWithoutTheGuaranteedIdGainsItAndKeepsTheRest() {
+        PlayerData data = new PlayerData(0, 0, WEEK, DAY, 0, java.util.Map.of(),
+            List.of("a0", "a1", "a2", "a3", "a4", "a5", "a6"), List.of("a1", "a2"));
+
+        assertTrue(data.ensureTasks(ids(30), List.of("a9"), new Random(4)));
+
+        assertEquals(PlayerData.TASKS_PER_DAY, data.tasks().size());
+        assertTrue(data.tasks().contains("a9"));
+        // Exactly one of the old tasks made room, and it was an unrevealed one
+        assertTrue(data.tasks().containsAll(List.of("a1", "a2")), "a revealed task was taken over");
+        assertEquals(Set.of("a1", "a2"), data.revealed(), "a revealed flag was lost");
+        assertEquals(6, data.tasks().stream().filter(id -> !id.equals("a9")).count());
+    }
+
+    @Test
+    void aShortPersistedDrawGainsTheGuaranteedIdAndIsToppedUp() {
+        PlayerData data = new PlayerData(0, 0, WEEK, DAY, 0, java.util.Map.of(),
+            List.of("a0", "gone", "a1"), List.of("a1"));
+
+        assertTrue(data.ensureTasks(ids(30), List.of("a9"), new Random(4)));
+
+        assertEquals(PlayerData.TASKS_PER_DAY, data.tasks().size());
+        assertTrue(data.tasks().contains("a9"));
+        assertTrue(data.tasks().containsAll(List.of("a0", "a1")));
+        assertEquals(Set.of("a1"), data.revealed());
+    }
+
+    @Test
+    void aDrawThatAlreadyHoldsTheGuaranteedIdIsLeftAlone() {
+        PlayerData data = data();
+        data.ensureTasks(ids(30), List.of("a9"), new Random(4));
+        List<String> first = List.copyOf(data.tasks());
+
+        assertFalse(data.ensureTasks(ids(30), List.of("a9"), new Random(6)));
+        assertEquals(first, data.tasks());
     }
 
     @Test
     void aDrawnListCannotBeMutatedByItsCaller() {
-        List<String> drawn = PlayerData.draw(ids(30), new Random(7));
+        List<String> drawn = PlayerData.draw(ids(30), List.of(), new Random(7));
 
         assertThrows(UnsupportedOperationException.class, () -> drawn.add("a99"));
     }
