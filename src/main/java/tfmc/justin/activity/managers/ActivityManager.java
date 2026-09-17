@@ -3,11 +3,13 @@ package tfmc.justin.activity.managers;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.InventoryView;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
 import tfmc.justin.activity.config.ActivityConfiguration;
 import tfmc.justin.activity.config.Messages;
+import tfmc.justin.activity.gui.ActivityGui;
 import tfmc.justin.activity.hooks.TLibsItems;
 import tfmc.justin.activity.models.ActivityDef;
 import tfmc.justin.activity.models.PlayerData;
@@ -29,6 +31,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.BooleanSupplier;
+import java.util.function.Predicate;
 import java.util.function.Function;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
@@ -70,6 +73,35 @@ public class ActivityManager {
     // and cleared by reload() the way warnedEmptyPool is.
     static final Set<String> reportedItemPaths = ConcurrentHashMap.newKeySet();
 
+    // ====================================
+    // Same idea for a configured command the console refused or that threw:
+    // an unknown command (the shipped 'sudo %player% votelist' on a server
+    // with neither CMI nor EssentialsX, say) would otherwise write a line per
+    // click per player for the whole uptime. Keyed by kind + the configured
+    // command, so the same text under 'reward' and under 'click' is still
+    // reported once each, and cleared by reload() the way the set above is.
+    // ====================================
+    static final Set<String> reportedBrokenCommands = ConcurrentHashMap.newKeySet();
+
+    // uuid -> the nanoTime of that player's last click-commands dispatch.
+    // Written on the main thread (InventoryClickEvent) and emptied per player
+    // by the GUI's quit handler, but concurrent like every other shared map
+    // here: both accessors are public and this class is already touched off
+    // the main thread.
+    private final Map<UUID, Long> clickCooldowns = new ConcurrentHashMap<>();
+
+    // ====================================
+    // The server-wide ceiling the per-player cooldown cannot give: a token
+    // bucket refilled at click-commands-per-second, holding at most one
+    // second's worth. Twenty players each holding a mouse button are twenty
+    // dispatches a second past the cooldown; a hundred players are a hundred,
+    // all synchronous on the main thread. Main thread only - every reader is
+    // inside InventoryClickEvent.
+    // ====================================
+    private double clickTokens;
+    private long clickTokensAt;
+    private boolean clickTokensPrimed;
+
     // One tick a minute crediting online, non-idle players. Cancelled by
     // shutdown; reload leaves it running, since it reads the AFK threshold
     // fresh on every tick.
@@ -97,11 +129,12 @@ public class ActivityManager {
     }
 
     // ====================================
-    // Whether one reward command can be run for one player. Only a command
-    // that pastes %player% needs a name that survives being pasted - a
-    // %uuid%-only command runs for a Bedrock name with a space in it just fine.
+    // Whether one configured console command can be run for one player. Only
+    // a command that pastes %player% needs a name that survives being pasted
+    // - a %uuid%-only command runs for a Bedrock name with a space in it just
+    // fine. The same rule for a reward command and for a click command.
     // ====================================
-    public static boolean canRunRewardCommand(String command, String name) {
+    public static boolean canRunCommand(String command, String name) {
         return command != null && (!command.contains("%player%") || isSafeCommandName(name));
     }
 
@@ -556,7 +589,7 @@ public class ActivityManager {
 
     // ====================================
     // The pool entries that can pay this player at all: one whose commands can
-    // be run for this name (see canRunRewardCommand), or one that hands over
+    // be run for this name (see canRunCommand), or one that hands over
     // items - an item goes straight into the inventory and never has the name
     // pasted into it, so it pays a Bedrock/unsafe name like any other.
     // ====================================
@@ -568,7 +601,7 @@ public class ActivityManager {
                 continue;
             }
             for (String command : entry.commands()) {
-                if (canRunRewardCommand(command, name)) {
+                if (canRunCommand(command, name)) {
                     runnable.add(entry);
                     break;
                 }
@@ -593,7 +626,7 @@ public class ActivityManager {
         return dispatchRewards(
             () -> giveItems(player, entry, config.rewardMultiplier(), milestone,
                 this::resolveRewardItem, plugin.getLogger()),
-            () -> dispatchCommands(player, entry.commands()));
+            () -> dispatchCommands(player, entry.commands(), "reward", plugin.getLogger(), CONSOLE));
     }
 
     // The combine on its own, so the rule above can be pinned without a server
@@ -753,42 +786,330 @@ public class ActivityManager {
         return gaveAny;
     }
 
+    // What a dispatch actually runs on a live server. Passed in rather than
+    // called directly so the loop below can be driven headless - the same
+    // seam giveItems uses for its item resolver.
+    // A Predicate rather than a Consumer so dispatchCommand's own answer is
+    // captured: it returns false for a command the server does not know or
+    // refused, which is otherwise indistinguishable from one that worked.
+    private static final Predicate<String> CONSOLE =
+        command -> Bukkit.dispatchCommand(Bukkit.getConsoleSender(), command);
+
     // ====================================
     // True only if at least one command actually ran. The name check is per
     // command rather than per player: an unsafe name skips the ones that paste
     // it and leaves the %uuid%-only ones working.
+    //
+    // 'what' names the kind of command in the log line - "reward" for a
+    // milestone payout, "click" for an activity's click-commands - so one
+    // dispatcher serves both without either lying about the other.
+    //
+    // A command the console refused (dispatchCommand returned false: unknown,
+    // or the plugin behind it said no) still counts as run, which is what it
+    // has always counted as and what the reward payout's burn-save-pay rule
+    // is built on - a milestone rolled back is drawn and paid again. It is
+    // reported, though, and only once per kind and command: every other
+    // outcome here is bounded by something, and this one is reachable on
+    // every click of a stock config on a server without CMI or EssentialsX.
     // ====================================
-    private boolean dispatchCommands(Player player, List<String> commands) {
+    static boolean dispatchCommands(Player player, List<String> commands, String what, Logger logger,
+                                    Predicate<String> console) {
         String name = player.getName();
         String uuid = player.getUniqueId().toString();
         boolean ranAny = false;
 
         for (String command : commands) {
-            if (!canRunRewardCommand(command, name)) {
-                plugin.getLogger().warning("Skipping reward command '" + command + "' for '"
-                    + Utils.safeForLog(name) + "': the name is not one that can be safely pasted into a"
-                    + " console command.");
+            if (!canRunCommand(command, name)) {
+                logger.warning("Skipping " + what + " command '" + Utils.safeForLog(String.valueOf(command))
+                    + "' for '" + Utils.safeForLog(name) + "': the name is not one that can be safely pasted"
+                    + " into a console command.");
                 continue;
             }
 
             // ====================================
-            // A reward command runs somebody else's plugin, which is free to
-            // throw. Letting that unwind would leave claim() with the
+            // A configured command runs somebody else's plugin, which is free
+            // to throw. Letting that unwind would leave claim() with the
             // thresholds already burned and saved and no chance to put them
             // back, so a throwing command counts as "did not run" and stops
-            // the payout at the milestone it broke on.
+            // the payout at the milestone it broke on. The click path needs
+            // the same guard for a different reason: an InventoryClickEvent
+            // handler that throws leaves the click half-handled.
             // ====================================
             try {
-                Bukkit.dispatchCommand(Bukkit.getConsoleSender(),
-                    command.replace("%player%", name).replace("%uuid%", uuid));
+                if (!console.test(command.replace("%player%", name).replace("%uuid%", uuid))
+                    && reportOnce(what, command)) {
+                    logger.warning("The " + what + " command '" + Utils.safeForLog(String.valueOf(command))
+                        + "' was refused by the console - it is probably unknown on this server. Not"
+                        + " reported again until /activity reload.");
+                }
                 ranAny = true;
             } catch (Throwable t) {
-                plugin.getLogger().severe("Reward command '" + command + "' threw for "
-                    + Utils.safeForLog(name) + ": " + t);
+                // Keyed apart from the refusal above: the two are different
+                // failures, and sharing one key means a command that throws
+                // once and is refused ever after is never reported refused
+                if (reportOnce(what + "-threw", command)) {
+                    logger.severe("A " + what + " command '" + Utils.safeForLog(String.valueOf(command))
+                        + "' threw for " + Utils.safeForLog(name) + ": " + t + ". Not reported again until"
+                        + " /activity reload.");
+                }
             }
         }
 
         return ranAny;
+    }
+
+    // True the first time this kind of command is reported broken, false
+    // every time after, until reload() empties the set
+    private static boolean reportOnce(String what, String command) {
+        return reportedBrokenCommands.add(what + "|" + command);
+    }
+
+    // ====================================
+    // An activity's 'click-commands', run for the player who clicked the task
+    // in this slot (0-based). True only when something was actually
+    // dispatched, so the caller knows whether to play its click sound.
+    //
+    // The slot is resolved and checked here rather than by the caller: the
+    // whole safety of this path is that only a task the player has already
+    // revealed can make the console run anything, and that invariant belongs
+    // with the data it is about, the way reveal(UUID, int) owns its own slot
+    // lookup. False covers a slot showing filler, an activity a reload has
+    // dropped, a task that is still hidden, one that configures no
+    // click-commands, and every refusal of the two rate limits below.
+    //
+    // Nothing is dispatched on this tick: the close and the dispatch are both
+    // scheduled for the next one, by runClickCommandsNow below.
+    //
+    // So "true" here means scheduled, not dispatched - and the caller's click
+    // sound plays on this tick, before the console has been asked anything.
+    // Deliberate: the sound is the GUI's acknowledgement that the click was
+    // accepted rather than refused by a rate limit, and that is exactly what
+    // is known now. Waiting a tick to make it the result of the dispatch
+    // would cost perceived responsiveness on the one control in this menu
+    // that does something, and would still not mean much - a command the
+    // console refuses counts as run here, so "dispatched" is not "worked".
+    // ====================================
+    public boolean runClickCommands(Player player, int slot) {
+        PlayerData data = tasks(player.getUniqueId());
+        List<String> drawn = data.tasks();
+        if (slot < 0 || slot >= drawn.size()) {
+            return false;
+        }
+
+        String id = drawn.get(slot);
+        ActivityDef def = config.activity(id);
+        if (def == null || !data.isRevealed(id)) {
+            return false;
+        }
+
+        // ====================================
+        // What will actually be dispatched, decided before anything is
+        // committed: a click whose every command is skipped by the name guard
+        // ran nothing, and must not cost a sound, a closed menu or a place in
+        // either rate limit. The per-click cap is here too, since the
+        // cooldown bounds clicks and not commands - a 20-entry list would
+        // otherwise multiply the cost of every click by twenty.
+        // ====================================
+        List<String> commands = runnableClickCommands(def, player.getName(), config.clickCommandsPerClick(),
+            plugin.getLogger());
+        if (commands.isEmpty()) {
+            return false;
+        }
+
+        long now = System.nanoTime();
+        // Peeked before the cooldown is burned and taken after it passed, so
+        // neither refusal costs the other anything: a click the server-wide
+        // budget refused leaves the player's cooldown untouched, and one the
+        // player's own cooldown refused does not spend a token other players
+        // are queueing for
+        if (!clickBudget(now, config.clickCommandsPerSecond(), false)) {
+            return false;
+        }
+        // ====================================
+        // The cooldown is burned here, where the dispatch is committed, and
+        // not for a click that ran nothing. A command that is dispatched and
+        // then throws or is refused still burns it: the console has already
+        // been made to do work, which is the thing being rate-limited, and
+        // not burning it would let a permanently broken command be retried at
+        // click rate - exactly what these limits exist to stop.
+        // ====================================
+        if (!clickCooldownPassed(player.getUniqueId(), now,
+            config.clickCommandCooldownMillis() * 1_000_000L)) {
+            return false;
+        }
+        clickBudget(now, config.clickCommandsPerSecond(), commands.size(), true);
+
+        return schedule(() -> runClickCommandsNow(player, commands, id, CONSOLE));
+    }
+
+    // ====================================
+    // The tick after the click: close the menu, then dispatch. In that order
+    // because config.yml promises the menu is gone before the command runs,
+    // so a command that opens a GUI of its own keeps it; done the other way
+    // round the close lands on whatever window the command opened and shuts
+    // that instead.
+    //
+    // The window is identified by its holder and not by comparing the
+    // InventoryView the click came from: nothing in Bukkit promises
+    // getOpenInventory() hands back the same object twice, and a container
+    // that returns a fresh wrapper per call would leave the menu silently
+    // never closing. Asking the same question ActivityGui.onClick asks means
+    // a player who closed the menu himself in the meantime keeps whatever he
+    // opened instead, and a player who reopened the activity menu has that
+    // one closed - which is the wanted outcome anyway.
+    //
+    // Package-private and taking the console call rather than reaching for
+    // Bukkit, so the ordering and the audit line can be driven headless - the
+    // same seam dispatchCommands uses.
+    // ====================================
+    void runClickCommandsNow(Player player, List<String> commands, String id, Predicate<String> console) {
+        InventoryView open = player.getOpenInventory();
+        if (open != null && open.getTopInventory().getHolder() instanceof ActivityGui.Marker) {
+            player.closeInventory();
+        }
+
+        Logger logger = plugin.getLogger();
+        String name = player.getName();
+        UUID uuid = player.getUniqueId();
+
+        dispatchCommands(player, commands, "click", logger, command -> {
+            // ====================================
+            // The audit line every staff command already writes, for the one
+            // console dispatch a player can set off himself. A
+            // console-dispatched command is not written to the server log the
+            // way a player-issued one is, so without this nothing links the
+            // player to what he caused.
+            //
+            // Emitted from a finally so a command that throws still leaves a
+            // per-player trace - that being exactly the case an operator
+            // would be investigating, and the one the once-per-uptime severe
+            // above says the least about.
+            // ====================================
+            String result = "threw";
+            try {
+                boolean ran = console.test(command);
+                result = ran ? "done" : "refused";
+                return ran;
+            } finally {
+                logger.info("ACTIVITY-AUDIT sender=" + Utils.quotedForLog(name) + " uuid=" + uuid
+                    + " action=click-command activity=" + Utils.quotedForLog(id)
+                    + " command=" + Utils.quotedForLog(command) + " result=" + result);
+            }
+        });
+    }
+
+    // ====================================
+    // The commands of one click that can actually be run for this name, at
+    // most 'max' of them. The name guard is the dispatcher's own
+    // (canRunCommand), asked early so a click that would run nothing can be
+    // refused before it costs anything; the dispatcher asks again for each
+    // one it runs, which is where the skip is logged.
+    // ====================================
+    static List<String> runnableClickCommands(ActivityDef def, String name, int max, Logger logger) {
+        if (def == null) {
+            return List.of();
+        }
+        List<String> runnable = new ArrayList<>();
+        for (String command : def.clickCommands()) {
+            if (!canRunCommand(command, name)) {
+                continue;
+            }
+            if (runnable.size() == max) {
+                if (reportOnce("click-cap", def.id())) {
+                    logger.warning("Activity '" + Utils.safeForLog(def.id()) + "' lists more than " + max
+                        + " click-commands - only the first " + max + " are run (see"
+                        + " click-commands-per-click). Not reported again until /activity reload.");
+                }
+                break;
+            }
+            runnable.add(command);
+        }
+        return runnable;
+    }
+
+    // ====================================
+    // Next tick's work, handed to the scheduler behind a guard: a plugin that
+    // is disabling (a /reload or a shutdown mid-tick) throws
+    // IllegalPluginAccessException out of runTask, which would unwind through
+    // the click handler and leave the click half-handled - the exact failure
+    // the ordering above exists to avoid. Nothing was dispatched then, so the
+    // caller is told so.
+    // ====================================
+    private boolean schedule(Runnable work) {
+        try {
+            plugin.getServer().getScheduler().runTask(plugin, work);
+            return true;
+        } catch (Throwable t) {
+            plugin.getLogger().warning("Could not schedule an activity click's commands: " + t);
+            return false;
+        }
+    }
+
+    // ====================================
+    // The server-wide ceiling, refilled at 'perSecond' tokens a second and
+    // holding at most one second's worth, so a burst is bounded by the same
+    // number it sustains. Peeked with take=false and spent with take=true.
+    // Package-private and taking its clock reading so it can be pinned
+    // without a clock to wait on.
+    //
+    // A token is a command and not a click: config.yml documents the knob as
+    // a ceiling on commands, and a click dispatching five of them costs the
+    // console five commands' worth of main thread.
+    //
+    // 'cost' is what a take spends, and the bucket is allowed to go negative
+    // paying it - the gate is one whole token, not 'cost' of them. Refusing a
+    // click outright when it wants more than the bucket holds would make a
+    // legal configuration (click-commands-per-second below
+    // click-commands-per-click) silently never run anything, forever, with no
+    // diagnostic. Overdrawing instead keeps the long-run rate at exactly
+    // 'perSecond': the debt has to be refilled before the next click is
+    // allowed, and it is bounded by one click's cap (at most 50), so the
+    // bucket always recovers.
+    // ====================================
+    boolean clickBudget(long now, int perSecond, boolean take) {
+        return clickBudget(now, perSecond, 1, take);
+    }
+
+    boolean clickBudget(long now, int perSecond, int cost, boolean take) {
+        if (!clickTokensPrimed) {
+            clickTokensPrimed = true;
+            clickTokensAt = now;
+            clickTokens = perSecond;
+        }
+        clickTokens = Math.min(perSecond, clickTokens + (now - clickTokensAt) / 1e9 * perSecond);
+        clickTokensAt = now;
+        if (clickTokens < 1) {
+            return false;
+        }
+        if (take) {
+            clickTokens -= cost;
+        }
+        return true;
+    }
+
+    // The rate limit on its own, so it can be pinned without a clock to wait
+    // on. Per player rather than per activity: what is being bounded is how
+    // often one player can make the console run anything.
+    boolean clickCooldownPassed(UUID uuid, long now, long intervalNanos) {
+        Long last = clickCooldowns.get(uuid);
+        if (last != null && now - last < intervalNanos) {
+            return false;
+        }
+        clickCooldowns.put(uuid, now);
+        return true;
+    }
+
+    // ====================================
+    // Called from the GUI's quit handler. Without it the map would keep one
+    // entry per player who ever clicked a task, for the whole uptime.
+    // ====================================
+    public void forgetClickCooldown(UUID uuid) {
+        clickCooldowns.remove(uuid);
+    }
+
+    // Package-private for the eviction test; nothing else reads it
+    int clickCooldownEntries() {
+        return clickCooldowns.size();
     }
 
     // A joiner who has never scored anything gets no entry: rolled() reads
@@ -807,6 +1128,9 @@ public class ActivityManager {
         // if they got it wrong twice
         warnedEmptyPool = false;
         reportedItemPaths.clear();
+        // An operator who fixed a broken command deserves to hear about it
+        // again if it is still broken
+        reportedBrokenCommands.clear();
     }
 
     private void playSound(Player player, String soundKey) {

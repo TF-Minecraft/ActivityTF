@@ -75,14 +75,39 @@ reset:
 #   and one craft counts as one action however big the output stack is. An
 #   activity with both 'station' and 'craft'/'profession' is a config error:
 #   the extra 'station' is reported at load and ignored.
+# click-commands: optional. Console commands run when the player clicks this
+#   activity's task in /activity AFTER it has already been revealed - the
+#   first click on a hidden task only reveals it, every later click runs
+#   these. They run from the console, not as the player, and %player% and
+#   %uuid% are replaced with his name and his UUID. A name that cannot be
+#   safely pasted into a console command (a Bedrock name with a space in it,
+#   say) skips the commands that use %player% and still runs the %uuid% ones.
+#   The menu is closed first and the commands run straight after, on the tick
+#   after the click, so a command is free to open a menu of its own and keep
+#   it. One player can only set these off once every
+#   'click-command-cooldown-millis' however fast he clicks, the server as a
+#   whole no more often than 'click-commands-per-second', and one click runs
+#   at most 'click-commands-per-click' of them.
+# description: optional. A short blurb shown at the top of the task's lore,
+#   above the progress bar. Write it as a single string for one line or as a
+#   list for several; the same #rrggbb and &-codes 'display' takes work here.
+#   It is only shown once the player has revealed the task - a hidden task
+#   stays a blank grey dye, so a description never gives away what it is.
+#   Anything that is neither a string nor a list is reported at load and the
+#   activity simply shows no description.
 activities:
   vote:
     display: "#e6ca40&lVoting"
+    description:
+      - "&7Vote for the server on any listed site."
+      - "&7Links: &f/vote"
     material: v.paper
     every: 1
     points: 1
     daily-cap: 5
     daily-guaranteed: true
+    click-commands:
+      - "sudo %player% votelist"
   geiger:
     display: "#e6ca40&lRadioactive Sources"
     material: SPYGLASS
@@ -91,6 +116,7 @@ activities:
     daily-cap: 1
   archaeology_find:
     display: "#e6ca40&lArchaeology"
+    description: "&7Brush suspicious sand and gravel for finds."
     material: BRUSH
     every: 3
     points: 1
@@ -103,6 +129,7 @@ activities:
     daily-cap: 1
   playtime:
     display: "#e6ca40&lTime Played"
+    description: "&7Simply stay online and active."
     material: CLOCK
     every: 60          # 60 counted minutes => 1 point
     points: 1
@@ -110,6 +137,7 @@ activities:
   # MarketBlock: denar earned selling to the market block ('every' is denar)
   market_sale:
     display: "#e6ca40&lMarket Sales"
+    description: "&7Earn denar selling goods to a market block."
     material: EMERALD
     every: 25          # 25 denar earned => 1 point
     points: 1
@@ -187,6 +215,7 @@ activities:
   # Cooking: dishes finished at pots, stations and crafting boards
   cook_dish:
     display: "#e6ca40&lCook Dishes"
+    description: "&7Finish dishes at a cooking pot, station or board."
     material: COOKED_BEEF
     every: 5
     points: 1
@@ -492,6 +521,33 @@ sounds:               # Bukkit Sound names, "" disables
   bar-complete: UI_TOAST_CHALLENGE_COMPLETE     # milestone reached / claimed
 
 save-interval-minutes: 5
+
+# Shortest gap, per player, between two runs of any activity's
+# 'click-commands'. A click inside it does nothing at all. Clamped to
+# 50-60000; there is no "off" value, since 0 would let a held mouse button
+# make the console run commands at click rate.
+click-command-cooldown-millis: 1000
+
+# The ceiling the per-player cooldown above cannot give: how many click-command
+# dispatches the whole server may do in a second, however many players are
+# clicking. They run on the main thread, so a hundred players each holding a
+# mouse button is a hundred console commands a tick-budget has to pay for. A
+# click over the ceiling does nothing at all, exactly like one inside the
+# cooldown. Clamped to 1-200.
+#
+# A click pays for every command it dispatches, not one flat token - so with
+# click-commands-per-click: 5 below, a click running five commands costs five.
+# A click needs one token to be allowed and may then take the budget negative
+# paying for the rest, so setting this lower than click-commands-per-click
+# still works: it just means one click and then a wait, rather than nothing
+# ever running.
+click-commands-per-second: 20
+
+# Most commands one click may dispatch. The cooldown counts a click and not a
+# command, so without this a 20-entry 'click-commands' list would multiply the
+# cost of every click by twenty. Anything past this is dropped and reported
+# once. Clamped to 1-50.
+click-commands-per-click: 5
 
 # Feeds the 'playtime' activity above: one counted action per whole minute a
 # player is online whose client has not gone silent. Part-minutes at join and

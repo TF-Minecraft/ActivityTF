@@ -305,6 +305,51 @@ class DefaultResourcesTest {
         assertTrue(value.contains("%max%"));
     }
 
+    // The shipped descriptions, read through the exact key the parser reads -
+    // a typo in either end would leave the examples invisible in silence. Both
+    // accepted shapes ship: cook_dish is a plain string, vote is a list.
+    @Test
+    void theShippedConfigDescribesVoteAndCookDish() {
+        YamlConfiguration config = load("config.yml");
+        String key = "." + ActivityConfiguration.DESCRIPTION_KEY;
+
+        String cookDish = config.getString("activities.cook_dish" + key);
+        assertFalse(cookDish == null || cookDish.isBlank(), "activities.cook_dish" + key + " should not be blank");
+
+        List<String> vote = config.getStringList("activities.vote" + key);
+        assertFalse(vote.isEmpty(), "activities.vote" + key + " should ship at least one line");
+        for (String line : vote) {
+            assertFalse(line == null || line.isBlank(), "activities.vote" + key + " has a blank line");
+        }
+    }
+
+    // Every description that ships, whatever shape it is written in, has to be
+    // non-blank and use valid hex markers - the same bar display is held to
+    @Test
+    void everyShippedDescriptionIsNonBlankAndValidHex() {
+        YamlConfiguration config = load("config.yml");
+        ConfigurationSection activities = config.getConfigurationSection("activities");
+        assertTrue(activities != null && !activities.getKeys(false).isEmpty());
+
+        int described = 0;
+        for (String id : activities.getKeys(false)) {
+            String path = id + "." + ActivityConfiguration.DESCRIPTION_KEY;
+            Object raw = activities.get(path);
+            if (raw == null) {
+                continue;
+            }
+            described++;
+            List<?> lines = raw instanceof List<?> list ? list : List.of(raw);
+            assertFalse(lines.isEmpty(), "activities." + path + " should not be empty");
+            for (Object line : lines) {
+                String value = String.valueOf(line);
+                assertFalse(line == null || value.isBlank(), "activities." + path + " has a blank line");
+                assertEveryHexMarkerIsValid(value, "activities." + path);
+            }
+        }
+        assertTrue(described >= 1, "config.yml should ship a description example, found " + described);
+    }
+
     @Test
     void colorizeStripsHexAndLegacyCodes() {
         String result = Utils.colorize("#e6ca40&lX");

@@ -140,6 +140,29 @@ public class ActivityConfiguration {
 
     private int saveIntervalMinutes;
 
+    // ====================================
+    // Shortest gap between two runs of an activity's 'click-commands' for one
+    // player. The GUI is the only path where a click dispatches a console
+    // command, so this is what keeps a held mouse button or a macro from
+    // dispatching at click rate.
+    // volatile for the same reason as the fields above it: /activity reload
+    // rewrites it on the main thread.
+    // ====================================
+    private volatile int clickCommandCooldownMillis = CLICK_COMMAND_COOLDOWN_DEFAULT;
+
+    // ====================================
+    // The two limits the per-player cooldown cannot give: how many click
+    // dispatches the whole server may do in a second (the cooldown is per
+    // player, so a hundred players holding a mouse button is a hundred
+    // console dispatches a second on the main thread), and how many commands
+    // one click may dispatch (the cooldown counts a click, not a command, so
+    // a 20-entry 'click-commands' list multiplies the per-click cost).
+    // volatile for the same reason as the field above.
+    // ====================================
+    private volatile int clickCommandsPerSecond = CLICK_COMMANDS_PER_SECOND_DEFAULT;
+
+    private volatile int clickCommandsPerClick = CLICK_COMMANDS_PER_CLICK_DEFAULT;
+
     private volatile int afkMinutes;
 
     public ActivityConfiguration(JavaPlugin plugin) {
@@ -200,6 +223,13 @@ public class ActivityConfiguration {
 
         saveIntervalMinutes = Math.max(1, config.getInt("save-interval-minutes", 5));
 
+        clickCommandCooldownMillis = clamped(config, CLICK_COMMAND_COOLDOWN_PATH,
+            CLICK_COMMAND_COOLDOWN_DEFAULT, 50, 60_000);
+        clickCommandsPerSecond = clamped(config, CLICK_COMMANDS_PER_SECOND_PATH,
+            CLICK_COMMANDS_PER_SECOND_DEFAULT, 1, 200);
+        clickCommandsPerClick = clamped(config, CLICK_COMMANDS_PER_CLICK_PATH,
+            CLICK_COMMANDS_PER_CLICK_DEFAULT, 1, 50);
+
         // 0 disables the idle check, so unlike the other clamps this one has
         // no lower bound of 1
         afkMinutes = Math.max(0, config.getInt("playtime.afk-minutes", 5));
@@ -229,6 +259,57 @@ public class ActivityConfiguration {
     // every claim paying 1x with nothing to show for it.
     static final String REWARDS_MULTIPLIER_PATH = "rewards.multiplier";
     static final String REWARDS_POOL_PATH = "rewards.pool";
+
+    // The per-activity key and the rate limit that guards it. A path constant
+    // for the same reason as the ones above: DefaultResourcesTest asserts the
+    // shipped file against this exact string.
+    static final String CLICK_COMMANDS_KEY = "click-commands";
+
+    // The optional per-activity blurb, a constant for the same reason:
+    // DefaultResourcesTest asserts the shipped file against this exact string.
+    static final String DESCRIPTION_KEY = "description";
+    static final String CLICK_COMMAND_COOLDOWN_PATH = "click-command-cooldown-millis";
+    static final String CLICK_COMMANDS_PER_SECOND_PATH = "click-commands-per-second";
+    static final String CLICK_COMMANDS_PER_CLICK_PATH = "click-commands-per-click";
+
+    // ====================================
+    // The defaults, named once each: they are both the field initialiser and
+    // what an absent or unparseable value falls back to, and writing the
+    // number in three places is how "absent" and "unreadable" end up meaning
+    // two different things.
+    // ====================================
+    static final int CLICK_COMMAND_COOLDOWN_DEFAULT = 1000;
+    static final int CLICK_COMMANDS_PER_SECOND_DEFAULT = 20;
+    static final int CLICK_COMMANDS_PER_CLICK_DEFAULT = 5;
+
+    // ====================================
+    // The three click-command knobs, parsed the same way. None of them has an
+    // "off" value the reroll knobs have: 0 would let a held mouse button
+    // dispatch console commands at click rate, so each has a floor above
+    // zero, and a ceiling past which the value reads as a typo rather than a
+    // setting. A non-number is named and the default used, the way
+    // rewardMultiplier() names one. Takes the section, not the value, so a
+    // headless test can catch a typo in the path.
+    // ====================================
+    private int clamped(ConfigurationSection config, String path, int fallback, int min, int max) {
+        Object raw = config.get(path);
+        if (raw == null) {
+            return fallback;
+        }
+        if (!(raw instanceof Number number)) {
+            plugin.getLogger().warning(path + " is not a number ('"
+                + Utils.safeForLog(String.valueOf(raw)) + "') - using " + fallback + ".");
+            return fallback;
+        }
+        long value = number.longValue();
+        if (value < min || value > max) {
+            long clamp = Math.max(min, Math.min(max, value));
+            plugin.getLogger().warning(path + " " + value
+                + " is outside " + min + "-" + max + " - using " + clamp + ".");
+            return (int) clamp;
+        }
+        return (int) value;
+    }
 
     // 0 turns rerolling off entirely, so like playtime.afk-minutes this clamp
     // has no lower bound of 1
@@ -293,7 +374,9 @@ public class ActivityConfiguration {
                 iconPath,
                 Math.max(1, wholeNumber(entry, id, "every", 1)),
                 points,
-                dailyCap
+                dailyCap,
+                clickCommands(entry, id),
+                description(entry, id)
             ));
 
             loadCraft(crafts, paths, entry.getString("craft"), id);
@@ -536,6 +619,61 @@ public class ActivityConfiguration {
             return fallback;
         }
         return entry.getBoolean(key, fallback);
+    }
+
+    // ====================================
+    // Optional per-activity console commands, run when the player clicks an
+    // already-revealed task. A single 'click-commands: sudo %player% votelist'
+    // is the natural typo and would otherwise be dropped without a word - the
+    // same bug loadRewardItems refuses to have.
+    // ====================================
+    private List<String> clickCommands(ConfigurationSection entry, String id) {
+        Object raw = entry.get(CLICK_COMMANDS_KEY);
+        if (raw == null) {
+            return List.of();
+        }
+        if (!(raw instanceof List<?> list)) {
+            plugin.getLogger().warning("activities." + id + "." + CLICK_COMMANDS_KEY + " is not a list of"
+                + " commands ('" + Utils.safeForLog(String.valueOf(raw)) + "') - no command will ever be run"
+                + " for this activity.");
+            return List.of();
+        }
+        return nonBlank(list);
+    }
+
+    // ====================================
+    // Optional per-activity blurb, shown at the top of the task's lore once
+    // the task is revealed. A two-line description wants a list and a one-line
+    // one wants a plain string, so both are accepted; anything else (a number,
+    // a nested section) is named and ignored rather than silently dropped.
+    // ====================================
+    private List<String> description(ConfigurationSection entry, String id) {
+        Object raw = entry.get(DESCRIPTION_KEY);
+        if (raw == null) {
+            return List.of();
+        }
+        if (raw instanceof List<?> list) {
+            return nonBlank(list);
+        }
+        if (raw instanceof String text) {
+            return text.isBlank() ? List.of() : List.of(text);
+        }
+        plugin.getLogger().warning("activities." + id + "." + DESCRIPTION_KEY + " is neither a string nor a"
+            + " list of lines ('" + Utils.safeForLog(String.valueOf(raw)) + "') - this activity shows no"
+            + " description.");
+        return List.of();
+    }
+
+    // Every blank or missing entry dropped, so neither a stray '- ""' nor a
+    // null from YAML reaches the GUI or the dispatcher
+    private static List<String> nonBlank(List<?> list) {
+        List<String> kept = new ArrayList<>();
+        for (Object value : list) {
+            if (value != null && !String.valueOf(value).isBlank()) {
+                kept.add(String.valueOf(value));
+            }
+        }
+        return List.copyOf(kept);
     }
 
     // A bar of 0 glyphs is invisible and one of 5000 does not fit in a lore
@@ -1060,6 +1198,21 @@ public class ActivityConfiguration {
 
     public int saveIntervalMinutes() {
         return saveIntervalMinutes;
+    }
+
+    // Shortest gap between two 'click-commands' runs for one player
+    public int clickCommandCooldownMillis() {
+        return clickCommandCooldownMillis;
+    }
+
+    // Most click dispatches the whole server may do in a second
+    public int clickCommandsPerSecond() {
+        return clickCommandsPerSecond;
+    }
+
+    // Most commands one click may dispatch
+    public int clickCommandsPerClick() {
+        return clickCommandsPerClick;
     }
 
     // Whether an m.<type>.<id> path can actually be resolved right now -

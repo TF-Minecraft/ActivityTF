@@ -8,6 +8,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
@@ -55,7 +56,13 @@ public class ActivityGui implements Listener {
         this.manager = manager;
     }
 
-    private static final class Marker implements InventoryHolder {
+    // ====================================
+    // What makes an open window "the activity menu". Public because the
+    // manager asks the same question a tick after a click, to decide whether
+    // the window it is about to close is still ours - identity of the
+    // InventoryView is not something Bukkit promises.
+    // ====================================
+    public static final class Marker implements InventoryHolder {
 
         private Inventory inventory;
 
@@ -208,19 +215,33 @@ public class ActivityGui implements Listener {
     }
 
     private ItemStack activityItem(ActivityConfiguration config, Messages messages, ActivityDef def, PlayerData data) {
-        int count = data.count(def.id());
-        int today = def.worth(count);
+        return item(iconStack(config, def.icon(), def.iconPath()), Utils.colorize(def.display()),
+            activityLore(messages, def, data.count(def.id())));
+    }
 
+    // ====================================
+    // A revealed task's lore: the operator's description first, then the
+    // progress bar, then what the day has paid so far. The description is
+    // free-form operator text with no label or placeholder of its own, so it
+    // is emitted as configured rather than through a messages.yml key - the
+    // same treatment def.display() gets, colour codes and all. Only reached
+    // from activityItem, never from the hidden-task branch, so a description
+    // cannot give away an unrevealed task. Package-private and pure so the
+    // ordering can be pinned without a live Bukkit inventory.
+    // ====================================
+    static List<String> activityLore(Messages messages, ActivityDef def, int count) {
         List<String> lore = new ArrayList<>();
+        for (String line : def.description()) {
+            lore.add(Utils.colorize(line));
+        }
         String progress = progressBar(def, count);
         if (progress != null) {
             lore.add(messages.get("gui.activity-lore-progress", "%bar%", Utils.colorize(progress)));
         }
         lore.add(def.dailyCap() > 0
-            ? messages.get("gui.activity-lore-today-capped", "%today%", today, "%cap%", def.dailyCap())
-            : messages.get("gui.activity-lore-today", "%today%", today));
-
-        return item(iconStack(config, def.icon(), def.iconPath()), Utils.colorize(def.display()), lore);
+            ? messages.get("gui.activity-lore-today-capped", "%today%", def.worth(count), "%cap%", def.dailyCap())
+            : messages.get("gui.activity-lore-today", "%today%", def.worth(count)));
+        return lore;
     }
 
     // ====================================
@@ -326,6 +347,19 @@ public class ActivityGui implements Listener {
             clickSound(player);
             player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1f, 1f);
         } else if (!reveal.drawChanged()) {
+            // ====================================
+            // Nothing to reveal and nothing to repaint: the task was already
+            // revealed. That is the click that runs the activity's
+            // 'click-commands', if it configures any - so the first click
+            // reveals and every later one runs them. The manager owns the
+            // revealed check, the dispatch, the two rate limits and the
+            // close; a click it refused (nothing to run, or one of the
+            // limits) stays as silent as it has always been, and only a click
+            // that really dispatched something makes a sound.
+            // ====================================
+            if (manager.runClickCommands(player, task)) {
+                clickSound(player);
+            }
             return;
         }
 
@@ -423,6 +457,17 @@ public class ActivityGui implements Listener {
             }
         }
         return -1;
+    }
+
+    // ====================================
+    // The per-player click-commands cooldown would otherwise keep an entry
+    // for every player who ever clicked a task, for the whole uptime. This
+    // listener is registered unconditionally (see ActivityPlugin), so there
+    // is no new registration to add for it.
+    // ====================================
+    @EventHandler
+    public void onQuit(PlayerQuitEvent event) {
+        manager.forgetClickCooldown(event.getPlayer().getUniqueId());
     }
 
     // Marketblock's menu click; a successful claim still plays its own sound
