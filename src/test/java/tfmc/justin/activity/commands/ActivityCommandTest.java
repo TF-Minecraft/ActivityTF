@@ -102,7 +102,7 @@ class ActivityCommandTest {
         ActivityManager manager = manager();
         UUID player = UUID.randomUUID();
 
-        assertEquals(Outcome.NOT_A_TASK, command(manager).add(player, "vote", 5, false));
+        assertEquals(Outcome.NOT_A_TASK, command(manager).add(player, "vote", 5, false).outcome());
         // Not even a row: a gated add must not pin an offline player in the file
         assertNull(manager.getStore().peek(player));
     }
@@ -113,7 +113,7 @@ class ActivityCommandTest {
         UUID player = UUID.randomUUID();
         manager.tasks(player);
 
-        assertEquals(Outcome.NOT_A_TASK, command(manager).add(player, "vote", 5, false));
+        assertEquals(Outcome.NOT_A_TASK, command(manager).add(player, "vote", 5, false).outcome());
         assertEquals(0, manager.getStore().get(player).count("vote"));
     }
 
@@ -123,7 +123,7 @@ class ActivityCommandTest {
         UUID player = UUID.randomUUID();
         manager.reveal(player, manager.tasks(player).tasks().indexOf("vote"));
 
-        assertEquals(Outcome.ADDED, command(manager).add(player, "vote", 1, false));
+        assertEquals(Outcome.ADDED, command(manager).add(player, "vote", 1, false).outcome());
         assertEquals(1, manager.getStore().get(player).count("vote"));
     }
 
@@ -132,7 +132,7 @@ class ActivityCommandTest {
         ActivityManager manager = manager();
         UUID player = UUID.randomUUID();
 
-        assertEquals(Outcome.ADDED, command(manager).add(player, "vote", 1, true));
+        assertEquals(Outcome.ADDED, command(manager).add(player, "vote", 1, true).outcome());
         assertEquals(1, manager.getStore().get(player).count("vote"));
     }
 
@@ -141,8 +141,8 @@ class ActivityCommandTest {
         ActivityManager manager = manager();
         UUID player = UUID.randomUUID();
 
-        assertEquals(Outcome.UNKNOWN_ACTIVITY, command(manager).add(player, "nope", 1, false));
-        assertEquals(Outcome.UNKNOWN_ACTIVITY, command(manager).add(player, "nope", 1, true));
+        assertEquals(Outcome.UNKNOWN_ACTIVITY, command(manager).add(player, "nope", 1, false).outcome());
+        assertEquals(Outcome.UNKNOWN_ACTIVITY, command(manager).add(player, "nope", 1, true).outcome());
     }
 
     // ====================================
@@ -157,8 +157,9 @@ class ActivityCommandTest {
             new ActivityDef("vote", "Vote", Material.PAPER, null, 1, 1, 0));
         TestManagers.limits(manager, 50, 0);
         UUID player = UUID.randomUUID();
+        manager.reveal(player, manager.tasks(player).tasks().indexOf("vote"));
 
-        assertEquals(Outcome.CAPPED_DAILY, command(manager).add(player, "vote", 5, true));
+        assertEquals(Outcome.CAPPED_DAILY, command(manager).add(player, "vote", 5, false).outcome());
         // The count still went in - only the points were lost
         assertEquals(5, manager.getStore().get(player).count("vote"));
         assertEquals(0, manager.getStore().get(player).points());
@@ -170,8 +171,9 @@ class ActivityCommandTest {
             new ActivityDef("vote", "Vote", Material.PAPER, null, 1, 1, 0));
         TestManagers.limits(manager, 0, 10);
         UUID player = UUID.randomUUID();
+        manager.reveal(player, manager.tasks(player).tasks().indexOf("vote"));
 
-        assertEquals(Outcome.CAPPED_WEEKLY, command(manager).add(player, "vote", 5, true));
+        assertEquals(Outcome.CAPPED_WEEKLY, command(manager).add(player, "vote", 5, false).outcome());
         assertEquals(0, manager.getStore().get(player).points());
     }
 
@@ -182,11 +184,76 @@ class ActivityCommandTest {
         // A full bar keeps the point off it, so the cap can be reached headless
         TestManagers.limits(manager, 0, 10);
         UUID player = UUID.randomUUID();
+        manager.reveal(player, manager.tasks(player).tasks().indexOf("vote"));
         ActivityCommand command = command(manager);
 
         // The first add is what meets the activity's own daily cap of 1
-        assertEquals(Outcome.CAPPED_WEEKLY, command.add(player, "vote", 1, true));
-        assertEquals(Outcome.CAPPED_ACTIVITY, command.add(player, "vote", 1, true));
+        assertEquals(Outcome.CAPPED_WEEKLY, command.add(player, "vote", 1, false).outcome());
+        assertEquals(Outcome.CAPPED_ACTIVITY, command.add(player, "vote", 1, false).outcome());
+    }
+
+    // ====================================
+    // What --force is for: the shipped vote activity (every: 1, points: 1,
+    // daily-cap: 5) with bar.daily-max 10, credited 50. Both limits are
+    // ignored and all 50 points land. Awarding a point reaches
+    // Bukkit.getPlayer, so the server stub goes in first.
+    // ====================================
+    @Test
+    void forceAwardsTheFullWorthPastTheActivityCapAndTheDailyBudget() {
+        TestManagers.bukkit();
+        ActivityManager manager = TestManagers.manager(
+            new ActivityDef("vote", "Vote", Material.PAPER, null, 1, 1, 5));
+        TestManagers.limits(manager, 100, 10);
+        UUID player = UUID.randomUUID();
+
+        ActivityCommand.Added added = command(manager).add(player, "vote", 50, true);
+
+        assertEquals(Outcome.ADDED, added.outcome());
+        assertEquals(50, added.points());
+        assertEquals(50, manager.getStore().get(player).points());
+        assertEquals(50, manager.getStore().get(player).count("vote"));
+        assertEquals(0, manager.getStore().get(player).dailyPoints());
+    }
+
+    // The same add unforced: the activity cap of 5 is what lands, and the
+    // daily budget of 10 would have held it to 10 anyway
+    @Test
+    void theSameAddUnforcedIsStillHeldToTheActivityCap() {
+        TestManagers.bukkit();
+        ActivityManager manager = TestManagers.manager(
+            new ActivityDef("vote", "Vote", Material.PAPER, null, 1, 1, 5));
+        TestManagers.limits(manager, 100, 10);
+        UUID player = UUID.randomUUID();
+        manager.reveal(player, manager.tasks(player).tasks().indexOf("vote"));
+
+        ActivityCommand.Added added = command(manager).add(player, "vote", 50, false);
+
+        assertEquals(Outcome.ADDED, added.outcome());
+        assertEquals(5, added.points());
+        assertEquals(5, manager.getStore().get(player).points());
+        assertEquals(5, manager.getStore().get(player).dailyPoints());
+    }
+
+    // bar.max is the one limit --force does not bypass: a bar that cannot hold
+    // the award is reported as clamped rather than as a plain success
+    @Test
+    void forceStillStopsAtTheWeeklyMaximum() {
+        TestManagers.bukkit();
+        ActivityManager manager = TestManagers.manager(
+            new ActivityDef("vote", "Vote", Material.PAPER, null, 1, 1, 5));
+        TestManagers.limits(manager, 10, 10);
+        UUID player = UUID.randomUUID();
+
+        ActivityCommand.Added added = command(manager).add(player, "vote", 50, true);
+
+        assertEquals(Outcome.CLAMPED_WEEKLY, added.outcome());
+        assertEquals(10, added.points());
+        assertEquals(10, manager.getStore().get(player).points());
+
+        // ...and a second forced add onto the full bar has nothing to clamp
+        ActivityCommand.Added again = command(manager).add(player, "vote", 5, true);
+        assertEquals(Outcome.CAPPED_WEEKLY, again.outcome());
+        assertEquals(0, again.points());
     }
 
     // A count part-way to its next point is a plain success, not a cap
@@ -195,7 +262,7 @@ class ActivityCommandTest {
         ActivityManager manager = manager();
         UUID player = UUID.randomUUID();
 
-        assertEquals(Outcome.ADDED, command(manager).add(player, "vote", 1, true));
+        assertEquals(Outcome.ADDED, command(manager).add(player, "vote", 1, true).outcome());
     }
 
     // Each outcome has to have something to say, and it has to be in the
@@ -210,6 +277,7 @@ class ActivityCommandTest {
         assertEquals("admin.add-capped-activity", Outcome.CAPPED_ACTIVITY.messageKey());
         assertEquals("admin.add-capped-daily", Outcome.CAPPED_DAILY.messageKey());
         assertEquals("admin.add-capped-weekly", Outcome.CAPPED_WEEKLY.messageKey());
+        assertEquals("admin.add-clamped-weekly", Outcome.CLAMPED_WEEKLY.messageKey());
         assertEquals("admin.unknown-activity", Outcome.UNKNOWN_ACTIVITY.messageKey());
 
         for (Outcome outcome : Outcome.values()) {

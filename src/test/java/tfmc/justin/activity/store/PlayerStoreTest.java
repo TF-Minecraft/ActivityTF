@@ -1,8 +1,11 @@
 package tfmc.justin.activity.store;
 
+import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.junit.jupiter.api.Test;
+import tfmc.justin.activity.models.ActivityDef;
 import tfmc.justin.activity.models.PlayerData;
 
 import java.util.List;
@@ -124,6 +127,40 @@ class PlayerStoreTest {
         PlayerData parsed = PlayerStore.readEntry(players, id.toString(), BAR_MAX, DAILY_MAX, KNOWN);
 
         assertEquals(7, parsed.dailyPoints());
+    }
+
+    // ====================================
+    // /activity add --force awards past both daily limits, so what it leaves
+    // behind has to survive a save and a load unchanged: parse() clamps points
+    // to bar.max and daily-points to bar.daily-max, and a forced add that
+    // pushed either past its clamp would be silently cut back on the next
+    // restart - memory and disk disagreeing about a live player.
+    // ====================================
+    @Test
+    void aForcedAwardAgreesBetweenMemoryAndDisk() throws InvalidConfigurationException {
+        UUID id = UUID.randomUUID();
+        PlayerData inMemory = new PlayerData(0, 0, "2026-09-07", "2026-09-09", 0, Map.of());
+        // every: 1, points: 1, daily-cap: 5 - the shipped vote activity, with
+        // BAR_MAX (20) well under what 50 actions are worth uncapped
+        ActivityDef vote = new ActivityDef("vote", "Vote", Material.PAPER, null, 1, 1, 5);
+        inMemory.recordForced(50, vote, BAR_MAX, List.of());
+
+        // Through the file's own text, not just the in-memory snapshot: the
+        // daily counts go in as a plain Map and only become a section once
+        // YAML has been written and read back
+        YamlConfiguration onDisk = new YamlConfiguration();
+        onDisk.loadFromString(PlayerStore.snapshot(Map.of(id, inMemory)).saveToString());
+        PlayerData fromDisk = PlayerStore.readEntry(onDisk.getConfigurationSection("players"),
+            id.toString(), BAR_MAX, DAILY_MAX, KNOWN);
+
+        assertEquals(inMemory.points(), fromDisk.points());
+        assertEquals(inMemory.dailyPoints(), fromDisk.dailyPoints());
+        assertEquals(inMemory.claimedPoints(), fromDisk.claimedPoints());
+        assertEquals(inMemory.count("vote"), fromDisk.count("vote"));
+        // and neither clamp had anything to cut
+        assertEquals(BAR_MAX, fromDisk.points());
+        assertEquals(0, fromDisk.dailyPoints());
+        assertEquals(50, fromDisk.count("vote"));
     }
 
     @Test

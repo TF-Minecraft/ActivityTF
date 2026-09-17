@@ -26,5 +26,10 @@ public enum Recorded {
     DAILY_MAX,
 
     // The weekly bar (bar.max) was already full
-    WEEKLY_MAX
+    WEEKLY_MAX,
+
+    // Points landed, but fewer than were earned: the weekly bar (bar.max)
+    // filled up part-way through. Only a forced add can produce this - the
+    // gated path spends its whole award or none of it.
+    WEEKLY_CLAMPED
 }

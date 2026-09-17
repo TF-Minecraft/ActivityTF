@@ -39,8 +39,17 @@ public record ActivityDef(String id, String display, Material icon, String iconP
 
     // What a day's action count is worth in points, after every and dailyCap
     public int worth(int count) {
-        long raw = (long) (count / every) * points;
-        long capped = dailyCap > 0 ? Math.min(raw, dailyCap) : raw;
-        return (int) Math.min(Integer.MAX_VALUE, capped);
+        int raw = rawWorth(count);
+        return dailyCap > 0 ? Math.min(raw, dailyCap) : raw;
+    }
+
+    // ====================================
+    // The same figure before dailyCap is applied - what /activity add --force
+    // credits, since the whole point of the flag is that no cap holds it back.
+    // Saturates rather than wrapping: a count near MAX_ADD times a big 'points'
+    // overflows an int, and a negative worth would take points off the bar.
+    // ====================================
+    public int rawWorth(int count) {
+        return (int) Math.min(Integer.MAX_VALUE, (long) (count / every) * points);
     }
 }

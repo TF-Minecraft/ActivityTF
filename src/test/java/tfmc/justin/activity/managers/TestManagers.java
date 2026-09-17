@@ -1,5 +1,7 @@
 package tfmc.justin.activity.managers;
 
+import org.bukkit.Bukkit;
+import org.bukkit.Server;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 import sun.reflect.ReflectionFactory;
@@ -9,6 +11,8 @@ import tfmc.justin.activity.models.ActivityDef;
 import java.io.File;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.Proxy;
 import java.time.DayOfWeek;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -152,6 +156,42 @@ public final class TestManagers {
         try {
             set(manager.getConfiguration().messages(), "messages",
                 YamlConfiguration.loadConfiguration(new File("src/main/resources/messages.yml")));
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    // ====================================
+    // A Bukkit server stub, so the record paths that actually credit a point
+    // can be driven headless: they end in Bukkit.getPlayer(uuid), which NPEs
+    // while Bukkit.server is null. The stub answers that with null - the
+    // offline-player case - so the award lands and nothing is announced.
+    // Bukkit's singleton can only be set once per JVM, hence the guard; every
+    // other method is left to throw rather than quietly answering a caller
+    // this was not written for.
+    // ====================================
+    public static void bukkit() {
+        if (Bukkit.getServer() != null) {
+            return;
+        }
+        InvocationHandler handler = (proxy, method, args) -> switch (method.getName()) {
+            case "getPlayer" -> null;
+            case "getLogger" -> Logger.getLogger(LOGGER_NAME);
+            case "getName", "getVersion", "getBukkitVersion" -> "TestManagers";
+            case "toString" -> "stub-server";
+            case "hashCode" -> LOGGER_NAME.hashCode();
+            case "equals" -> proxy == args[0];
+            default -> throw new UnsupportedOperationException("unexpected call to Server#" + method.getName());
+        };
+        Server server = (Server) Proxy.newProxyInstance(
+            TestManagers.class.getClassLoader(), new Class<?>[] {Server.class}, handler);
+        try {
+            // Not Bukkit.setServer: it logs a version banner built from
+            // ServerBuildInfo, which has no provider outside a real server and
+            // throws NoSuchElementException - after the field is already set
+            Field field = Bukkit.class.getDeclaredField("server");
+            field.setAccessible(true);
+            field.set(null, server);
         } catch (ReflectiveOperationException e) {
             throw new RuntimeException(e);
         }

@@ -197,6 +197,53 @@ class ActivityAdminCommandTest {
     }
 
     // ====================================
+    // The reply and the audit line a forced add that fills the bar leaves
+    // behind. --force bypasses the activity's daily cap and today's budget,
+    // but not bar.max - and when the bar cuts the award short the admin is
+    // told how much actually landed rather than being told it all went in.
+    // Points really are awarded here, so the Bukkit stub goes in first.
+    // ====================================
+    @Test
+    void aForcedAddThatFillsTheWeeklyBarSaysHowMuchLanded() {
+        TestManagers.bukkit();
+        ActivityManager manager = TestManagers.manager(
+            new ActivityDef("vote", "Vote", Material.PAPER, null, 1, 1, 5));
+        TestManagers.messages(manager);
+        TestManagers.limits(manager, 10, 10);
+        UUID player = UUID.randomUUID();
+
+        Sender sender = admin();
+        List<String> lines = audit(() -> command(manager, player, "Steve").onCommand(
+            sender.bukkit, null, "activity", new String[] {"add", "Steve", "vote", "50", "--force"}));
+
+        assertEquals("Added 50 to vote for Steve, but only 10 points fit: "
+            + "Steve's weekly bar hit its maximum of 10.", sender.all());
+        assertEquals(10, manager.getStore().get(player).points());
+        assertEquals(1, lines.size(), String.valueOf(lines));
+        assertEquals("ACTIVITY-AUDIT sender=\"Justin\" action=add target=\"Steve\" uuid=" + player
+            + " activity=\"vote\" count=50 force=true points=10 result=CLAMPED_WEEKLY", lines.get(0));
+    }
+
+    // The same add with the bar wide open: every point lands and the reply
+    // says how many
+    @Test
+    void aForcedAddReportsThePointsItAwarded() {
+        TestManagers.bukkit();
+        ActivityManager manager = TestManagers.manager(
+            new ActivityDef("vote", "Vote", Material.PAPER, null, 1, 1, 5));
+        TestManagers.messages(manager);
+        TestManagers.limits(manager, 100, 10);
+        UUID player = UUID.randomUUID();
+
+        Sender sender = admin();
+        command(manager, player, "Steve").onCommand(
+            sender.bukkit, null, "activity", new String[] {"add", "Steve", "vote", "50", "--force"});
+
+        assertEquals("Added 50 to vote for Steve: 50 points.", sender.all());
+        assertEquals(50, manager.getStore().get(player).points());
+    }
+
+    // ====================================
     // check
     // ====================================
 
@@ -593,7 +640,7 @@ class ActivityAdminCommandTest {
             command.onCommand(sender.bukkit, null, "activity", new String[] {"add", "Steve", "vote", "1", "--force"}));
         assertEquals(1, add.size(), String.valueOf(add));
         assertEquals("ACTIVITY-AUDIT sender=\"Justin\" action=add target=\"Steve\" uuid=" + player
-            + " activity=\"vote\" count=1 force=true result=ADDED", add.get(0));
+            + " activity=\"vote\" count=1 force=true points=0 result=ADDED", add.get(0));
 
         // the give-back that found nothing to give back is logged too, and
         // says so - a mutating command that changed nothing is still a line

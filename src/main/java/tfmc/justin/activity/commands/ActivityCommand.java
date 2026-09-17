@@ -13,7 +13,7 @@ import tfmc.justin.activity.gui.ActivityGui;
 import tfmc.justin.activity.managers.ActivityManager;
 import tfmc.justin.activity.models.ActivityDef;
 import tfmc.justin.activity.models.PlayerData;
-import tfmc.justin.activity.models.Recorded;
+import tfmc.justin.activity.models.RecordResult;
 import tfmc.justin.activity.utils.Utils;
 
 import java.util.ArrayList;
@@ -28,8 +28,10 @@ import java.util.UUID;
 // 'add' doubles as the intake path for ConditionalEvents and anything else
 // that can dispatch a console command, so it goes through the same daily-task
 // gate a listener does: nothing is credited unless the activity is one of the
-// player's revealed tasks today. A trailing --force skips the gate, for
-// testing and for correcting a player by hand.
+// player's revealed tasks today. A trailing --force skips the gate and both
+// daily limits - the activity's daily-cap and bar.daily-max - so staff testing
+// an activity get exactly the points they asked for. bar.max still holds, and
+// an award it cuts short is reported as such.
 // ====================================
 public class ActivityCommand implements CommandExecutor, TabCompleter {
 
@@ -352,16 +354,20 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
             return;
         }
 
-        Outcome outcome = add(target.getUniqueId(), args[2], count, forced(args));
+        Added added = add(target.getUniqueId(), args[2], count, forced(args));
+        Outcome outcome = added.outcome();
         sender.sendMessage(switch (outcome) {
-            case ADDED, CAPPED_ACTIVITY, CAPPED_DAILY, CAPPED_WEEKLY -> messages().get(outcome.messageKey(),
-                "%count%", count, "%activity%", args[2], "%player%", name(target, args[1]));
+            case ADDED, CAPPED_ACTIVITY, CAPPED_DAILY, CAPPED_WEEKLY, CLAMPED_WEEKLY ->
+                messages().get(outcome.messageKey(),
+                    "%count%", count, "%activity%", args[2], "%player%", name(target, args[1]),
+                    "%points%", added.points(), "%max%", manager.getConfiguration().barMax());
             case NOT_A_TASK -> messages().get(outcome.messageKey(),
                 "%activity%", args[2], "%player%", name(target, args[1]));
             case UNKNOWN_ACTIVITY -> messages().get(outcome.messageKey(), "%activity%", args[2]);
         });
         audit(sender, "action=add " + who(target, args[1]) + " activity=" + quoted(args[2])
-            + " count=" + count + " force=" + forced(args) + " result=" + outcome);
+            + " count=" + count + " force=" + forced(args) + " points=" + added.points()
+            + " result=" + outcome);
     }
 
     // ====================================
@@ -378,6 +384,8 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
         CAPPED_ACTIVITY("admin.add-capped-activity"),
         CAPPED_DAILY("admin.add-capped-daily"),
         CAPPED_WEEKLY("admin.add-capped-weekly"),
+        // Forced only: some points landed and bar.max swallowed the rest
+        CLAMPED_WEEKLY("admin.add-clamped-weekly"),
         UNKNOWN_ACTIVITY("admin.unknown-activity");
 
         private final String messageKey;
@@ -397,21 +405,26 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
     // console intake path cannot quietly hand out points for a task the
     // player never drew or revealed. The record path itself is what decides
     // between an unknown id, a refused gate and a cap - this only names the
-    // message for what it reports.
+    // message for what it reports, and carries the points it awarded along so
+    // the reply can say how many actually landed.
     // ====================================
-    Outcome add(UUID uuid, String activityId, int count, boolean force) {
-        Recorded recorded = force
-            ? manager.recordActionUngated(uuid, activityId, count)
-            : manager.recordAction(uuid, activityId, count);
+    Added add(UUID uuid, String activityId, int count, boolean force) {
+        RecordResult result = manager.recordAdmin(uuid, activityId, count, force);
 
-        return switch (recorded) {
+        Outcome outcome = switch (result.outcome()) {
             case RECORDED -> Outcome.ADDED;
             case NOT_A_TASK -> Outcome.NOT_A_TASK;
             case ACTIVITY_CAP -> Outcome.CAPPED_ACTIVITY;
             case DAILY_MAX -> Outcome.CAPPED_DAILY;
             case WEEKLY_MAX -> Outcome.CAPPED_WEEKLY;
+            case WEEKLY_CLAMPED -> Outcome.CLAMPED_WEEKLY;
             case UNKNOWN -> Outcome.UNKNOWN_ACTIVITY;
         };
+        return new Added(outcome, result.pointsAwarded());
+    }
+
+    // What the add came to and how many points actually reached the bar
+    record Added(Outcome outcome, int points) {
     }
 
     // ====================================
