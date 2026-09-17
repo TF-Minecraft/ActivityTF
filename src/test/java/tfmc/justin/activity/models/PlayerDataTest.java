@@ -3,7 +3,10 @@ package tfmc.justin.activity.models;
 import org.bukkit.Material;
 import org.junit.jupiter.api.Test;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Random;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -17,11 +20,11 @@ class PlayerDataTest {
     private static final int DAILY_MAX = 1000;
     private static final List<Integer> MILESTONES = List.of(10, 20);
 
-    private static final ActivityDef VOTE = new ActivityDef("vote", "Vote", Material.PAPER, null, 1, 1, 5, null);
-    private static final ActivityDef QUEST = new ActivityDef("quest", "Quest", Material.BOOK, null, 1, 1, 5, null);
+    private static final ActivityDef VOTE = new ActivityDef("vote", "Vote", Material.PAPER, null, 1, 1, 5);
+    private static final ActivityDef QUEST = new ActivityDef("quest", "Quest", Material.BOOK, null, 1, 1, 5);
     private static final ActivityDef INSTRUMENT =
-        new ActivityDef("instrument", "Notes", Material.NOTE_BLOCK, null, 20, 1, 1, null);
-    private static final ActivityDef UNCAPPED = new ActivityDef("free", "Free", Material.STONE, null, 1, 1, 0, null);
+        new ActivityDef("instrument", "Notes", Material.NOTE_BLOCK, null, 20, 1, 1);
+    private static final ActivityDef UNCAPPED = new ActivityDef("free", "Free", Material.STONE, null, 1, 1, 0);
 
     private PlayerData data() {
         return new PlayerData(WEEK, DAY);
@@ -162,7 +165,7 @@ class PlayerDataTest {
 
     @Test
     void worthDoesNotOverflowOnHugeCounts() {
-        ActivityDef rich = new ActivityDef("rich", "Rich", Material.STONE, null, 1, 1_000_000, 0, null);
+        ActivityDef rich = new ActivityDef("rich", "Rich", Material.STONE, null, 1, 1_000_000, 0);
 
         assertEquals(Integer.MAX_VALUE, rich.worth(Integer.MAX_VALUE));
     }
@@ -524,5 +527,107 @@ class PlayerDataTest {
         assertEquals(20, playerB.points());
         assertEquals(List.of(10, 20), PlayerData.due(playerA.points(), playerA.claimedPoints(), MILESTONES));
         assertEquals(List.of(10, 20), PlayerData.due(playerB.points(), playerB.claimedPoints(), MILESTONES));
+    }
+
+    // ====================================
+    // The daily draw: up to TASKS_PER_DAY distinct loaded ids, wiped by both
+    // rollovers so the next day hands out a fresh, fully hidden set.
+    // ====================================
+    private static List<String> ids(int count) {
+        List<String> ids = new java.util.ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            ids.add("a" + i);
+        }
+        return ids;
+    }
+
+    @Test
+    void aDrawIsSevenDistinctIdsOutOfMany() {
+        List<String> drawn = PlayerData.draw(ids(30), new Random(7));
+
+        assertEquals(PlayerData.TASKS_PER_DAY, drawn.size());
+        assertEquals(drawn.size(), new HashSet<>(drawn).size());
+        assertTrue(ids(30).containsAll(drawn));
+    }
+
+    @Test
+    void aDrawOutOfFewerIdsTakesAllOfThem() {
+        List<String> drawn = PlayerData.draw(ids(4), new Random(7));
+
+        assertEquals(4, drawn.size());
+        assertEquals(new HashSet<>(ids(4)), new HashSet<>(drawn));
+        assertEquals(List.of(), PlayerData.draw(List.of(), new Random(7)));
+    }
+
+    @Test
+    void tasksAreOnlyDrawnOnce() {
+        PlayerData data = data();
+
+        assertTrue(data.ensureTasks(ids(30), new Random(1)));
+        List<String> first = List.copyOf(data.tasks());
+
+        assertFalse(data.ensureTasks(ids(30), new Random(2)));
+        assertEquals(first, data.tasks());
+    }
+
+    @Test
+    void onlyARevealedTaskReadsAsRevealed() {
+        PlayerData data = data();
+        data.ensureTasks(ids(30), new Random(1));
+
+        assertTrue(data.reveal(3));
+
+        for (int slot = 0; slot < data.tasks().size(); slot++) {
+            assertEquals(slot == 3, data.isRevealed(data.tasks().get(slot)), "slot " + slot);
+        }
+        assertFalse(data.reveal(3), "a second reveal of the same slot changes nothing");
+        assertFalse(data.reveal(PlayerData.TASKS_PER_DAY), "an empty slot cannot be revealed");
+    }
+
+    @Test
+    void aNewDayClearsTheDrawAndEveryRevealedFlag() {
+        PlayerData data = data();
+        data.ensureTasks(ids(30), new Random(1));
+        data.reveal(0);
+
+        assertTrue(data.roll(WEEK, "2026-09-10"));
+
+        assertEquals(List.of(), data.tasks());
+        assertEquals(Set.of(), data.revealed());
+        assertTrue(data.ensureTasks(ids(30), new Random(2)), "the next day draws again");
+    }
+
+    @Test
+    void aNewWeekClearsTheDrawToo() {
+        PlayerData data = data();
+        data.ensureTasks(ids(30), new Random(1));
+        data.reveal(0);
+
+        assertTrue(data.roll("2026-09-14", DAY));
+
+        assertEquals(List.of(), data.tasks());
+        assertEquals(Set.of(), data.revealed());
+    }
+
+    @Test
+    void aResetClearsTheDraw() {
+        PlayerData data = data();
+        data.ensureTasks(ids(30), new Random(1));
+        data.reveal(0);
+
+        data.reset(WEEK, DAY);
+
+        assertEquals(List.of(), data.tasks());
+        assertEquals(Set.of(), data.revealed());
+    }
+
+    @Test
+    void theStoredConstructorKeepsOnlyRevealedFlagsThatAreTasks() {
+        PlayerData data = new PlayerData(0, 0, WEEK, DAY, 0, java.util.Map.of(),
+            List.of("vote", "quest"), List.of("quest", "stranger"));
+
+        assertEquals(List.of("vote", "quest"), data.tasks());
+        assertTrue(data.isRevealed("quest"));
+        assertFalse(data.isRevealed("stranger"));
     }
 }

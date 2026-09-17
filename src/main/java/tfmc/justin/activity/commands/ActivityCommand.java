@@ -142,7 +142,9 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
         }
 
         UUID uuid = target.getUniqueId();
-        if (!manager.recordAction(uuid, def.id(), count)) {
+        // Bypasses the daily-task gate: a testing aid, so any activity can be
+        // credited whether or not it is one of the player's revealed tasks
+        if (!manager.recordActionUngated(uuid, def.id(), count)) {
             sender.sendMessage(messages().get("admin.unknown-activity", "%activity%", args[2]));
             return;
         }

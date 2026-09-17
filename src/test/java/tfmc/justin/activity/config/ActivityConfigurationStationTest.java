@@ -1,19 +1,15 @@
 package tfmc.justin.activity.config;
 
-import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.junit.jupiter.api.Test;
 import sun.reflect.ReflectionFactory;
-import tfmc.justin.activity.models.GroupDef;
 
 import java.io.StringReader;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.util.LinkedHashMap;
-import java.util.Map;
 import java.util.Optional;
 import java.util.logging.Logger;
 
@@ -70,21 +66,6 @@ class ActivityConfigurationStationTest {
         return full.getConfigurationSection(key);
     }
 
-    @SuppressWarnings("unchecked")
-    private static void setGroups(ActivityConfiguration config, String... groupIds) {
-        try {
-            Map<String, GroupDef> groups = new LinkedHashMap<>();
-            for (String id : groupIds) {
-                groups.put(id, new GroupDef(id, id, Material.PAPER, null));
-            }
-            Field field = ActivityConfiguration.class.getDeclaredField("groups");
-            field.setAccessible(true);
-            field.set(config, groups);
-        } catch (ReflectiveOperationException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
     private static void loadActivities(ActivityConfiguration config, ConfigurationSection section) {
         try {
             Method method = ActivityConfiguration.class.getDeclaredMethod("loadActivities", ConfigurationSection.class);
@@ -95,18 +76,17 @@ class ActivityConfigurationStationTest {
         }
     }
 
-    // Builds a config from an 'activities:' YAML block. Every entry needs a
-    // 'group' + 'points' to survive loadActivities()'s earlier checks and
-    // actually reach loadStation().
+    // Builds a config from an 'activities:' YAML block. Every entry needs
+    // 'points' to survive loadActivities()'s earlier checks and actually
+    // reach loadStation().
     private static ActivityConfiguration configFor(String activitiesYaml) {
         ActivityConfiguration config = new ActivityConfiguration(stubPlugin());
-        setGroups(config, "misc");
         loadActivities(config, section("activities:\n" + activitiesYaml, "activities"));
         return config;
     }
 
     private static String entry(String id, String station) {
-        return "  " + id + ":\n    group: misc\n    points: 1\n    station: \"" + station + "\"\n";
+        return "  " + id + ":\n    points: 1\n    station: \"" + station + "\"\n";
     }
 
     @Test
@@ -169,7 +149,7 @@ class ActivityConfigurationStationTest {
     @Test
     void stationTogetherWithCraftIsIgnored() {
         ActivityConfiguration config = configFor(
-            "  smelt:\n    group: misc\n    points: 1\n    craft: \"m.material.steel\"\n    station: \"forge\"\n");
+            "  smelt:\n    points: 1\n    craft: \"m.material.steel\"\n    station: \"forge\"\n");
 
         assertEquals(Optional.empty(), config.stationActivity("forge", "anything"));
     }
@@ -177,7 +157,7 @@ class ActivityConfigurationStationTest {
     @Test
     void stationTogetherWithProfessionIsIgnored() {
         ActivityConfiguration config = configFor(
-            "  mine:\n    group: misc\n    points: 1\n    profession: miner\n    station: \"forge\"\n");
+            "  mine:\n    points: 1\n    profession: miner\n    station: \"forge\"\n");
 
         assertEquals(Optional.empty(), config.stationActivity("forge", "anything"));
     }
@@ -230,7 +210,6 @@ class ActivityConfigurationStationTest {
     @Test
     void emptyActivitiesSectionMeansNoStationsAtAll() {
         ActivityConfiguration config = new ActivityConfiguration(stubPlugin());
-        setGroups(config, "misc");
         loadActivities(config, null);
 
         assertFalse(config.stationActivity("forge", "anything").isPresent());

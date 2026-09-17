@@ -163,14 +163,33 @@ public class ActivityManager {
     // Record progress towards an activity. Returns false for an unknown id or
     // a non-positive amount, so the admin command can say which it was;
     // callers that cannot act on it (events, the API) just ignore the result.
+    //
+    // The daily-task gate lives here: every listener, the playtime tick and
+    // the API come through this method, and an activity that is not one of
+    // the player's revealed tasks today records nothing at all - that is a
+    // 'true' though, since the id itself is a real one.
     // ====================================
     public boolean recordAction(UUID uuid, String activityId, int amount) {
+        return record(uuid, activityId, amount, true);
+    }
+
+    // /activity add only: skips the daily-task gate on purpose, so an admin
+    // can credit any activity while testing, drawn or not
+    public boolean recordActionUngated(UUID uuid, String activityId, int amount) {
+        return record(uuid, activityId, amount, false);
+    }
+
+    private boolean record(UUID uuid, String activityId, int amount, boolean gated) {
         ActivityDef def = config.activity(activityId);
         if (def == null || amount <= 0) {
             return false;
         }
 
-        PlayerData data = store.get(uuid);
+        PlayerData data = tasks(uuid);
+        if (gated && !data.isRevealed(activityId)) {
+            return true;
+        }
+
         RecordResult result = data.record(amount, def, config.barMax(), config.dailyMax(), config.milestones());
         store.markDirty();
 
@@ -197,6 +216,44 @@ public class ActivityManager {
             player.sendMessage(messages.get("reward-ready"));
             playSound(player, config.barCompleteSound());
         }
+        return true;
+    }
+
+    // ====================================
+    // Whether this activity would earn anything for this player right now:
+    // it is loaded and one of their revealed tasks today. Listeners that
+    // carry fractions ask this first, so no fraction banks up for a task
+    // that is hidden or was never drawn.
+    // ====================================
+    public boolean isTracked(UUID uuid, String activityId) {
+        return config.activity(activityId) != null && tasks(uuid).isRevealed(activityId);
+    }
+
+    // The player's data with today's tasks drawn, drawing them now if this
+    // is the first time today they are needed
+    public PlayerData tasks(UUID uuid) {
+        PlayerData data = store.get(uuid);
+        if (data.tasks().isEmpty()
+            && data.ensureTasks(config.activities().stream().map(ActivityDef::id).toList(),
+                ThreadLocalRandom.current())) {
+            store.markDirty();
+        }
+        return data;
+    }
+
+    // ====================================
+    // Reveals the task in this slot (0-based). False when the slot is empty,
+    // already revealed, or holds an activity a reload has since removed.
+    // ====================================
+    public boolean reveal(UUID uuid, int slot) {
+        PlayerData data = tasks(uuid);
+        if (slot < 0 || slot >= data.tasks().size() || config.activity(data.tasks().get(slot)) == null) {
+            return false;
+        }
+        if (!data.reveal(slot)) {
+            return false;
+        }
+        store.markDirty();
         return true;
     }
 

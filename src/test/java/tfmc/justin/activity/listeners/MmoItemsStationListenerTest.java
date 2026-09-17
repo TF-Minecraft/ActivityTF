@@ -154,7 +154,7 @@ class MmoItemsStationListenerTest {
         setField(config, ActivityConfiguration.class, "stationActivities", stations);
 
         Map<String, tfmc.justin.activity.models.ActivityDef> activities = new LinkedHashMap<>();
-        activities.put(activityId, new ActivityDef(activityId, activityId, Material.PAPER, null, 1, 1, 0, "misc"));
+        activities.put(activityId, new ActivityDef(activityId, activityId, Material.PAPER, null, 1, 1, 0));
         setField(config, ActivityConfiguration.class, "activities", activities);
 
         return config;

@@ -12,8 +12,7 @@ gui:
   activity-lore-progress: "#af97bdProgress&e: %bar%"
   activity-lore-today: "#d97b66Today&e: &6%today%"
   activity-lore-today-capped: "#d97b66Today&e: &6%today%&7/&f%cap%"
-  group-lore-click: "#c9c14fClick to view"
-  back-name: "&cBack"
+  hidden-task-name: "#c9c14fClick to reveal"
   filler-name: "&8 "
 placeholder: { done: "&a✔", not-done: "&c✘" }
 admin:
