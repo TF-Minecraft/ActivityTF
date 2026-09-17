@@ -157,8 +157,8 @@ class ActivityManagerTasksTest {
         String hidden = manager.tasks(uuid).tasks().get(0);
         String other = undrawn(manager, uuid, 20);
 
-        assertEquals(Recorded.RECORDED, manager.recordActionUngated(uuid, hidden, 1));
-        assertEquals(Recorded.RECORDED, manager.recordActionUngated(uuid, other, 1));
+        assertEquals(Recorded.RECORDED, manager.recordAdmin(uuid, hidden, 1, true).outcome());
+        assertEquals(Recorded.RECORDED, manager.recordAdmin(uuid, other, 1, true).outcome());
 
         assertEquals(1, manager.tasks(uuid).count(hidden));
         assertEquals(1, manager.tasks(uuid).count(other));
@@ -170,7 +170,7 @@ class ActivityManagerTasksTest {
         UUID uuid = UUID.randomUUID();
 
         assertEquals(Recorded.UNKNOWN, manager.recordAction(uuid, "nope", 1));
-        assertEquals(Recorded.UNKNOWN, manager.recordActionUngated(uuid, "nope", 1));
+        assertEquals(Recorded.UNKNOWN, manager.recordAdmin(uuid, "nope", 1, true).outcome());
         assertFalse(manager.isTracked(uuid, "nope"));
     }
 

@@ -226,19 +226,24 @@ public class ActivityManager {
     // the player's revealed tasks today records nothing at all.
     // ====================================
     public Recorded recordAction(UUID uuid, String activityId, int amount) {
-        return record(uuid, activityId, amount, true);
+        return record(uuid, activityId, amount, true).outcome();
     }
 
-    // /activity add --force only: skips the daily-task gate on purpose, so an
-    // admin can credit any activity while testing, drawn or not
-    public Recorded recordActionUngated(UUID uuid, String activityId, int amount) {
-        return record(uuid, activityId, amount, false);
+    // ====================================
+    // /activity add. Gated exactly like a listener unless the admin asked for
+    // --force, which skips the daily-task gate AND credits the full worth of
+    // the count past the activity's daily cap and today's budget (see
+    // PlayerData.recordForced). The whole result comes back rather than just
+    // the outcome, so the command can report how many points actually landed.
+    // ====================================
+    public RecordResult recordAdmin(UUID uuid, String activityId, int amount, boolean force) {
+        return record(uuid, activityId, amount, !force);
     }
 
-    private Recorded record(UUID uuid, String activityId, int amount, boolean gated) {
+    private RecordResult record(UUID uuid, String activityId, int amount, boolean gated) {
         ActivityDef def = config.activity(activityId);
         if (def == null || amount <= 0) {
-            return Recorded.UNKNOWN;
+            return new RecordResult(0, 0, Recorded.UNKNOWN);
         }
 
         // ====================================
@@ -249,21 +254,23 @@ public class ActivityManager {
         // ====================================
         PlayerData data = gated ? store.rolled(uuid) : store.get(uuid);
         if (gated && (data == null || !data.isRevealed(activityId))) {
-            return Recorded.NOT_A_TASK;
+            return new RecordResult(0, 0, Recorded.NOT_A_TASK);
         }
 
-        RecordResult result = data.record(amount, def, config.barMax(), config.dailyMax(), config.milestones());
+        RecordResult result = gated
+            ? data.record(amount, def, config.barMax(), config.dailyMax(), config.milestones())
+            : data.recordForced(amount, def, config.barMax(), config.milestones());
         store.markDirty();
 
         // A full bar or a met daily cap awards nothing, and "+0" is worse
         // than silence
         if (result.pointsAwarded() <= 0) {
-            return result.outcome();
+            return result;
         }
 
         Player player = Bukkit.getPlayer(uuid);
         if (player == null) {
-            return result.outcome();
+            return result;
         }
 
         Messages messages = config.messages();
@@ -278,7 +285,7 @@ public class ActivityManager {
             player.sendMessage(messages.get("reward-ready"));
             playSound(player, config.barCompleteSound());
         }
-        return result.outcome();
+        return result;
     }
 
     // ====================================

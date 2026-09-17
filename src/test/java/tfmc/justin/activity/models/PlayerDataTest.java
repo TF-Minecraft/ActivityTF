@@ -36,6 +36,113 @@ class PlayerDataTest {
         return data.record(amount, def, MAX, DAILY_MAX, MILESTONES);
     }
 
+    // ====================================
+    // /activity add --force: the same count, none of the daily limits. VOTE is
+    // every: 1, points: 1, daily-cap: 5 - the shipped vote activity - and the
+    // budget handed in is deliberately smaller than the award, since a forced
+    // add is not supposed to look at it at all.
+    // ====================================
+    private RecordResult forced(PlayerData data, ActivityDef def, int amount, int max) {
+        return data.recordForced(amount, def, max, MILESTONES);
+    }
+
+    @Test
+    void aForcedRecordIgnoresTheActivityCapAndTodaysBudget() {
+        PlayerData data = data();
+
+        RecordResult result = forced(data, VOTE, 50, 100);
+
+        assertEquals(50, result.pointsAwarded());
+        assertEquals(Recorded.RECORDED, result.outcome());
+        assertEquals(50, data.points());
+        assertEquals(50, data.count("vote"));
+        // Nothing of a forced award is spent out of today's budget, so
+        // dailyPoints can never be pushed past the bar.daily-max the loader
+        // clamps it to
+        assertEquals(0, data.dailyPoints());
+    }
+
+    @Test
+    void aForcedRecordStillStopsAtTheWeeklyMaximumAndSaysSo() {
+        PlayerData data = data();
+
+        RecordResult clamped = forced(data, VOTE, 50, MAX);
+
+        assertEquals(MAX, clamped.pointsAwarded());
+        assertEquals(Recorded.WEEKLY_CLAMPED, clamped.outcome());
+        assertEquals(MAX, data.points());
+
+        // ...and once the bar is full there is nothing left to clamp
+        RecordResult full = forced(data, VOTE, 10, MAX);
+        assertEquals(0, full.pointsAwarded());
+        assertEquals(Recorded.WEEKLY_MAX, full.outcome());
+        assertEquals(MAX, data.points());
+        // the count still went in
+        assertEquals(60, data.count("vote"));
+    }
+
+    // A count part-way to its next award is a plain success, not a cap
+    @Test
+    void aForcedRecordPartWayToThePointIsStillRecorded() {
+        PlayerData data = data();
+
+        RecordResult result = forced(data, INSTRUMENT, 5, MAX);
+
+        assertEquals(0, result.pointsAwarded());
+        assertEquals(Recorded.RECORDED, result.outcome());
+        assertEquals(5, data.count("instrument"));
+    }
+
+    // ====================================
+    // A forced award that saturates at Integer.MAX_VALUE must fill the bar,
+    // not wrap it. 'points + p' as an int would go negative and be clamped to
+    // 0, wiping a bar that already had points on it - and leaving points below
+    // claimedPoints, which PlayerStore.parse resolves by cutting claimedPoints
+    // down, handing every milestone the player already collected back.
+    // ====================================
+    @Test
+    void aForcedAwardThatSaturatesFillsTheBarInsteadOfWrappingIt() {
+        ActivityDef rich = new ActivityDef("boss", "Boss", Material.STONE, null, 1, 2500, 0);
+        PlayerData data = data();
+        data.addPoints(15, MAX);
+        data.setClaimedPoints(10);
+        assertEquals(Integer.MAX_VALUE, rich.rawWorth(1_000_000));
+
+        RecordResult result = forced(data, rich, 1_000_000, MAX);
+
+        assertEquals(MAX, data.points());
+        assertTrue(data.points() >= data.claimedPoints(), "points=" + data.points());
+        assertEquals(MAX - 15, result.pointsAwarded());
+        assertEquals(Recorded.WEEKLY_CLAMPED, result.outcome());
+    }
+
+    @Test
+    void aForcedRecordStillCountsMilestonesReached() {
+        PlayerData data = data();
+
+        assertEquals(MILESTONES.size(), forced(data, VOTE, 50, MAX).milestonesReached());
+    }
+
+    // ====================================
+    // Because a forced award never touches dailyPoints, a later reroll hands
+    // back only what the player genuinely earned today - the staff-granted
+    // points stay on the bar - and the reroll.max-points gate (which reads
+    // dailyPoints) is not tripped by a forced add either.
+    // ====================================
+    @Test
+    void aForcedAwardIsNotRefundedByAReroll() {
+        PlayerData data = data();
+        record(data, QUEST, 3);
+        assertEquals(3, data.dailyPoints());
+        forced(data, VOTE, 50, 100);
+        assertEquals(53, data.points());
+
+        data.reroll(List.of("vote"), 100);
+
+        assertEquals(50, data.points());
+        assertEquals(0, data.dailyPoints());
+    }
+
     @Test
     void eachActionIsWorthItsPoints() {
         PlayerData data = data();

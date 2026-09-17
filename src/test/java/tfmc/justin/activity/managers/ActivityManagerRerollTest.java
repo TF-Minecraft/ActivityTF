@@ -43,6 +43,33 @@ class ActivityManagerRerollTest {
         return defs;
     }
 
+    // ====================================
+    // A forced add (/activity add --force) never touches dailyPoints, so it
+    // neither trips the reroll.max-points gate nor gets handed back off the
+    // weekly bar by the reroll that follows it - only the points the player
+    // genuinely earned today are refunded.
+    // ====================================
+    @Test
+    void aForcedAwardNeitherBlocksARerollNorIsRefundedByOne() {
+        TestManagers.bukkit();
+        ActivityManager manager = TestManagers.manager(defs(20));
+        TestManagers.storeLoaded(manager);
+        TestManagers.rerollsPerDay(manager, 1);
+        TestManagers.limits(manager, 100, 10);
+        UUID uuid = UUID.randomUUID();
+        manager.tasks(uuid);
+
+        // 50 points on an activity capped at 10 a day and a budget of 10
+        assertEquals(50, manager.recordAdmin(uuid, "a0", 50, true).pointsAwarded());
+        PlayerData data = manager.getStore().get(uuid);
+        assertEquals(50, data.points());
+        // the gate reads dailyPoints, which a forced award leaves alone
+        assertEquals(0, data.dailyPoints());
+
+        assertEquals(ActivityManager.Rerolled.DONE, manager.reroll(uuid));
+        assertEquals(50, data.points(), "the reroll refunded points nobody earned today");
+    }
+
     @Test
     void aRerollReplacesAllSevenTasksAndLeavesThemUnrevealed() {
         ActivityManager manager = TestManagers.manager(defs(20));

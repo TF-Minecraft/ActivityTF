@@ -6,7 +6,9 @@ reset:
 # /activity; a task earns nothing until the player clicks it to reveal it.
 # Every 'every' actions → earn 'points'. 'daily-cap' = most points one
 # activity can add per day (0 = no cap). Bar caps at bar.max; bar.daily-max
-# caps what can reach it on any single day, first.
+# caps what can reach it on any single day, first. Both are bypassed by
+# /activity add <player> <activity> <count> --force, which is staff-only and
+# credits the full worth of the count; only bar.max still holds it back.
 # daily-guaranteed: optional, default false. An activity marked true is in
 #   every player's draw every day, at a random slot like any other task; the
 #   remaining slots are filled at random as usual. Marking more than seven

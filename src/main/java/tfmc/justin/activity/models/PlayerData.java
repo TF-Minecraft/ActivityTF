@@ -163,8 +163,50 @@ public class PlayerData {
             Recorded.RECORDED);
     }
 
+    // ====================================
+    // /activity add --force only. The count goes in exactly as record() puts
+    // it in, but the award ignores both the activity's dailyCap and today's
+    // bar.daily-max budget: staff asking for 50 get 50.
+    //
+    // bar.max is NOT ignored. PlayerStore.parse clamps stored points to it on
+    // load, so a bar past its maximum would be silently cut back at the next
+    // restart - memory and disk disagreeing about a live player. An award the
+    // bar cuts short comes back as WEEKLY_CLAMPED so the admin is told.
+    //
+    // dailyPoints is deliberately left alone rather than raised past
+    // bar.daily-max, which parse() clamps just as hard. The consequences are
+    // the right ones: a forced award does not eat the player's real budget for
+    // the day, does not trip the reroll.max-points gate, and is not handed
+    // back off the bar by a later reroll - a reroll refunds today's genuinely
+    // earned points only, which is what it is for.
+    // ====================================
+    public RecordResult recordForced(int amount, ActivityDef def, int max, List<Integer> milestones) {
+        int before = daily.getOrDefault(def.id(), 0);
+        int after = (int) Math.min(Integer.MAX_VALUE, (long) before + amount);
+        daily.put(def.id(), after);
+
+        int earned = def.rawWorth(after) - def.rawWorth(before);
+        if (earned <= 0) {
+            // Part-way to the next award: the count landed, which is a success
+            return new RecordResult(0, 0, Recorded.RECORDED);
+        }
+
+        int pointsBefore = points;
+        addPoints(earned, max);
+        int awarded = points - pointsBefore;
+        if (awarded <= 0) {
+            return new RecordResult(0, 0, Recorded.WEEKLY_MAX);
+        }
+        return new RecordResult(awarded, due(points, pointsBefore, milestones).size(),
+            awarded < earned ? Recorded.WEEKLY_CLAMPED : Recorded.RECORDED);
+    }
+
+    // Widened to long before the sum: a forced add hands over an award that
+    // saturates at Integer.MAX_VALUE, and 'points + p' as an int would wrap
+    // negative and Math.max(0, ..) would then wipe the bar instead of filling
+    // it. Every value that did not overflow before is unaffected.
     public void addPoints(int p, int max) {
-        points = Math.max(0, Math.min(max, points + p));
+        points = (int) Math.max(0, Math.min(max, (long) points + p));
     }
 
     // Stored points can exceed the bar after bar.max is lowered or the file

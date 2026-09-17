@@ -1,5 +1,7 @@
 package tfmc.justin.activity.managers;
 
+import org.bukkit.Bukkit;
+import org.bukkit.Server;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 import sun.reflect.ReflectionFactory;
@@ -9,6 +11,8 @@ import tfmc.justin.activity.models.ActivityDef;
 import java.io.File;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.Proxy;
 import java.time.DayOfWeek;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -157,6 +161,56 @@ public final class TestManagers {
         }
     }
 
+    // ====================================
+    // A Bukkit server stub, so the record paths that actually credit a point
+    // can be driven headless: they end in Bukkit.getPlayer(uuid), which NPEs
+    // while Bukkit.server is null. The stub answers that with null - the
+    // offline-player case - so the award lands and nothing is announced.
+    // Bukkit's singleton can only be set once per JVM, so the contract is
+    // first caller wins: whichever test calls this first installs the stub
+    // every later test in the same fork gets. That is fine while this is the
+    // only stub - and if another one is ever installed, or this is reached
+    // inside a real server, the call throws rather than silently handing back
+    // a server the caller did not ask for. Every method the stub does not
+    // answer throws too, so a test that needs a richer Server fails loudly on
+    // the call it makes rather than quietly getting a wrong answer.
+    // ====================================
+    public static void bukkit() {
+        Server installed = Bukkit.getServer();
+        if (installed != null) {
+            if (!STUB_NAME.equals(installed.toString())) {
+                throw new IllegalStateException(
+                    "Bukkit.server is already set to " + installed + "; this JVM cannot hold two stubs");
+            }
+            return;
+        }
+        InvocationHandler handler = (proxy, method, args) -> switch (method.getName()) {
+            case "getPlayer" -> null;
+            // Its own logger, deliberately not the one audit lines land on:
+            // anything logged through Bukkit.getLogger() must not show up in
+            // a test's captured audit stream. Hyphen in the name prevents Java's
+            // hierarchical logger inheritance (dot would make it a child of TestManagers)
+            case "getLogger" -> Logger.getLogger(SERVER_LOGGER_NAME);
+            case "getName", "getVersion", "getBukkitVersion" -> "TestManagers";
+            case "toString" -> STUB_NAME;
+            case "hashCode" -> STUB_NAME.hashCode();
+            case "equals" -> proxy == args[0];
+            default -> throw new UnsupportedOperationException("unexpected call to Server#" + method.getName());
+        };
+        Server server = (Server) Proxy.newProxyInstance(
+            TestManagers.class.getClassLoader(), new Class<?>[] {Server.class}, handler);
+        try {
+            // Not Bukkit.setServer: it logs a version banner built from
+            // ServerBuildInfo, which has no provider outside a real server and
+            // throws NoSuchElementException - after the field is already set
+            Field field = Bukkit.class.getDeclaredField("server");
+            field.setAccessible(true);
+            field.set(null, server);
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     // The logger the stub plugin hands out, which is what an audit line lands
     // in - a test captures it by attaching a Handler here
     public static Logger logger() {
@@ -164,6 +218,10 @@ public final class TestManagers {
     }
 
     private static final String LOGGER_NAME = "TestManagers";
+
+    private static final String SERVER_LOGGER_NAME = "TestManagers-Server";
+
+    private static final String STUB_NAME = "stub-server";
 
     private static JavaPlugin stubPlugin() {
         try {
