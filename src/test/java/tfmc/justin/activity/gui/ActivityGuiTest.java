@@ -4,6 +4,7 @@ import org.bukkit.Material;
 import org.junit.jupiter.api.Test;
 import tfmc.justin.activity.models.ActivityDef;
 import tfmc.justin.activity.models.GroupDef;
+import tfmc.justin.activity.utils.Bar;
 
 import java.lang.reflect.Field;
 import java.util.ArrayList;
@@ -122,5 +123,59 @@ class ActivityGuiTest {
 
     private static ActivityDef activity(String id, String group) {
         return new ActivityDef(id, id, Material.PAPER, null, 1, 1, 0, group);
+    }
+
+    private static ActivityDef activity(String id, int every, int points, int dailyCap) {
+        return new ActivityDef(id, id, Material.PAPER, null, every, points, dailyCap, "g");
+    }
+
+    // ====================================
+    // progressBar shows progress toward the NEXT point (count % every out of
+    // every), not the whole daily budget - it wraps every time a point is
+    // earned rather than filling once across the whole day.
+    // ====================================
+    @Test
+    void progressBarIsPartialMidCycle() {
+        // market_sale-like: every 25, cap 2. 22 of 25 into the next point.
+        ActivityDef def = activity("a", 25, 1, 2);
+        assertEquals(Bar.render(22, 25, 20), ActivityGui.progressBar(def, 22));
+    }
+
+    // count == every means a point was just earned and the next cycle starts
+    // fresh at zero, not a full bar.
+    @Test
+    void progressBarIsEmptyExactlyAtAPointBoundary() {
+        ActivityDef def = activity("a", 25, 1, 2);
+        assertEquals(Bar.render(0, 25, 20), ActivityGui.progressBar(def, 25));
+    }
+
+    @Test
+    void progressBarIsFullOnceTheDailyCapIsReached() {
+        ActivityDef def = activity("a", 25, 1, 2);
+        assertEquals(Bar.render(1, 1, 20), ActivityGui.progressBar(def, 50));
+    }
+
+    // Past the cap (e.g. a stray extra count) must still read as full, not
+    // reset or overflow.
+    @Test
+    void progressBarStaysFullPastTheDailyCap() {
+        ActivityDef def = activity("a", 25, 1, 2);
+        assertEquals(Bar.render(1, 1, 20), ActivityGui.progressBar(def, 73));
+    }
+
+    // every == 1 uncapped: each count is already a whole point, so there is
+    // no meaningful partial progress to show.
+    @Test
+    void progressBarIsHiddenForEveryOneUncapped() {
+        ActivityDef def = activity("a", 1, 1, 0);
+        assertEquals(null, ActivityGui.progressBar(def, 3));
+    }
+
+    // every == 1 capped still shows full once the cap is hit, same as any
+    // other capped activity.
+    @Test
+    void progressBarIsFullForEveryOneCapped() {
+        ActivityDef def = activity("a", 1, 1, 2);
+        assertEquals(Bar.render(1, 1, 20), ActivityGui.progressBar(def, 2));
     }
 }
