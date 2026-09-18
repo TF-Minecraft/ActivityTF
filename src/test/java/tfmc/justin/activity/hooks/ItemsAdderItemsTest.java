@@ -3,6 +3,7 @@ package tfmc.justin.activity.hooks;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 import org.junit.jupiter.api.Test;
+import tfmc.justin.activity.managers.TestManagers;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -290,6 +291,10 @@ class ItemsAdderItemsTest {
     // ====================================
     @Test
     void anInvocationTargetExceptionFromItemsAdderIsRetriedOnEveryCall() {
+        // Default.INSTANCE is built with Bukkit.getLogger(), which NPEs with no
+        // server installed - and whether an earlier test in this fork already
+        // installed one depends on class order (it differs between OSes)
+        TestManagers.bukkit();
         dev.lone.itemsadder.api.CustomStack.getItemStackCalls = 0;
         ItemsAdderItems.reset();
         try {
