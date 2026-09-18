@@ -87,6 +87,17 @@ public class ActivityConfiguration {
     // an icon or on a craft
     private boolean pluginPathConfigured;
 
+    // Whether an ia.<namespace:id> path can be resolved right now. Deliberately
+    // its own flag rather than another entry in the TLibs/MMOItems/MythicLib
+    // list above: those three are what an m. path is built from, ItemsAdder has
+    // nothing to do with them, and folding it in would stop every m. path from
+    // resolving on a server that simply does not run ItemsAdder.
+    private volatile boolean itemsAdderUsable;
+
+    // Set while parsing when any well-formed ia.<namespace:id> value is seen,
+    // on an icon or on a reward item
+    private boolean itemsAdderPathConfigured;
+
     // ====================================
     // MMOCore profession id (normalized, see normalizeProfessionId) ->
     // activity id. Built once on load so the experience-gain listener, which
@@ -183,6 +194,7 @@ public class ActivityConfiguration {
         }
         itemPathsUsable = missing.isEmpty();
         missingItemPathPlugins = String.join(", ", missing);
+        itemsAdderUsable = Bukkit.getPluginManager().isPluginEnabled("ItemsAdder");
 
         resetDay = parseDay(config.getString("reset.day", "MONDAY"));
         resetHour = Math.max(0, Math.min(23, config.getInt("reset.hour", 0)));
@@ -190,6 +202,7 @@ public class ActivityConfiguration {
         // Reset here rather than in loadActivities: the one warning about m.
         // paths is logged after the section is read
         pluginPathConfigured = false;
+        itemsAdderPathConfigured = false;
         loadActivities(config.getConfigurationSection("activities"));
 
         rewardPool = loadRewardPool(config);
@@ -205,6 +218,11 @@ public class ActivityConfiguration {
                 + (missingItemPathPlugins.contains(",") ? " are" : " is") + " not enabled - those icons"
                 + " fall back to PAPER, those crafts are never credited, and any reward item on such a path"
                 + " hands over nothing and leaves its milestone unclaimed.");
+        }
+
+        String itemsAdderProblem = itemsAdderWarning(itemsAdderPathConfigured, itemsAdderUsable);
+        if (itemsAdderProblem != null) {
+            plugin.getLogger().warning(itemsAdderProblem);
         }
 
         guiTitle = config.getString("gui.title", "&8Weekly Activity");
@@ -368,7 +386,7 @@ public class ActivityConfiguration {
                 // gone or the path stops resolving. iconPath() has already
                 // reported a path that could not be used, so material() -
                 // which would call it an unknown material - is skipped.
-                ItemPath.isPluginPath(iconValue)
+                ItemPath.isPluginPath(iconValue) || ItemPath.isItemsAdderPath(iconValue)
                     ? Material.PAPER
                     : material(iconValue, "activities." + id + ".material"),
                 iconPath,
@@ -560,6 +578,25 @@ public class ActivityConfiguration {
             }
             paths.add(Map.entry(path, id));
             return null;
+        }
+
+        // ====================================
+        // Deliberately not supported, and said so in its own words rather than
+        // through the generic line below.
+        //
+        // Every other key resolves a path into an item; a craft key has to do
+        // the opposite - take the crafted ItemStack and find the path it was
+        // built from - which for ItemsAdder means a CustomStack.byItemStack()
+        // reflection call on every craft the Material map did not answer. That
+        // is a second reverse-matching mechanism, on the hot path of a craft
+        // event, for something nobody has asked for: the request was for icons
+        // and reward items. Say plainly that it is the craft key specifically,
+        // so an admin does not read it as "ia. paths do not work at all".
+        // ====================================
+        if (ItemPath.isItemsAdderPath(name)) {
+            return "ItemsAdder item path '" + safe + "' at activities." + safeId
+                + ".craft - ia.<namespace:id> is not supported for craft keys (only for 'material:'"
+                + " icons and reward items) - nothing will ever feed that activity.";
         }
 
         if (ItemPath.isUnsupportedPath(name)) {
@@ -778,14 +815,29 @@ public class ActivityConfiguration {
         return items;
     }
 
-    // The three forms ItemPath accepts, warned about the way material() and
+    // The forms ItemPath accepts, warned about the way material() and
     // iconPath() warn - except that a reward item has no safe default, so a
     // value that is none of them is dropped instead of falling back.
     private boolean validItemPath(String value, String at) {
         if (ItemPath.isUnsupportedPath(value)) {
             plugin.getLogger().warning("Unsupported item path '" + Utils.safeForLog(value) + "' at " + at
-                + " - only bare Material names, v.<material> and m.<type>.<id> are supported - ignored.");
+                + " - only bare Material names, v.<material>, m.<type>.<id> and ia.<namespace:id>"
+                + " are supported - ignored.");
             return false;
+        }
+        if (ItemPath.isItemsAdderPath(value)) {
+            if (ItemPath.itemsAdderId(value) == null) {
+                plugin.getLogger().warning("Malformed item path '" + Utils.safeForLog(value) + "' at " + at
+                    + " - expected ia.<namespace:id> - ignored.");
+                return false;
+            }
+            // Counts as "the admin asked for ItemsAdder items", so load() warns
+            // once for the file when ItemsAdder is not enabled. Kept as written:
+            // resolveRewardItem normalizes it when the payout happens, and a
+            // warning that quotes config.yml back is worth more than one that
+            // quotes something the admin never typed.
+            itemsAdderPathConfigured = true;
+            return true;
         }
         if (ItemPath.isPluginPath(value)) {
             if (ItemPath.pluginPath(value) == null) {
@@ -987,10 +1039,26 @@ public class ActivityConfiguration {
     }
 
     // ====================================
-    // The m.<type>.<id> path an icon should be built from, or null when the
-    // value is a plain material - which material() then reports on as before.
+    // The m.<type>.<id> or ia.<namespace:id> path an icon should be built
+    // from, or null when the value is a plain material - which material() then
+    // reports on as before. An ia. path comes back normalized to its colon
+    // form, so the two ways of writing it are one path from here on.
     // ====================================
     private String iconPath(String name, String path) {
+        if (ItemPath.isItemsAdderPath(name)) {
+            String id = ItemPath.itemsAdderId(name);
+            if (id == null) {
+                plugin.getLogger().warning("Malformed item path '" + Utils.safeForLog(name) + "' at " + path
+                    + " - expected ia.<namespace:id> - using PAPER.");
+                return null;
+            }
+            // Well formed, so it counts even when ItemsAdder cannot resolve it -
+            // load() says that once for the whole file. Kept as a path rather
+            // than gated here the way the m. branch is, because the GUI is what
+            // asks ItemsAdder and it re-checks itemsAdderUsable() at build time.
+            itemsAdderPathConfigured = true;
+            return "ia." + id;
+        }
         if (!ItemPath.isPluginPath(name)) {
             return null;
         }
@@ -1010,7 +1078,8 @@ public class ActivityConfiguration {
     private Material material(String name, String path) {
         if (ItemPath.isUnsupportedPath(name)) {
             plugin.getLogger().warning("Unsupported item path '" + Utils.safeForLog(name) + "' at " + path
-                + " - only bare Material names, v.<material> and m.<type>.<id> are supported - using PAPER.");
+                + " - only bare Material names, v.<material>, m.<type>.<id> and ia.<namespace:id>"
+                + " are supported - using PAPER.");
             return Material.PAPER;
         }
         Material material = ItemPath.material(name);
@@ -1221,5 +1290,24 @@ public class ActivityConfiguration {
     // agree on what "usable" means.
     public boolean itemPathsUsable() {
         return itemPathsUsable;
+    }
+
+    // Whether an ia.<namespace:id> path can actually be resolved right now.
+    // Asked separately from itemPathsUsable() by the GUI and by the reward
+    // payout, so ItemsAdder being absent costs ia. paths only.
+    public boolean itemsAdderUsable() {
+        return itemsAdderUsable;
+    }
+
+    // The one line the whole file gets when it asks for ia. paths and
+    // ItemsAdder is not enabled, or null when there is nothing to say. Split
+    // out so the rule can be pinned without a running server behind load().
+    static String itemsAdderWarning(boolean configured, boolean usable) {
+        if (!configured || usable) {
+            return null;
+        }
+        return "config.yml uses ia.<namespace:id> item paths but ItemsAdder is not enabled -"
+            + " those icons fall back to PAPER, and any reward item on such a path hands over"
+            + " nothing and leaves its milestone unclaimed.";
     }
 }

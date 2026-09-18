@@ -23,6 +23,8 @@ import java.util.logging.Logger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // ====================================
@@ -266,7 +268,7 @@ class ActivityConfigurationRewardsTest {
     void unusableItemPathsAreDroppedAndTheRestOfTheEntrySurvives() {
         List<RewardEntry> pool = loadRewardPool("rewards:\n  pool:\n    - weight: 1\n      items:\n"
             + "        - item: 'NOT_A_MATERIAL'\n"
-            + "        - item: 'ia.custom.block'\n"
+            + "        - item: 'nx.custom.block'\n"
             + "        - item: 'm.material'\n"
             + "        - amount: 2\n"
             + "        - 'DIAMOND'\n"
@@ -278,10 +280,62 @@ class ActivityConfigurationRewardsTest {
         // Each warning must name the element it came from, or an admin cannot
         // find the line to fix
         assertTrue(loggedContains("Unknown material 'NOT_A_MATERIAL' at rewards.pool[0].items[0]"));
-        assertTrue(loggedContains("Unsupported item path 'ia.custom.block' at rewards.pool[0].items[1]"));
+        assertTrue(loggedContains("Unsupported item path 'nx.custom.block' at rewards.pool[0].items[1]"));
         assertTrue(loggedContains("Malformed item path 'm.material' at rewards.pool[0].items[2]"));
         assertTrue(loggedContains("rewards.pool[0].items[3] has no 'item:' path"));
         assertTrue(loggedContains("rewards.pool[0].items[4] is not an 'item:'/'amount:' block"));
+    }
+
+    // ====================================
+    // ia.<namespace:id> is a reward item like any other: kept at load in the
+    // form the admin wrote, normalized only when the payout asks ItemsAdder.
+    // Nothing here can tell a live ItemsAdder id from a deleted one, and
+    // ItemsAdder may not even be enabled while this runs - so both separators
+    // survive the parser.
+    // ====================================
+    @Test
+    void anItemsAdderPathIsKeptAsARewardItem() {
+        List<RewardEntry> pool = loadRewardPool("rewards:\n  pool:\n    - weight: 1\n      items:\n"
+            + "        - item: 'ia.tfmc:saucepan'\n"
+            + "        - item: 'ia.tfmc.saucepan'\n"
+            + "          amount: 2\n");
+
+        assertEquals(List.of(
+            new RewardEntry.Item("ia.tfmc:saucepan", 1),
+            new RewardEntry.Item("ia.tfmc.saucepan", 2)), pool.get(0).items());
+        assertFalse(loggedContains("Unsupported item path"));
+        assertFalse(loggedContains("Malformed item path"));
+    }
+
+    // A path with no id behind it can never resolve, so it is dropped at load
+    // rather than kept to hand over nothing at payout
+    @Test
+    void aMalformedItemsAdderPathIsDroppedAndNamed() {
+        List<RewardEntry> pool = loadRewardPool("rewards:\n  pool:\n    - weight: 1\n      items:\n"
+            + "        - item: 'ia.saucepan'\n"
+            + "        - item: 'DIAMOND'\n");
+
+        assertEquals(List.of(new RewardEntry.Item("DIAMOND", 1)), pool.get(0).items());
+        assertTrue(loggedContains("Malformed item path 'ia.saucepan' at rewards.pool[0].items[0]"));
+        assertTrue(loggedContains("expected ia.<namespace:id>"));
+    }
+
+    // ====================================
+    // The one line the whole file gets when it asks for ItemsAdder items and
+    // ItemsAdder is not there. load() itself needs a live server, so the rule
+    // behind it is pinned directly.
+    // ====================================
+    @Test
+    void theItemsAdderWarningIsOnlyGivenWhenItIsBothAskedForAndMissing() {
+        assertNull(ActivityConfiguration.itemsAdderWarning(false, false));
+        assertNull(ActivityConfiguration.itemsAdderWarning(false, true));
+        assertNull(ActivityConfiguration.itemsAdderWarning(true, true));
+
+        String warning = ActivityConfiguration.itemsAdderWarning(true, false);
+        assertNotNull(warning);
+        assertTrue(warning.contains("ItemsAdder is not enabled"), warning);
+        // an admin must be told the payout consequence, not just the fact
+        assertTrue(warning.contains("leaves its milestone unclaimed"), warning);
     }
 
     // ====================================

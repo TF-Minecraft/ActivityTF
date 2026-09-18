@@ -10,6 +10,7 @@ import org.bukkit.scheduler.BukkitTask;
 import tfmc.justin.activity.config.ActivityConfiguration;
 import tfmc.justin.activity.config.Messages;
 import tfmc.justin.activity.gui.ActivityGui;
+import tfmc.justin.activity.hooks.ItemsAdderItems;
 import tfmc.justin.activity.hooks.TLibsItems;
 import tfmc.justin.activity.models.ActivityDef;
 import tfmc.justin.activity.models.PlayerData;
@@ -650,10 +651,20 @@ public class ActivityManager {
     // and only while all of TLibs/MMOItems/MythicLib are enabled - touching
     // TLibsItems without them would fail on class initialisation, which is not
     // something resolve() can catch for us.
+    //
+    // ia. paths go through ItemsAdder the same way, on its own gate. Null out
+    // of either branch is the existing "nothing could be built" answer, which
+    // giveItems already treats as nothing handed over - so an ItemsAdder item
+    // that stops resolving leaves its milestone unclaimed rather than burning
+    // it for nothing.
     // ====================================
     private ItemStack resolveRewardItem(String path) {
         if (ItemPath.isPluginPath(path)) {
             return config.itemPathsUsable() ? TLibsItems.item(path) : null;
+        }
+        if (ItemPath.isItemsAdderPath(path)) {
+            String id = ItemPath.itemsAdderId(path);
+            return id != null && config.itemsAdderUsable() ? ItemsAdderItems.item(id) : null;
         }
         Material material = ItemPath.material(path);
         return material == null ? null : new ItemStack(material);
