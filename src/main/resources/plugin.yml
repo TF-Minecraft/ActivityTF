@@ -3,9 +3,9 @@ version: 1.0
 name: activity
 author: Justin
 api-version: 1.21
-softdepend: [VotingPlugin, MusicalInstruments, geiger_counter, MMOCore, MMOItems, PlaceholderAPI,
+softdepend: [VotingPlugin, MusicalInstruments, geiger_counter, MMOCore, MMOItems, MythicLib, PlaceholderAPI,
              VFBuilders, RPCharacters, InteractibleFurniture, SimpleFactions, AdvancedCrafting, TLibs, Archaeo,
-             MarketBlock, Games, Cooking]
+             MarketBlock, Games, Cooking, ItemsAdder]
 commands:
   activity:
     description: Open the weekly activity bar, or run admin subcommands

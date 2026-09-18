@@ -3,22 +3,13 @@ package tfmc.justin.activity.config;
 import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
-import org.bukkit.plugin.java.JavaPlugin;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import sun.reflect.ReflectionFactory;
 import tfmc.justin.activity.models.ActivityDef;
 
 import java.io.StringReader;
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.logging.Handler;
-import java.util.logging.LogRecord;
-import java.util.logging.Logger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -41,58 +32,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 // ====================================
 class ActivityConfigurationIconPathTest {
 
-    private static final class TestPlugin extends JavaPlugin {
-    }
-
     private final List<String> logged = new ArrayList<>();
 
-    private final Handler capture = new Handler() {
-        @Override
-        public void publish(LogRecord record) {
-            logged.add(record.getMessage());
-        }
-
-        @Override
-        public void flush() {
-        }
-
-        @Override
-        public void close() {
-        }
-    };
-
-    private static final Logger LOGGER = Logger.getLogger("ActivityConfigurationIconPathTest");
-
-    @BeforeEach
-    void capture() {
-        logged.clear();
-        LOGGER.addHandler(capture);
-    }
-
-    @AfterEach
-    void stopCapturing() {
-        LOGGER.removeHandler(capture);
-    }
-
-    private static JavaPlugin stubPlugin() {
-        try {
-            ReflectionFactory rf = ReflectionFactory.getReflectionFactory();
-            Constructor<Object> objectCtor = Object.class.getDeclaredConstructor();
-            Constructor<?> bypass = rf.newConstructorForSerialization(TestPlugin.class, objectCtor);
-            JavaPlugin plugin = (JavaPlugin) bypass.newInstance();
-
-            Field loggerField = JavaPlugin.class.getDeclaredField("logger");
-            loggerField.setAccessible(true);
-            loggerField.set(plugin, LOGGER);
-
-            return plugin;
-        } catch (ReflectiveOperationException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    private static ActivityDef load(String material) {
-        ActivityConfiguration config = new ActivityConfiguration(stubPlugin());
+    private ActivityDef load(String material) {
+        ActivityConfiguration config = new ActivityConfiguration(TestPlugins.capturing(logged));
         YamlConfiguration yaml = YamlConfiguration.loadConfiguration(new StringReader(
             "activities:\n  cook_dish:\n    points: 1\n    material: \"" + material + "\"\n"));
         ConfigurationSection section = yaml.getConfigurationSection("activities");
@@ -153,6 +96,33 @@ class ActivityConfigurationIconPathTest {
         assertEquals(Material.PAPER, def.icon());
         assertTrue(loggedContains("Unsupported item path 'nx.saucepan' at activities.cook_dish.material"));
         assertTrue(loggedContains("ia.<namespace:id>"));
+    }
+
+    // Whitespace around a segment is the admin's spacing, not part of the id:
+    // ItemsAdder is whitespace-sensitive, so 'tfmc: saucepan' would resolve to
+    // nothing at runtime while passing load clean
+    @Test
+    void spacingAroundAnItemsAdderSegmentIsStripped() {
+        assertEquals("ia.tfmc:saucepan", load("ia.tfmc: saucepan").iconPath());
+        assertEquals("ia.tfmc:saucepan", load("ia. tfmc . saucepan ").iconPath());
+    }
+
+    // Whitespace inside a segment cannot be spacing, so it is named at load
+    // rather than failing silently per claim
+    @Test
+    void whitespaceInsideAnItemsAdderSegmentIsRefusedAtLoad() {
+        ActivityDef def = load("ia.tfmc:sauce pan");
+
+        assertNull(def.iconPath());
+        assertEquals(Material.PAPER, def.icon());
+        assertTrue(loggedContains("Malformed item path 'ia.tfmc:sauce pan' at activities.cook_dish.material"));
+    }
+
+    // Case is left exactly as the admin wrote it - ItemsAdder's matching rules
+    // are not guessed at here
+    @Test
+    void theCaseOfAnItemsAdderIdIsNotTouched() {
+        assertEquals("ia.TFMC:Saucepan", load("ia.TFMC:Saucepan").iconPath());
     }
 
     // The m. and bare forms are untouched by any of this. An m. path drops its

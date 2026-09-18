@@ -3,8 +3,9 @@ package tfmc.justin.activity.utils;
 import org.bukkit.Material;
 
 // ====================================
-// The four forms an item-valued config key ('material:', 'craft:') accepts,
-// classified here so both keys read them the same way:
+// The forms an item-valued config key accepts - four for 'material:' and for
+// a reward 'item:', three for 'craft:', which refuses ia. outright - all
+// classified here so every key reads them the same way:
 //
 //   IRON_INGOT   a bare Material name, as before
 //   v.iron_ingot the same thing in TLibs path notation
@@ -77,15 +78,27 @@ public final class ItemPath {
             return null;
         }
         String rest = value.strip().substring(3);
-        if (rest.indexOf(':') >= 0) {
-            String[] parts = rest.split(":", -1);
-            return parts.length == 2 && !parts[0].isBlank() && !parts[1].isBlank() ? rest : null;
-        }
-        String[] parts = rest.split("\\.", -1);
-        if (parts.length != 2 || parts[0].isBlank() || parts[1].isBlank()) {
+        String[] parts = rest.indexOf(':') >= 0 ? rest.split(":", -1) : rest.split("\\.", -1);
+        if (parts.length != 2) {
             return null;
         }
-        return parts[0] + ":" + parts[1];
+        // Stripped, so 'ia.tfmc: saucepan' is the item the admin meant rather
+        // than an id with a space in it that only fails later, inside
+        // ItemsAdder; and refused outright when a segment has whitespace
+        // inside it, so the mistake is named at load, where the config key is
+        // still in the warning. Case is left exactly as written: ItemsAdder's
+        // matching rules are not ours to guess, and silently lower-casing an
+        // id would break a pack that legitimately uses a capital.
+        String namespace = parts[0].strip();
+        String id = parts[1].strip();
+        if (namespace.isEmpty() || id.isEmpty() || hasWhitespace(namespace) || hasWhitespace(id)) {
+            return null;
+        }
+        return namespace + ":" + id;
+    }
+
+    private static boolean hasWhitespace(String value) {
+        return value.chars().anyMatch(Character::isWhitespace);
     }
 
     // Does this value have a <letters>. prefix that is none of v., m. and ia.?
