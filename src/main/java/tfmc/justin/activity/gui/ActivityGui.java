@@ -1,5 +1,6 @@
 package tfmc.justin.activity.gui;
 
+import com.google.common.collect.ImmutableMultimap;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.Sound;
@@ -11,6 +12,7 @@ import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
+import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import tfmc.justin.activity.config.ActivityConfiguration;
@@ -315,11 +317,24 @@ public class ActivityGui implements Listener {
         return item(new ItemStack(material), name, lore);
     }
 
+    // ====================================
+    // Every icon this GUI shows passes through here, so the enchant glint
+    // (kept) never drags an "Efficiency II" tooltip line along with it, and a
+    // custom item's "When in Main Hand: ..." attribute lines stay off too.
+    // HIDE_ATTRIBUTES alone is not enough on this API version: a vanilla tool
+    // with no explicit attribute modifiers still shows its built-in
+    // attack-damage lines, because those come from the item's default
+    // component rather than an explicit modifier list a flag can hide. Setting
+    // an empty modifier map overrides that default with "no modifiers at all",
+    // which starves HIDE_ATTRIBUTES of anything to hide in the first place.
+    // ====================================
     private ItemStack item(ItemStack stack, String name, List<String> lore) {
         ItemMeta meta = stack.getItemMeta();
         if (meta != null) {
             meta.setDisplayName(name);
             meta.setLore(lore);
+            meta.addItemFlags(ItemFlag.HIDE_ENCHANTS, ItemFlag.HIDE_ATTRIBUTES);
+            meta.setAttributeModifiers(ImmutableMultimap.of());
             stack.setItemMeta(meta);
         }
         return stack;
