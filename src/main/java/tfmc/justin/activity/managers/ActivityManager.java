@@ -271,6 +271,10 @@ public class ActivityManager {
     // same tail as every other award.
     // ====================================
     public RecordResult recordPoints(UUID uuid, int points) {
+        // Before store.get, which would create and pin a row for nothing
+        if (points <= 0) {
+            return new RecordResult(0, 0, Recorded.UNKNOWN);
+        }
         PlayerData data = store.get(uuid);
         return credited(uuid, data, data.creditForced(points, config.barMax(), config.milestones()),
             config.messages().get("points-granted-source"));

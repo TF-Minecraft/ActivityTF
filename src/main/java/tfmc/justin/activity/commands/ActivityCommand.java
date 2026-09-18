@@ -92,7 +92,11 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
         // ====================================
         if (!SUBCOMMANDS.contains(sub)) {
             boolean anything = sender.hasPermission("activity.admin") || sender.hasPermission("activity.check");
-            sender.sendMessage(messages().get(anything ? "admin.usage" : "admin.no-permission"));
+            if (anything) {
+                usage(sender);
+            } else {
+                sender.sendMessage(messages().get("admin.no-permission"));
+            }
             return true;
         }
 
@@ -133,9 +137,21 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
                 // every case here matches one of them. Kept because the
                 // compiler cannot prove that and requires this switch
                 // statement to return on every path.
-                sender.sendMessage(messages().get("admin.usage"));
+                usage(sender);
                 return true;
         }
+    }
+
+    // ====================================
+    // addpoints has a usage line of its own rather than a place in
+    // admin.usage: every deployed messages.yml already has admin.usage, the
+    // live file wins over the packaged one, and a new key is the only way the
+    // line reaches a server that is already running - the same reason
+    // ADD_DONE_POINTS is its own key.
+    // ====================================
+    private void usage(CommandSender sender) {
+        sender.sendMessage(messages().get("admin.usage"));
+        sender.sendMessage(messages().get("admin.usage-addpoints"));
     }
 
     private void openGui(CommandSender sender) {
@@ -152,7 +168,7 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
 
     private void handleReset(CommandSender sender, String[] args) {
         if (args.length < 2) {
-            sender.sendMessage(messages().get("admin.usage"));
+            usage(sender);
             audit(sender, "action=reset result=usage");
             return;
         }
@@ -187,7 +203,7 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
     // ====================================
     private void handleGiveReroll(CommandSender sender, String[] args) {
         if (args.length < 2) {
-            sender.sendMessage(messages().get("admin.usage"));
+            usage(sender);
             audit(sender, "action=givereroll result=usage");
             return;
         }
@@ -238,7 +254,7 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
     // ====================================
     private void handleCheck(CommandSender sender, String[] args) {
         if (args.length < 2) {
-            sender.sendMessage(messages().get("admin.usage"));
+            usage(sender);
             return;
         }
 
@@ -349,7 +365,7 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
 
     private void handleAdd(CommandSender sender, String[] args) {
         if (!wellFormedAdd(args)) {
-            sender.sendMessage(messages().get("admin.usage"));
+            usage(sender);
             audit(sender, "action=add result=usage");
             return;
         }
@@ -403,7 +419,7 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
     // ====================================
     private void handleAddPoints(CommandSender sender, String[] args) {
         if (args.length != 3) {
-            sender.sendMessage(messages().get("admin.usage"));
+            usage(sender);
             audit(sender, "action=addpoints result=usage");
             return;
         }
@@ -421,8 +437,12 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
             points = 0;
         }
         if (points <= 0) {
-            sender.sendMessage(messages().get("admin.addpoints-invalid", "%value%", args[2]));
-            audit(sender, "action=addpoints " + who(target, args[1]) + " result=invalid-number");
+            // Echoed back stripped, the way check strips a display name:
+            // what was typed must not recolour or restyle the reply
+            sender.sendMessage(messages().get("admin.addpoints-invalid",
+                "%value%", ChatColor.stripColor(Utils.colorize(args[2]))));
+            audit(sender, "action=addpoints " + who(target, args[1]) + " value=" + quoted(args[2])
+                + " result=invalid-number");
             return;
         }
 
