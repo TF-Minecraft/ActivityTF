@@ -7,6 +7,7 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
+import net.md_5.bungee.api.ChatColor;
 import tfmc.justin.activity.config.ActivityConfiguration;
 import tfmc.justin.activity.config.Messages;
 import tfmc.justin.activity.gui.ActivityGui;
@@ -292,8 +293,13 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
             String id = tasks.get(slot);
             ActivityDef def = config.activity(id);
             // An id a reload has dropped still sits in the draw until the
-            // player is next touched, so it is named by its raw id
-            String display = def == null ? id : def.display();
+            // player is next touched, so it is named by its raw id.
+            // Unlike the GUI, this is plain console/chat text with no item
+            // lore to carry colour, so the name is stripped of every code
+            // the config accepts (legacy &, hex #rrggbb, &#rrggbb, ...) via
+            // the same translator the GUI uses before printing it.
+            String display = def == null ? id
+                : ChatColor.stripColor(Utils.colorize(def.display()));
             int count = data.count(id);
             // The display name goes in last: it is config text, and
             // substitution walks the pairs in order, so nothing in it can

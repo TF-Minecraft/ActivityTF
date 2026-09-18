@@ -304,6 +304,31 @@ class ActivityAdminCommandTest {
         assertTrue(out.contains("hidden"), out);
     }
 
+    // ====================================
+    // Config display names carry colour/format codes (hex, '&', or both
+    // stacked, as here) so the GUI can paint them - but check() prints to
+    // console/chat with no item lore to carry that colour, so it must strip
+    // every code the config accepts before printing the name.
+    // ====================================
+    @Test
+    void checkStripsColourCodesFromTheTaskName() {
+        ActivityManager manager = TestManagers.manager(
+            new ActivityDef("vote", "#e6ca40&lCarve Basic Handles", Material.PAPER, null, 2, 1, 0),
+            new ActivityDef("quest", "Quest", Material.PAPER, null, 2, 1, 0));
+        TestManagers.messages(manager);
+        TestManagers.rerollsPerDay(manager, 1);
+        UUID player = UUID.randomUUID();
+        manager.reveal(player, manager.tasks(player).tasks().indexOf("vote"));
+
+        Sender sender = admin();
+        command(manager, player, "Steve").onCommand(sender.bukkit, null, "activity", new String[] {"check", "Steve"});
+        String out = sender.all();
+
+        assertTrue(out.contains("Carve Basic Handles"), out);
+        assertFalse(out.contains("#e6ca40"), out);
+        assertFalse(out.contains("&l"), out);
+    }
+
     @Test
     void checkMutatesNothing() {
         ActivityManager manager = manager();
