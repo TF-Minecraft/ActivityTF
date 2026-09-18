@@ -456,9 +456,10 @@ public class ActivityManager {
     }
 
     // ====================================
-    // Hands over every milestone the player has reached but not yet claimed,
-    // one draw from the reward pool per milestone. Only ever called for an
-    // online player (a GUI click), so %player% always resolves. Returns how
+    // Hands over every milestone the player has reached but not yet claimed:
+    // its fixed rewards.drops item, or else one draw from the reward pool.
+    // Only ever called for an online player (a GUI click), so %player% always
+    // resolves. Returns how
     // many milestones were actually paid: 0 covers both "nothing was due" and
     // every refusal below, all of which leave the milestones there to claim
     // once an operator has fixed what broke.
@@ -504,11 +505,14 @@ public class ActivityManager {
         }
 
         List<RewardEntry> pool = config.rewardPool();
+        Map<Integer, RewardEntry> drops = config.milestoneDrops();
+        // The pool refusals below only apply when a due milestone draws from it
+        boolean needsPool = !drops.keySet().containsAll(due);
 
         // Nothing configured to hand over: burning the milestones here would
         // pay the player in silence. Load already warned about this, but a
         // claim is the moment an operator can tie the warning to a player.
-        if (pool.isEmpty()) {
+        if (needsPool && pool.isEmpty()) {
             if (!warnedEmptyPool) {
                 warnedEmptyPool = true;
                 plugin.getLogger().warning("Handed nothing to " + player.getUniqueId()
@@ -523,7 +527,7 @@ public class ActivityManager {
         // Entries that can pay only sometimes (a mix of %player% and %uuid%
         // commands) stay in; only the ones this name cannot pay at all drop out.
         List<RewardEntry> runnablePool = runnableEntries(pool, player.getName());
-        if (runnablePool.isEmpty()) {
+        if (needsPool && runnablePool.isEmpty()) {
             plugin.getLogger().warning("No reward command could be run for '"
                 + Utils.safeForLog(player.getName()) + "': the name cannot be safely pasted into a console"
                 + " command. Use %uuid%-based reward commands to support Bedrock/unsafe names.");
@@ -548,7 +552,7 @@ public class ActivityManager {
 
         int paid = 0;
         for (int i = 0; i < due.size(); i++) {
-            RewardEntry drawn = draw(runnablePool);
+            RewardEntry drawn = rewardFor(due.get(i), drops, runnablePool, ActivityManager::draw);
             if (drawn == null || !dispatchRewards(player, drawn, due.get(i))) {
                 break;
             }
@@ -594,6 +598,15 @@ public class ActivityManager {
 
         playSound(player, config.barCompleteSound());
         return paid;
+    }
+
+    // What one milestone pays: its fixed drop, and the pool is never drawn
+    // from for it; otherwise one draw. Takes the draw so a test can see it is
+    // skipped.
+    static RewardEntry rewardFor(int milestone, Map<Integer, RewardEntry> drops, List<RewardEntry> pool,
+                                 Function<List<RewardEntry>, RewardEntry> draw) {
+        RewardEntry fixed = drops.get(milestone);
+        return fixed != null ? fixed : draw.apply(pool);
     }
 
     // One weighted draw from the pool. Null only on an empty pool.

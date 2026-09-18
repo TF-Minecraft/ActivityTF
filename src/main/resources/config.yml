@@ -468,6 +468,19 @@ rewards:
   # rewrites. A total above one stack is handed over as whole stacks of the
   # item's own maximum size.
   multiplier: 1
+  # What each milestone pays. drop_1 is the first of bar.milestones once they
+  # are sorted and deduped, drop_2 the second, and so on. 'pool' draws one
+  # entry from the pool below; anything else is a fixed item - the same four
+  # forms as a pool item, optionally followed by an amount of 1-64 (default
+  # 1), e.g. "m.material.steel 3". A fixed item is multiplied, split into
+  # stacks, dropped at the feet when it does not fit, and leaves its milestone
+  # claimable when it cannot be resolved, exactly like a pool item; chat shows
+  # it as "x3 Steel". A missing drop_N, or one that does not parse (it is
+  # named in the log), draws from the pool.
+  drops:
+    drop_1: pool
+    drop_2: pool
+    # drop_3: m.material.steel 3
   pool:
     - weight: 4
       display: "#50d990x3 #b8906eDiamond"

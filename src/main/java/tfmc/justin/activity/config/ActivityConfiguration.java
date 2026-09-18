@@ -132,6 +132,10 @@ public class ActivityConfiguration {
     // changes what the next claim pays.
     private volatile int rewardMultiplier = 1;
 
+    // rewards.drops: the fixed reward of a milestone, keyed by its point
+    // total. A milestone with no entry here draws from the pool.
+    private volatile Map<Integer, RewardEntry> milestoneDrops = Map.of();
+
     private String guiTitle;
 
     private volatile int barMax;
@@ -231,6 +235,12 @@ public class ActivityConfiguration {
         dailyMax = Math.max(1, config.getInt("bar.daily-max", 10));
         // After barMax: every milestone is validated against it
         milestones = loadMilestones(config.getIntegerList("bar.milestones"));
+        // After milestones: drop_N names the Nth of them
+        milestoneDrops = loadMilestoneDrops(config);
+        if (rewardPool.isEmpty() && milestoneDrops.size() < milestones.size()) {
+            plugin.getLogger().warning("rewards.pool is empty or every entry in it was dropped - a milestone"
+                + " can be reached but nothing can ever be claimed.");
+        }
         barLength = barLength(config.getInt("bar.length", 40));
 
         rerollsPerDay = parseRerollsPerDay(config);
@@ -277,6 +287,7 @@ public class ActivityConfiguration {
     // every claim paying 1x with nothing to show for it.
     static final String REWARDS_MULTIPLIER_PATH = "rewards.multiplier";
     static final String REWARDS_POOL_PATH = "rewards.pool";
+    static final String REWARDS_DROPS_PATH = "rewards.drops";
 
     // The per-activity key and the rate limit that guards it. A path constant
     // for the same reason as the ones above: DefaultResourcesTest asserts the
@@ -763,11 +774,6 @@ public class ActivityConfiguration {
             pool.add(new RewardEntry(Math.min(weight, 1_000_000),
                 display == null ? "" : String.valueOf(display), List.copyOf(commands), List.copyOf(items)));
         }
-
-        if (pool.isEmpty()) {
-            plugin.getLogger().warning("rewards.pool is empty or every entry in it was dropped - a milestone"
-                + " can be reached but nothing can ever be claimed.");
-        }
         return List.copyOf(pool);
     }
 
@@ -927,6 +933,77 @@ public class ActivityConfiguration {
             return (int) clamped;
         }
         return (int) value;
+    }
+
+    // ====================================
+    // rewards.drops: 'drop_N: pool' or 'drop_N: <item path> [amount]' for the
+    // Nth milestone. Anything that does not parse is named and left to the
+    // pool, so a typo never pays less than the config did before drops
+    // existed. The path is checked the way a pool item's is - a well formed
+    // m. or ia. path is kept even when its plugin is not up yet and is left
+    // to resolve, or fail and stay claimable, at payout.
+    // ====================================
+    private Map<Integer, RewardEntry> loadMilestoneDrops(ConfigurationSection config) {
+        ConfigurationSection section = config.getConfigurationSection(REWARDS_DROPS_PATH);
+        if (section == null) {
+            if (config.contains(REWARDS_DROPS_PATH)) {
+                plugin.getLogger().warning(REWARDS_DROPS_PATH + " is not a section of drop_<N> keys - ignored,"
+                    + " every milestone draws from the pool.");
+            }
+            return Map.of();
+        }
+        Map<Integer, RewardEntry> drops = new HashMap<>();
+        for (String key : section.getKeys(false)) {
+            String at = REWARDS_DROPS_PATH + "." + key;
+            String number = key.startsWith("drop_") ? key.substring(5) : "";
+            if (!number.matches("[1-9][0-9]*")) {
+                plugin.getLogger().warning(at + " is not a drop_<N> key (N = 1, 2, ...) - ignored.");
+                continue;
+            }
+            // Length first, so a number too long for an int is out of range
+            // rather than a NumberFormatException
+            if (number.length() > 9 || Integer.parseInt(number) > milestones.size()) {
+                plugin.getLogger().warning(at + " is past the last of the " + milestones.size()
+                    + " bar.milestones - ignored.");
+                continue;
+            }
+            int milestone = milestones.get(Integer.parseInt(number) - 1);
+
+            String value = String.valueOf(section.get(key)).strip();
+            if (value.equalsIgnoreCase("pool")) {
+                continue;
+            }
+            String[] parts = value.split("\\s+");
+            // 0 marks anything that is not one or two words with a 1-64 second one
+            int amount = parts.length == 1 ? 1
+                : parts.length == 2 && parts[1].matches("[0-9]{1,2}") ? Integer.parseInt(parts[1]) : 0;
+            if (amount < 1 || amount > 64) {
+                plugin.getLogger().warning(at + " '" + Utils.safeForLog(value) + "' is not '<item path>' or"
+                    + " '<item path> <amount 1-64>' - milestone " + milestone + " draws from the pool.");
+                continue;
+            }
+            if (!validItemPath(parts[0], at)) {
+                continue;
+            }
+            drops.put(milestone, new RewardEntry(1, "#50d990x" + amount + " #b8906e" + itemName(parts[0]),
+                List.of(), List.of(new RewardEntry.Item(parts[0], amount))));
+        }
+        return Map.copyOf(drops);
+    }
+
+    // The chat name of a fixed drop, from its path alone - resolving it here
+    // would need TLibs/ItemsAdder up at load. The last segment, words
+    // capitalised: m.material.steel is "Steel", ia.tfmc:ruby_gem "Ruby Gem".
+    static String itemName(String path) {
+        String last = path.substring(Math.max(path.lastIndexOf('.'), path.lastIndexOf(':')) + 1);
+        StringBuilder name = new StringBuilder();
+        for (String word : last.toLowerCase(Locale.ROOT).split("_")) {
+            if (!word.isEmpty()) {
+                name.append(name.isEmpty() ? "" : " ").append(Character.toUpperCase(word.charAt(0)))
+                    .append(word.substring(1));
+            }
+        }
+        return name.toString();
     }
 
     // ====================================
@@ -1222,6 +1299,11 @@ public class ActivityConfiguration {
 
     public int rewardMultiplier() {
         return rewardMultiplier;
+    }
+
+    // Keyed by milestone point total; a milestone missing here draws from the pool
+    public Map<Integer, RewardEntry> milestoneDrops() {
+        return milestoneDrops;
     }
 
     public String guiTitle() {
