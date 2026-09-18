@@ -3,6 +3,7 @@ package tfmc.justin.activity.managers;
 import org.bukkit.Bukkit;
 import org.bukkit.Server;
 import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 import sun.reflect.ReflectionFactory;
 import tfmc.justin.activity.config.ActivityConfiguration;
@@ -17,6 +18,8 @@ import java.time.DayOfWeek;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 
 // ====================================
@@ -185,7 +188,7 @@ public final class TestManagers {
             return;
         }
         InvocationHandler handler = (proxy, method, args) -> switch (method.getName()) {
-            case "getPlayer" -> null;
+            case "getPlayer" -> args[0] instanceof UUID uuid ? ONLINE.get(uuid) : null;
             // Its own logger, deliberately not the one audit lines land on:
             // anything logged through Bukkit.getLogger() must not show up in
             // a test's captured audit stream. Hyphen in the name prevents Java's
@@ -209,6 +212,21 @@ public final class TestManagers {
         } catch (ReflectiveOperationException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    // ====================================
+    // A player the stub's getPlayer(UUID) answers with, so a test can see
+    // what an award announces. Cleared by offline(); every other uuid is
+    // still the offline-player case.
+    // ====================================
+    private static final Map<UUID, Player> ONLINE = new ConcurrentHashMap<>();
+
+    public static void online(Player player) {
+        ONLINE.put(player.getUniqueId(), player);
+    }
+
+    public static void offline(UUID uuid) {
+        ONLINE.remove(uuid);
     }
 
     // The logger the stub plugin hands out, which is what an audit line lands

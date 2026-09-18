@@ -37,7 +37,7 @@ import java.util.UUID;
 public class ActivityCommand implements CommandExecutor, TabCompleter {
 
     private static final List<String> SUBCOMMANDS =
-        Arrays.asList("reload", "check", "reset", "givereroll", "add");
+        Arrays.asList("reload", "check", "reset", "givereroll", "add", "addpoints");
 
     // What 'check' alone gets: the read-only half of the command
     private static final List<String> READ_ONLY_SUBCOMMANDS = List.of("check");
@@ -124,6 +124,9 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
                 return true;
             case "add":
                 handleAdd(sender, args);
+                return true;
+            case "addpoints":
+                handleAddPoints(sender, args);
                 return true;
             default:
                 // Unreachable: sub is one of SUBCOMMANDS, checked above, and
@@ -392,6 +395,47 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
     }
 
     // ====================================
+    // /activity addpoints <player> <points>: exactly that many points, with
+    // no activity behind them. Capped like add --force - bar.max only - and
+    // any part bar.max cut off is said, not swallowed. No upper bound of its
+    // own: the credit sums in long and clamps, so a huge figure just fills
+    // the bar, and one past int range fails to parse like any typo.
+    // ====================================
+    private void handleAddPoints(CommandSender sender, String[] args) {
+        if (args.length != 3) {
+            sender.sendMessage(messages().get("admin.usage"));
+            audit(sender, "action=addpoints result=usage");
+            return;
+        }
+
+        OfflinePlayer target = resolve(sender, args[1]);
+        if (target == null) {
+            audit(sender, "action=addpoints typed=" + quoted(args[1]) + " result=unknown-player");
+            return;
+        }
+
+        int points;
+        try {
+            points = Integer.parseInt(args[2]);
+        } catch (NumberFormatException e) {
+            points = 0;
+        }
+        if (points <= 0) {
+            sender.sendMessage(messages().get("admin.addpoints-invalid", "%value%", args[2]));
+            audit(sender, "action=addpoints " + who(target, args[1]) + " result=invalid-number");
+            return;
+        }
+
+        RecordResult result = manager.recordPoints(target.getUniqueId(), points);
+        boolean all = result.pointsAwarded() == points;
+        sender.sendMessage(messages().get(all ? "admin.addpoints-done" : "admin.addpoints-clamped",
+            "%points%", result.pointsAwarded(), "%requested%", points,
+            "%max%", manager.getConfiguration().barMax(), "%player%", name(target, args[1])));
+        audit(sender, "action=addpoints " + who(target, args[1]) + " requested=" + points
+            + " points=" + result.pointsAwarded() + " result=" + result.outcome());
+    }
+
+    // ====================================
     // What a /activity add did, and the message that says so. Every way an
     // add can come to nothing gets its own line: a task the player has not
     // revealed today (or an offline player with no row at all) records
@@ -512,7 +556,8 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
         }
 
         if (args.length == 2
-            && (sub.equals("reset") || sub.equals("add") || sub.equals("check") || sub.equals("givereroll"))) {
+            && (sub.equals("reset") || sub.equals("add") || sub.equals("addpoints") || sub.equals("check")
+                || sub.equals("givereroll"))) {
             return filter(onlineNames(), args[1]);
         }
 

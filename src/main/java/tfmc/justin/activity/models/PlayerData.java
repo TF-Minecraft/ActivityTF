@@ -190,7 +190,15 @@ public class PlayerData {
             // Part-way to the next award: the count landed, which is a success
             return new RecordResult(0, 0, Recorded.RECORDED);
         }
+        return creditForced(earned, max, milestones);
+    }
 
+    // ====================================
+    // The award half of recordForced, and on its own /activity addpoints: a
+    // raw number of points with no activity behind it. Same rules - bar.max
+    // clamps, dailyPoints is left alone - for the same reasons given above.
+    // ====================================
+    public RecordResult creditForced(int earned, int max, List<Integer> milestones) {
         int pointsBefore = points;
         addPoints(earned, max);
         int awarded = points - pointsBefore;
