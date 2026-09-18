@@ -659,6 +659,10 @@ public class ActivityManager {
     // it for nothing.
     // ====================================
     private ItemStack resolveRewardItem(String path) {
+        // Lambda, not a TLibsItems::item method reference: a reference would
+        // resolve the TLibsItems class eagerly, ahead of the itemPathsUsable()
+        // gate above, and reintroduce the class-init crash a server without
+        // the TLibs trio would hit.
         return resolveRewardItem(path, config.itemPathsUsable(), config.itemsAdderUsable(),
             p -> TLibsItems.item(p), id -> ItemsAdderItems.item(id));
     }

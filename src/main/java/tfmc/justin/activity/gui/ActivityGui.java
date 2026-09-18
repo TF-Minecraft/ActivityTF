@@ -283,6 +283,10 @@ public class ActivityGui implements Listener {
     }
 
     private ItemStack fromPath(ActivityConfiguration config, String iconPath) {
+        // Lambda, not a TLibsItems::item method reference: a reference would
+        // resolve the TLibsItems class eagerly, ahead of the itemPathsUsable()
+        // gate, and reintroduce the class-init crash on a server without the
+        // TLibs trio (see ActivityManager's resolveRewardItem for the same rule).
         return fromPath(iconPath, config.itemPathsUsable(), config.itemsAdderUsable(),
             path -> TLibsItems.item(path), id -> ItemsAdderItems.item(id));
     }

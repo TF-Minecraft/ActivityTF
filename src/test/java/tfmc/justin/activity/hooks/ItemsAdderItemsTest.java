@@ -260,4 +260,48 @@ class ItemsAdderItemsTest {
 
         assertEquals(2, logged.size(), logged.toString());
     }
+
+    // A resolved id must not stay silenced by an old memo: the id can fail for
+    // a different reason later, and that later warning must still fire.
+    @Test
+    void aResolvedIdIsUnsilencedForALaterFailure() {
+        int[] fail = {1};
+        ItemsAdderItems ia = items(id -> fail[0] == 1
+            ? null
+            : new TestStack(Material.DIAMOND_SWORD));
+
+        ia.resolve("tfmc:saucepan"); // fails, warns once
+        fail[0] = 0;
+        ia.resolve("tfmc:saucepan"); // resolves, should clear the memo
+        fail[0] = 1;
+        ia.resolve("tfmc:saucepan"); // fails again, must warn again
+
+        assertEquals(2, logged.size(), logged.toString());
+    }
+
+    // ====================================
+    // fromItemsAdder() is private and reflects into a hardcoded class name
+    // (dev.lone.itemsadder.api.CustomStack), so the only way to drive a real
+    // java.lang.reflect.InvocationTargetException through it - the exception
+    // ItemsAdder's own getInstance()/getItemStack() throws while a pack is
+    // mid-reload - is to put a fixture class on that exact name on the test
+    // classpath (src/test/java/dev/lone/itemsadder/api/CustomStack.java) and
+    // go through the real static entry point, not the creator seam.
+    // ====================================
+    @Test
+    void anInvocationTargetExceptionFromItemsAdderIsRetriedOnEveryCall() {
+        dev.lone.itemsadder.api.CustomStack.getItemStackCalls = 0;
+        ItemsAdderItems.reset();
+        try {
+            assertNull(ItemsAdderItems.item("tfmc:saucepan"));
+            assertNull(ItemsAdderItems.item("tfmc:saucepan"));
+            assertNull(ItemsAdderItems.item("tfmc:saucepan"));
+
+            assertTrue(dev.lone.itemsadder.api.CustomStack.getItemStackCalls > 1,
+                "expected the creator to be invoked more than once, got "
+                    + dev.lone.itemsadder.api.CustomStack.getItemStackCalls);
+        } finally {
+            ItemsAdderItems.reset();
+        }
+    }
 }
