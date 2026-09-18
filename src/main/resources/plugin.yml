@@ -9,7 +9,7 @@ softdepend: [VotingPlugin, MusicalInstruments, geiger_counter, MMOCore, MMOItems
 commands:
   activity:
     description: Open the weekly activity bar, or run admin subcommands
-    usage: /activity [reload|check <player>|reset <player>|givereroll <player>|add <player> <activity> <count> [--force]]
+    usage: /activity [reload|check <player>|reset <player>|givereroll <player>|add <player> <activity> <count> [--force]|addpoints <player> <points>]
 permissions:
   activity.use:
     description: Open the weekly activity GUI

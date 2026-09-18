@@ -4,11 +4,14 @@ import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.entity.Player;
 import org.junit.jupiter.api.Test;
 import tfmc.justin.activity.managers.ActivityManager;
 import tfmc.justin.activity.managers.TestManagers;
 import tfmc.justin.activity.models.ActivityDef;
 import tfmc.justin.activity.models.PlayerData;
+import tfmc.justin.activity.models.RecordResult;
+import tfmc.justin.activity.models.Recorded;
 import tfmc.justin.activity.store.PlayerStore;
 
 import java.io.File;
@@ -17,6 +20,7 @@ import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.logging.Handler;
@@ -265,6 +269,226 @@ class ActivityAdminCommandTest {
     }
 
     // ====================================
+    // addpoints
+    // ====================================
+
+    // A manager whose bar is wide open and whose daily budget is smaller than
+    // the award, so a test that passes also proves bar.daily-max did not cut it
+    private static ActivityManager pointsManager(int barMax) {
+        TestManagers.bukkit();
+        ActivityManager manager = TestManagers.manager(
+            new ActivityDef("vote", "Vote", Material.PAPER, null, 1, 1, 5));
+        TestManagers.messages(manager);
+        TestManagers.limits(manager, barMax, 5);
+        return manager;
+    }
+
+    @Test
+    void addpointsCreditsExactlyThePointsAsked() {
+        ActivityManager manager = pointsManager(100);
+        UUID player = UUID.randomUUID();
+
+        Sender sender = admin();
+        List<String> lines = audit(() -> command(manager, player, "Steve").onCommand(
+            sender.bukkit, null, "activity", new String[] {"addpoints", "Steve", "13"}));
+
+        assertEquals("Added 13 points to Steve.", sender.all());
+        PlayerData data = manager.getStore().peek(player);
+        assertEquals(13, data.points());
+        // No activity behind it: no count anywhere, and - like add --force -
+        // nothing charged against today's budget
+        assertEquals(Map.of(), data.daily());
+        assertEquals(0, data.dailyPoints());
+        assertTrue(dirty(manager.getStore()), "the award was not marked for saving");
+        assertEquals(List.of("ACTIVITY-AUDIT sender=\"Justin\" action=addpoints target=\"Steve\" uuid=" + player
+            + " requested=13 points=13 result=RECORDED"), lines);
+    }
+
+    // Today's budget already spent: a gated award would get nothing, this
+    // one still gets every point
+    @Test
+    void addpointsIsNotLimitedByTheDailyMax() {
+        ActivityManager manager = pointsManager(100);
+        UUID player = UUID.randomUUID();
+        PlayerData data = manager.getStore().get(player);
+        data.record(5, new ActivityDef("vote", "Vote", Material.PAPER, null, 1, 1, 0), 100, 5, List.of());
+        assertEquals(5, data.dailyPoints());
+
+        Sender sender = admin();
+        command(manager, player, "Steve").onCommand(
+            sender.bukkit, null, "activity", new String[] {"addpoints", "Steve", "20"});
+
+        assertEquals("Added 20 points to Steve.", sender.all());
+        assertEquals(25, data.points());
+    }
+
+    @Test
+    void addpointsIsClampedAtTheWeeklyMaxAndSaysSo() {
+        ActivityManager manager = pointsManager(50);
+        UUID player = UUID.randomUUID();
+        manager.getStore().get(player).addPoints(40, 50);
+
+        Sender sender = admin();
+        List<String> lines = audit(() -> command(manager, player, "Steve").onCommand(
+            sender.bukkit, null, "activity", new String[] {"addpoints", "Steve", "13"}));
+
+        assertEquals("Added 10 of 13 points to Steve (weekly max 50 reached).", sender.all());
+        assertEquals(50, manager.getStore().peek(player).points());
+        assertEquals(List.of("ACTIVITY-AUDIT sender=\"Justin\" action=addpoints target=\"Steve\" uuid=" + player
+            + " requested=13 points=10 result=WEEKLY_CLAMPED"), lines);
+
+        // and a bar already full says none of it landed
+        Sender again = admin();
+        command(manager, player, "Steve").onCommand(
+            again.bukkit, null, "activity", new String[] {"addpoints", "Steve", "13"});
+        assertEquals("Added 0 of 13 points to Steve (weekly max 50 reached).", again.all());
+    }
+
+    @Test
+    void addpointsRejectsAnythingButAPositiveWholeNumber() {
+        for (String value : List.of("0", "-5", "abc", "1.5", "99999999999")) {
+            ActivityManager manager = pointsManager(100);
+            UUID player = UUID.randomUUID();
+
+            Sender sender = admin();
+            List<String> lines = audit(() -> command(manager, player, "Steve").onCommand(
+                sender.bukkit, null, "activity", new String[] {"addpoints", "Steve", value}));
+
+            assertEquals("Points must be a whole number above 0: " + value, sender.all(), value);
+            assertNull(manager.getStore().peek(player), value + ": a row was created");
+            assertFalse(dirty(manager.getStore()), value);
+            assertEquals(List.of("ACTIVITY-AUDIT sender=\"Justin\" action=addpoints target=\"Steve\" uuid="
+                + player + " value=\"" + value + "\" result=invalid-number"), lines, value);
+        }
+    }
+
+    // What was typed is echoed back without its formatting codes: a value
+    // must not be able to recolour or restyle the reply
+    @Test
+    void anInvalidAddpointsValueIsEchoedWithoutFormatting() {
+        ActivityManager manager = pointsManager(100);
+        Sender sender = admin();
+        command(manager, UUID.randomUUID(), "Steve").onCommand(
+            sender.bukkit, null, "activity", new String[] {"addpoints", "Steve", "&k&c#ff0000five"});
+
+        assertEquals(1, sender.sent.size(), String.valueOf(sender.sent));
+        assertEquals("§cPoints must be a whole number above 0: five", sender.sent.get(0));
+    }
+
+    @Test
+    void addpointsWithTheWrongArgumentCountIsAUsageError() {
+        for (String[] args : List.of(
+            new String[] {"addpoints"},
+            new String[] {"addpoints", "Steve"},
+            new String[] {"addpoints", "Steve", "5", "--force"})) {
+            ActivityManager manager = pointsManager(100);
+            UUID player = UUID.randomUUID();
+
+            Sender sender = admin();
+            command(manager, player, "Steve").onCommand(sender.bukkit, null, "activity", args);
+
+            assertTrue(sender.all().contains("Usage:"), sender.all());
+            assertTrue(sender.all().contains("addpoints <player> <points>"), sender.all());
+            assertNull(manager.getStore().peek(player), args.length + " args: a row was created");
+        }
+    }
+
+    // ====================================
+    // A milestone crossed by addpoints is announced exactly the way one
+    // crossed by add --force is: the points line, then Reward Ready, and the
+    // milestone is claimable afterwards. The only difference is what the
+    // points line names as their source.
+    // ====================================
+    @Test
+    void addpointsCrossesAMilestoneTheSameWayAForcedAddDoes() {
+        List<String> byAdd = milestoneCrossedBy(100, 0, admin(),
+            new String[] {"add", "Steve", "vote", "12", "--force"});
+        List<String> byPoints = milestoneCrossedBy(100, 0, admin(), new String[] {"addpoints", "Steve", "12"});
+
+        assertEquals(List.of("+12 Vote (12/100)", "REWARD READY! Open /activity to claim."), byAdd);
+        assertEquals(List.of("+12 Bonus (12/100)", "REWARD READY! Open /activity to claim."), byPoints);
+    }
+
+    // ====================================
+    // The last milestone is the weekly max itself, so an award that is
+    // clamped is also the one that reaches it: the clamp must not swallow
+    // the Reward Ready. 15 points with 10 already claimed, bar.max 20.
+    // ====================================
+    @Test
+    void aClampedAddpointsStillReachesTheMilestoneAtTheWeeklyMax() {
+        Sender sender = admin();
+        List<String> got = milestoneCrossedBy(20, 15, sender, new String[] {"addpoints", "Steve", "100"});
+
+        assertEquals("Added 5 of 100 points to Steve (weekly max 20 reached).", sender.all());
+        assertEquals(List.of("+5 Bonus (20/20)", "REWARD READY! Open /activity to claim."), got);
+    }
+
+    // ====================================
+    // Like add --force, addpoints charges nothing against today's budget, so
+    // a reroll - which refunds today's earned points only - leaves it on the
+    // bar.
+    // ====================================
+    @Test
+    void aRerollDoesNotTakeAddpointsBack() {
+        ActivityManager manager = pointsManager(100);
+        UUID player = UUID.randomUUID();
+        command(manager, player, "Steve").onCommand(
+            admin().bukkit, null, "activity", new String[] {"addpoints", "Steve", "13"});
+
+        PlayerData data = manager.getStore().peek(player);
+        data.reroll(List.of("vote"), 100);
+
+        assertEquals(13, data.points());
+        assertEquals(0, data.dailyPoints());
+    }
+
+    // The manager refuses a non-positive award itself, not just the command:
+    // it is public, and a row created for nothing would be pinned in the file
+    @Test
+    void recordPointsRefusesANonPositiveAwardWithoutCreatingARow() {
+        ActivityManager manager = pointsManager(100);
+        UUID player = UUID.randomUUID();
+
+        for (int points : new int[] {0, -1}) {
+            assertEquals(new RecordResult(0, 0, Recorded.UNKNOWN), manager.recordPoints(player, points));
+        }
+        assertNull(manager.getStore().peek(player), "a row was created");
+        assertFalse(dirty(manager.getStore()));
+    }
+
+    // What the online target was sent when these args pushed him past the
+    // next unclaimed milestone. He starts on startPoints, with every
+    // milestone below them already claimed.
+    private static List<String> milestoneCrossedBy(int barMax, int startPoints, Sender sender, String[] args) {
+        ActivityManager manager = pointsManager(barMax);
+        UUID uuid = UUID.randomUUID();
+        if (startPoints > 0) {
+            PlayerData data = manager.getStore().get(uuid);
+            data.addPoints(startPoints, barMax);
+            data.setClaimedPoints(PlayerData.due(startPoints, 0, manager.getConfiguration().milestones())
+                .stream().max(Integer::compare).orElse(0));
+        }
+        List<String> got = new ArrayList<>();
+        InvocationHandler handler = (proxy, method, a) -> switch (method.getName()) {
+            case "getUniqueId" -> uuid;
+            case "sendMessage" -> {
+                got.add(String.valueOf(a[0]).replaceAll("\u00a7.", ""));
+                yield null;
+            }
+            default -> throw new UnsupportedOperationException("unexpected call to Player#" + method.getName());
+        };
+        TestManagers.online((Player) Proxy.newProxyInstance(
+            ActivityAdminCommandTest.class.getClassLoader(), new Class<?>[] {Player.class}, handler));
+        try {
+            command(manager, uuid, "Steve").onCommand(sender.bukkit, null, "activity", args);
+        } finally {
+            TestManagers.offline(uuid);
+        }
+        assertEquals(1, manager.getStore().peek(uuid).claimable(manager.getConfiguration().milestones()));
+        return got;
+    }
+
+    // ====================================
     // check
     // ====================================
 
@@ -471,6 +695,7 @@ class ActivityAdminCommandTest {
         assertEquals(ADMIN, ActivityCommand.permissionFor("reset"));
         assertEquals(ADMIN, ActivityCommand.permissionFor("givereroll"));
         assertEquals(ADMIN, ActivityCommand.permissionFor("add"));
+        assertEquals(ADMIN, ActivityCommand.permissionFor("addpoints"));
     }
 
     @Test
@@ -502,6 +727,7 @@ class ActivityAdminCommandTest {
             new String[] {"reset", "Steve"},
             new String[] {"givereroll", "Steve"},
             new String[] {"add", "Steve", "vote", "1"},
+            new String[] {"addpoints", "Steve", "5"},
             new String[] {"reload"})) {
 
             ActivityManager manager = manager();
@@ -522,6 +748,7 @@ class ActivityAdminCommandTest {
             // nothing was touched
             assertEquals(1, manager.getStore().peek(player).rerolls(), args[0]);
             assertEquals(0, manager.getStore().peek(player).count("vote"), args[0]);
+            assertEquals(0, manager.getStore().peek(player).points(), args[0]);
             assertFalse(dirty(manager.getStore()), args[0]);
         }
     }
@@ -638,7 +865,8 @@ class ActivityAdminCommandTest {
             new String[] {"check", UNKNOWN},
             new String[] {"reset", UNKNOWN},
             new String[] {"givereroll", UNKNOWN},
-            new String[] {"add", UNKNOWN, "vote", "1"})) {
+            new String[] {"add", UNKNOWN, "vote", "1"},
+            new String[] {"addpoints", UNKNOWN, "5"})) {
 
             ActivityManager manager = manager();
             UUID player = UUID.randomUUID();
@@ -831,8 +1059,12 @@ class ActivityAdminCommandTest {
         ActivityManager manager = manager();
         ActivityCommand command = command(manager, UUID.randomUUID(), "Steve");
 
-        assertEquals(List.of("reload", "check", "reset", "givereroll", "add"),
+        assertEquals(List.of("reload", "check", "reset", "givereroll", "add", "addpoints"),
             command.onTabComplete(admin().bukkit, null, "activity", new String[] {""}));
+        assertEquals(List.of("Steve"),
+            command.onTabComplete(admin().bukkit, null, "activity", new String[] {"addpoints", "Ste"}));
+        assertEquals(List.of(),
+            command.onTabComplete(admin().bukkit, null, "activity", new String[] {"addpoints", "Steve", ""}));
         assertEquals(List.of("Steve"),
             command.onTabComplete(admin().bukkit, null, "activity", new String[] {"givereroll", "Ste"}));
     }
@@ -858,7 +1090,7 @@ class ActivityAdminCommandTest {
         for (String key : List.of("check-no-data", "check-header", "check-points", "check-daily",
             "check-rerolls", "check-keys", "check-stale", "check-no-tasks", "check-task-revealed",
             "check-task-hidden",
-            "reroll-given", "reroll-none-used")) {
+            "reroll-given", "reroll-none-used", "addpoints-done", "addpoints-clamped", "addpoints-invalid")) {
             String value = messages.getString("admin." + key);
             assertFalse(value == null || value.isBlank(), "admin." + key + " is missing");
         }
@@ -872,5 +1104,11 @@ class ActivityAdminCommandTest {
             .getString("commands.activity.usage", "");
         assertTrue(pluginUsage.contains("check"), pluginUsage);
         assertTrue(pluginUsage.contains("givereroll"), pluginUsage);
+        // Its own key, so a live messages.yml that predates it still gets the
+        // line - and not also in admin.usage, or a fresh install shows it twice
+        String addpointsUsage = messages.getString("admin.usage-addpoints", "");
+        assertTrue(addpointsUsage.contains("addpoints <player> <points>"), addpointsUsage);
+        assertFalse(usage.contains("addpoints"), usage);
+        assertTrue(pluginUsage.contains("addpoints <player> <points>"), pluginUsage);
     }
 }

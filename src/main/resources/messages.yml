@@ -1,4 +1,5 @@
 points-earned: "&a+%points% &f%activity% &7(&a%total%&7/%max%)"
+points-granted-source: "Bonus"
 reward-ready: "&a&lREWARD READY! &7Open &f/activity &7to claim."
 reward-claimed: "&a&lCLAIMED &7You received %reward%&7."
 reward-failed: "&cYour rewards could not be handed over - tell an admin."
@@ -28,6 +29,7 @@ gui:
 placeholder: { done: "&a✔", not-done: "&c✘" }
 admin:
   usage: "&eUsage: /activity <reload|check <player>|reset <player>|givereroll <player>|add <player> <activity> <count> [--force]>"
+  usage-addpoints: "&eUsage: /activity addpoints <player> <points>"
   no-permission: "&cNo permission."
   players-only: "&cPlayers only."
   reloaded: "&aactivity reloaded."
@@ -43,6 +45,9 @@ admin:
   add-capped-daily: "&eAdded %count% to %activity% for %player%, but no points: %player% has already earned today's maximum."
   add-capped-weekly: "&eAdded %count% to %activity% for %player%, but no points: %player%'s weekly bar is already full."
   add-clamped-weekly: "&eAdded %count% to %activity% for %player%, but only &f%points%&e points fit: %player%'s weekly bar hit its maximum of %max%."
+  addpoints-done: "&aAdded &f%points%&a points to %player%."
+  addpoints-clamped: "&eAdded &f%points%&e of %requested% points to %player% (weekly max %max% reached)."
+  addpoints-invalid: "&cPoints must be a whole number above 0: %value%"
   reroll-given: "&aGave %player% a reroll back: used today went from %before% to %after%."
   reroll-none-used: "&e%player% has used no rerolls today - there is nothing to give back."
   check-no-data: "&e%player% has no activity data."

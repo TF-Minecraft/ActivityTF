@@ -261,6 +261,28 @@ public class ActivityManager {
         RecordResult result = gated
             ? data.record(amount, def, config.barMax(), config.dailyMax(), config.milestones())
             : data.recordForced(amount, def, config.barMax(), config.milestones());
+        return credited(uuid, data, result, Utils.colorize(def.display()));
+    }
+
+    // ====================================
+    // /activity addpoints: exactly this many points, with no activity and no
+    // count behind them. Credited like a forced add (PlayerData.creditForced),
+    // so bar.max clamps and neither daily limit applies, and announced by the
+    // same tail as every other award.
+    // ====================================
+    public RecordResult recordPoints(UUID uuid, int points) {
+        // Before store.get, which would create and pin a row for nothing
+        if (points <= 0) {
+            return new RecordResult(0, 0, Recorded.UNKNOWN);
+        }
+        PlayerData data = store.get(uuid);
+        return credited(uuid, data, data.creditForced(points, config.barMax(), config.milestones()),
+            config.messages().get("points-granted-source"));
+    }
+
+    // What every award does once the points are on the bar: save, and tell
+    // an online player what landed and whether a reward is now waiting
+    private RecordResult credited(UUID uuid, PlayerData data, RecordResult result, String source) {
         store.markDirty();
 
         // A full bar or a met daily cap awards nothing, and "+0" is worse
@@ -276,7 +298,7 @@ public class ActivityManager {
 
         Messages messages = config.messages();
         player.sendMessage(messages.get("points-earned",
-            "%activity%", Utils.colorize(def.display()),
+            "%activity%", source,
             "%points%", result.pointsAwarded(),
             "%total%", data.points(),
             "%max%", config.barMax()));
