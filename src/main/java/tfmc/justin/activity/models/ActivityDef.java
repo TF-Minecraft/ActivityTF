@@ -7,9 +7,11 @@ import java.util.List;
 // ====================================
 // every: actions per award. points: awarded each time 'every' is met.
 // dailyCap: most points this activity can add in one day, 0 = unlimited.
-// iconPath: the TLibs m.<type>.<id> path the GUI icon comes from, or null
-// when the icon is the plain Material - in which case 'icon' is also the
-// fallback used if TLibs is missing or the path no longer resolves.
+// iconPath: the item path the GUI icon comes from - either the TLibs
+// m.<type>.<id> form or the normalized ItemsAdder ia.<namespace:id> one,
+// which is what routes ActivityGui.fromPath to the right hook - or null when
+// the icon is the plain Material, in which case 'icon' is also the fallback
+// used if the backing plugin is missing or the path no longer resolves.
 // clickCommands: console commands run when the player clicks this activity's
 // task after it is already revealed. Empty for every activity that does not
 // configure 'click-commands', which is the normal case.

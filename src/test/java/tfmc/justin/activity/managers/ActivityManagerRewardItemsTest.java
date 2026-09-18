@@ -25,6 +25,7 @@ import java.util.logging.Logger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // ====================================
@@ -585,5 +586,42 @@ class ActivityManagerRewardItemsTest {
         assertEquals(4, RewardEntry.totalWeight(pool));
         assertEquals(commands, RewardEntry.pick(pool, 2));
         assertEquals(items, RewardEntry.pick(pool, 3));
+    }
+
+    // ====================================
+    // The two gates are independent by design: ItemsAdder is not part of the
+    // TLibs/MMOItems/MythicLib trio itemPathsUsable() stands for, so each path
+    // form must resolve on its own backing plugin alone. All four combinations
+    // are pinned because the regression this guards against is an '&&'
+    // between them, which only shows on a server missing one of the two.
+    // ====================================
+    private static final Function<String, ItemStack> TLIBS_ITEMS = path -> new TestStack(Material.IRON_INGOT, 1);
+
+    private static final Function<String, ItemStack> IA_ITEMS = id -> new TestStack(Material.DIAMOND, 1);
+
+    private static ItemStack resolveReward(String path, boolean tlibs, boolean ia) {
+        return ActivityManager.resolveRewardItem(path, tlibs, ia, TLIBS_ITEMS, IA_ITEMS);
+    }
+
+    @Test
+    void anItemsAdderRewardPathNeedsOnlyTheItemsAdderGate() {
+        assertEquals(Material.DIAMOND, resolveReward("ia.tfmc:saucepan", false, true).getType());
+        assertEquals(Material.DIAMOND, resolveReward("ia.tfmc:saucepan", true, true).getType());
+        assertNull(resolveReward("ia.tfmc:saucepan", true, false));
+        assertNull(resolveReward("ia.tfmc:saucepan", false, false));
+    }
+
+    @Test
+    void aTLibsRewardPathNeedsOnlyTheItemPathsGate() {
+        assertEquals(Material.IRON_INGOT, resolveReward("m.material.steel", true, false).getType());
+        assertEquals(Material.IRON_INGOT, resolveReward("m.material.steel", true, true).getType());
+        assertNull(resolveReward("m.material.steel", false, true));
+        assertNull(resolveReward("m.material.steel", false, false));
+    }
+
+    // A malformed ia. path is never handed to the hook, gate open or not
+    @Test
+    void aMalformedItemsAdderRewardPathResolvesToNothing() {
+        assertNull(resolveReward("ia.saucepan", true, true));
     }
 }

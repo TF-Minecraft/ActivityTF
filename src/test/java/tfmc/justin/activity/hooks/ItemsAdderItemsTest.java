@@ -13,8 +13,8 @@ import java.util.logging.LogRecord;
 import java.util.logging.Logger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // ====================================
@@ -58,23 +58,55 @@ class ItemsAdderItemsTest {
     // needs a running server; the protected no-arg one only nulls a field
     private static final class TestStack extends ItemStack {
         private final Material type;
+        private int amount;
 
         TestStack(Material type) {
+            this(type, 64);
+        }
+
+        TestStack(Material type, int amount) {
             this.type = type;
+            this.amount = amount;
         }
 
         @Override
         public Material getType() {
             return type;
         }
+
+        @Override
+        public int getAmount() {
+            return amount;
+        }
+
+        @Override
+        public void setAmount(int amount) {
+            this.amount = amount;
+        }
+
+        // The real ItemStack#clone goes through the item registry; this is the
+        // same "a copy, not the original" contract without a server
+        @Override
+        public TestStack clone() {
+            return new TestStack(type, amount);
+        }
     }
 
+    // A copy, never ItemsAdder's own instance: CustomStack#getItemStack()
+    // hands back the CustomStack's field, and the caller sets a display name
+    // and lore on what it gets. The single-item amount is set on the copy.
     @Test
-    void aResolvedIdIsReturnedAsIs() {
-        ItemStack saucepan = new TestStack(Material.DIAMOND_SWORD);
+    void aResolvedIdIsReturnedAsACopy() {
+        ItemStack saucepan = new TestStack(Material.DIAMOND_SWORD, 64);
         ItemsAdderItems ia = items(id -> saucepan);
 
-        assertSame(saucepan, ia.resolve("tfmc:saucepan"));
+        ItemStack resolved = ia.resolve("tfmc:saucepan");
+
+        assertNotSame(saucepan, resolved);
+        assertEquals(Material.DIAMOND_SWORD, resolved.getType());
+        assertEquals(1, resolved.getAmount());
+        // the hook's own stack is untouched by the amount the caller gets
+        assertEquals(64, saucepan.getAmount());
         assertTrue(logged.isEmpty(), logged.toString());
     }
 
@@ -128,14 +160,35 @@ class ItemsAdderItemsTest {
         assertEquals(1, logged.size(), logged.toString());
     }
 
-    // Once an id is known bad, ItemsAdder (and its own per-call logging) must
-    // not be asked about it again
+    // ====================================
+    // getInstance() answers null for the whole duration of /iareload and of
+    // ItemsAdder's async pack load, so an id that came back null once is NOT
+    // known bad - one GUI open inside that window must not cost the icon and
+    // the reward for the rest of the uptime. Only the log line is silenced.
+    // ====================================
     @Test
-    void aFailedIdStopsCallingTheCreator() {
+    void anUnresolvedIdIsRetriedOnEveryCall() {
+        int[] calls = {0};
+        ItemStack saucepan = new TestStack(Material.DIAMOND_SWORD);
+        ItemsAdderItems ia = items(id -> calls[0]++ < 2 ? null : saucepan);
+
+        assertNull(ia.resolve("tfmc:saucepan"));
+        assertNull(ia.resolve("tfmc:saucepan"));
+        // ItemsAdder is back
+        assertEquals(Material.DIAMOND_SWORD, ia.resolve("tfmc:saucepan").getType());
+
+        assertEquals(3, calls[0]);
+        assertEquals(1, logged.size(), logged.toString());
+    }
+
+    // A throwing call is the genuinely permanent condition, so that id - and
+    // ItemsAdder's own per-call logging with it - is not asked about again
+    @Test
+    void aThrowingIdStopsCallingTheCreator() {
         int[] calls = {0};
         ItemsAdderItems ia = items(id -> {
             calls[0]++;
-            return null;
+            throw new IllegalStateException("boom");
         });
 
         ia.resolve("tfmc:nope");
@@ -143,6 +196,40 @@ class ItemsAdderItemsTest {
         ia.resolve("tfmc:nope");
 
         assertEquals(1, calls[0]);
+    }
+
+    // /activity reload is the operator's way out of that memo without a
+    // server restart
+    @Test
+    void clearingTheMemosLetsAThrowingIdBeTriedAgain() {
+        int[] calls = {0};
+        ItemsAdderItems ia = items(id -> {
+            calls[0]++;
+            throw new IllegalStateException("boom");
+        });
+
+        ia.resolve("tfmc:nope");
+        ia.resolve("tfmc:nope");
+        ia.clearMemos();
+        ia.resolve("tfmc:nope");
+
+        assertEquals(2, calls[0]);
+        assertEquals(2, logged.size(), logged.toString());
+    }
+
+    // A stack whose getType() throws is ItemsAdder's object too, and must cost
+    // this icon rather than the GUI build around it
+    @Test
+    void aThrowingStackIsCaughtLikeAThrowingCall() {
+        ItemsAdderItems ia = items(id -> new ItemStack() {
+            @Override
+            public Material getType() {
+                throw new IllegalStateException("no registry");
+            }
+        });
+
+        assertNull(ia.resolve("tfmc:saucepan"));
+        assertEquals(1, logged.size(), logged.toString());
     }
 
     // A good id is never cached: the GUI wants a fresh stack each open, and a

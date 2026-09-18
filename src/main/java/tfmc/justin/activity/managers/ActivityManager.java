@@ -659,12 +659,22 @@ public class ActivityManager {
     // it for nothing.
     // ====================================
     private ItemStack resolveRewardItem(String path) {
+        return resolveRewardItem(path, config.itemPathsUsable(), config.itemsAdderUsable(),
+            p -> TLibsItems.item(p), id -> ItemsAdderItems.item(id));
+    }
+
+    // The branch selection on its own, so the two gates can be pinned headless
+    // in all four combinations: each path form must survive the other form's
+    // backing plugin being absent
+    static ItemStack resolveRewardItem(String path, boolean tlibs, boolean ia,
+                                       Function<String, ItemStack> tlibsItems,
+                                       Function<String, ItemStack> iaItems) {
         if (ItemPath.isPluginPath(path)) {
-            return config.itemPathsUsable() ? TLibsItems.item(path) : null;
+            return tlibs ? tlibsItems.apply(path) : null;
         }
         if (ItemPath.isItemsAdderPath(path)) {
             String id = ItemPath.itemsAdderId(path);
-            return id != null && config.itemsAdderUsable() ? ItemsAdderItems.item(id) : null;
+            return id != null && ia ? iaItems.apply(id) : null;
         }
         Material material = ItemPath.material(path);
         return material == null ? null : new ItemStack(material);
@@ -1146,6 +1156,10 @@ public class ActivityManager {
         // if they got it wrong twice
         warnedEmptyPool = false;
         reportedItemPaths.clear();
+        // The hook's own memo of ids whose call threw is otherwise permanent
+        // for the JVM: this is the only way short of a restart to give an id
+        // another chance once ItemsAdder is back
+        ItemsAdderItems.reset();
         // An operator who fixed a broken command deserves to hear about it
         // again if it is still broken
         reportedBrokenCommands.clear();

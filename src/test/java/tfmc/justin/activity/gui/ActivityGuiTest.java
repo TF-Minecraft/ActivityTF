@@ -1,6 +1,7 @@
 package tfmc.justin.activity.gui;
 
 import org.bukkit.Material;
+import org.bukkit.inventory.ItemStack;
 import org.junit.jupiter.api.Test;
 import tfmc.justin.activity.config.ActivityConfiguration;
 import tfmc.justin.activity.config.Messages;
@@ -15,6 +16,7 @@ import java.lang.reflect.Field;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -289,5 +291,60 @@ class ActivityGuiTest {
 
         assertFalse(lore.get(0).contains("#e6ca40"), lore.toString());
         assertFalse(lore.get(0).contains("&l"), lore.toString());
+    }
+
+    // ====================================
+    // The two gates fromPath() reads are independent by design: a server with
+    // ItemsAdder and without the TLibs trio must still build its ia. icons,
+    // and the other way round. All four combinations are pinned because the
+    // regression this guards against is an '&&' between the two gates, which
+    // only shows on a server missing one of them.
+    //
+    // The real ItemStack constructors need the item registry of a running
+    // server; the protected no-arg one only nulls a field.
+    // ====================================
+    private static final class TestStack extends ItemStack {
+        private final Material type;
+
+        TestStack(Material type) {
+            this.type = type;
+        }
+
+        @Override
+        public Material getType() {
+            return type;
+        }
+    }
+
+    private static final Function<String, ItemStack> TLIBS_ITEMS = path -> new TestStack(Material.IRON_INGOT);
+
+    private static final Function<String, ItemStack> IA_ITEMS = id -> new TestStack(Material.DIAMOND);
+
+    private static ItemStack fromPath(String iconPath, boolean tlibs, boolean ia) {
+        return ActivityGui.fromPath(iconPath, tlibs, ia, TLIBS_ITEMS, IA_ITEMS);
+    }
+
+    @Test
+    void anItemsAdderIconNeedsOnlyTheItemsAdderGate() {
+        assertEquals(Material.DIAMOND, fromPath("ia.tfmc:saucepan", false, true).getType());
+        assertEquals(Material.DIAMOND, fromPath("ia.tfmc:saucepan", true, true).getType());
+        assertNull(fromPath("ia.tfmc:saucepan", true, false));
+        assertNull(fromPath("ia.tfmc:saucepan", false, false));
+    }
+
+    @Test
+    void aTLibsIconNeedsOnlyTheItemPathsGate() {
+        assertEquals(Material.IRON_INGOT, fromPath("m.material.steel", true, false).getType());
+        assertEquals(Material.IRON_INGOT, fromPath("m.material.steel", true, true).getType());
+        assertNull(fromPath("m.material.steel", false, true));
+        assertNull(fromPath("m.material.steel", false, false));
+    }
+
+    // No path configured, and a malformed ia. one, are both "nothing to build"
+    // - iconStack falls back to the Material for them
+    @Test
+    void noPathAndAMalformedItemsAdderPathBuildNothing() {
+        assertNull(fromPath(null, true, true));
+        assertNull(fromPath("ia.saucepan", true, true));
     }
 }

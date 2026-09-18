@@ -26,6 +26,7 @@ import tfmc.justin.activity.utils.Utils;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Function;
 
 // ====================================
 // One single-chest view of the week: the two bars on the top row, today's
@@ -281,18 +282,29 @@ public class ActivityGui implements Listener {
         return new ItemStack(icon);
     }
 
+    private ItemStack fromPath(ActivityConfiguration config, String iconPath) {
+        return fromPath(iconPath, config.itemPathsUsable(), config.itemsAdderUsable(),
+            path -> TLibsItems.item(path), id -> ItemsAdderItems.item(id));
+    }
+
     // Each path form on its own gate: a server without ItemsAdder must still
     // build its m. icons, and one without the TLibs trio its ia. ones. Neither
     // hook throws - both answer null for anything they cannot build.
-    private ItemStack fromPath(ActivityConfiguration config, String iconPath) {
+    //
+    // Static and with both hooks handed in, so all four gate combinations can
+    // be pinned headless - the two gates being independent is the whole point
+    // of the feature, and an '&&' slipped in here would otherwise go unnoticed.
+    static ItemStack fromPath(String iconPath, boolean tlibs, boolean ia,
+                              Function<String, ItemStack> tlibsItems,
+                              Function<String, ItemStack> iaItems) {
         if (iconPath == null) {
             return null;
         }
         if (ItemPath.isItemsAdderPath(iconPath)) {
             String id = ItemPath.itemsAdderId(iconPath);
-            return id != null && config.itemsAdderUsable() ? ItemsAdderItems.item(id) : null;
+            return id != null && ia ? iaItems.apply(id) : null;
         }
-        return config.itemPathsUsable() ? TLibsItems.item(iconPath) : null;
+        return tlibs ? tlibsItems.apply(iconPath) : null;
     }
 
     private ItemStack item(Material material, String name, List<String> lore) {
