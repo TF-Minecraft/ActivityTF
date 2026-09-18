@@ -14,12 +14,14 @@ import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import tfmc.justin.activity.config.ActivityConfiguration;
+import tfmc.justin.activity.hooks.ItemsAdderItems;
 import tfmc.justin.activity.hooks.TLibsItems;
 import tfmc.justin.activity.config.Messages;
 import tfmc.justin.activity.managers.ActivityManager;
 import tfmc.justin.activity.models.ActivityDef;
 import tfmc.justin.activity.models.PlayerData;
 import tfmc.justin.activity.utils.Bar;
+import tfmc.justin.activity.utils.ItemPath;
 import tfmc.justin.activity.utils.Utils;
 
 import java.util.ArrayList;
@@ -266,18 +268,31 @@ public class ActivityGui implements Listener {
 
     // ====================================
     // An icon written as a TLibs item path is built by TLibs, so an MMOItems
-    // icon keeps its model and texture; the name and lore below are then set
-    // on it like on any other icon. TLibs missing, or the path no longer
-    // resolving, falls back to the Material.
+    // icon keeps its model and texture; an ia.<namespace:id> one is built by
+    // ItemsAdder the same way. The name and lore below are then set on it like
+    // on any other icon. The backing plugin missing, or the path no longer
+    // resolving, falls back to the Material - which is PAPER behind any path.
     // ====================================
     private ItemStack iconStack(ActivityConfiguration config, Material icon, String iconPath) {
-        if (iconPath != null && config.itemPathsUsable()) {
-            ItemStack fromPath = TLibsItems.item(iconPath);
-            if (fromPath != null && !fromPath.getType().isAir()) {
-                return fromPath;
-            }
+        ItemStack fromPath = fromPath(config, iconPath);
+        if (fromPath != null && !fromPath.getType().isAir()) {
+            return fromPath;
         }
         return new ItemStack(icon);
+    }
+
+    // Each path form on its own gate: a server without ItemsAdder must still
+    // build its m. icons, and one without the TLibs trio its ia. ones. Neither
+    // hook throws - both answer null for anything they cannot build.
+    private ItemStack fromPath(ActivityConfiguration config, String iconPath) {
+        if (iconPath == null) {
+            return null;
+        }
+        if (ItemPath.isItemsAdderPath(iconPath)) {
+            String id = ItemPath.itemsAdderId(iconPath);
+            return id != null && config.itemsAdderUsable() ? ItemsAdderItems.item(id) : null;
+        }
+        return config.itemPathsUsable() ? TLibsItems.item(iconPath) : null;
     }
 
     private ItemStack item(Material material, String name, List<String> lore) {

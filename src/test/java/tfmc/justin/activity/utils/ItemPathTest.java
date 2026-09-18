@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // ====================================
-// How the three forms an item-valued config key accepts are told apart.
+// How the four forms an item-valued config key accepts are told apart.
 // Material.matchMaterial is a name lookup, so all of this runs headless.
 // ====================================
 class ItemPathTest {
@@ -76,10 +76,10 @@ class ItemPathTest {
 
     @Test
     void anUnrecognizedPrefixIsUnsupportedNotUnknown() {
-        assertTrue(ItemPath.isUnsupportedPath("ia.foo:bar"));
-        assertFalse(ItemPath.isPluginPath("ia.foo:bar"));
-        assertNull(ItemPath.material("ia.foo:bar"));
-        assertNull(ItemPath.pluginPath("ia.foo:bar"));
+        assertTrue(ItemPath.isUnsupportedPath("nx.foo:bar"));
+        assertFalse(ItemPath.isPluginPath("nx.foo:bar"));
+        assertNull(ItemPath.material("nx.foo:bar"));
+        assertNull(ItemPath.pluginPath("nx.foo:bar"));
 
         assertTrue(ItemPath.isUnsupportedPath("nx.x"));
         assertFalse(ItemPath.isPluginPath("nx.x"));
@@ -88,5 +88,57 @@ class ItemPathTest {
         assertFalse(ItemPath.isUnsupportedPath("IRON_INGOT"));
         assertFalse(ItemPath.isUnsupportedPath("v.iron_ingot"));
         assertFalse(ItemPath.isUnsupportedPath("m.material.steel"));
+        assertFalse(ItemPath.isUnsupportedPath("ia.tfmc:saucepan"));
+    }
+
+    // ====================================
+    // ia.<namespace:id> - the id /iagive takes. It is a path, never a
+    // material, and never "unsupported": the whole point of the form is that
+    // the admin gets an ItemsAdder lookup rather than a warning.
+    // ====================================
+
+    @Test
+    void anItemsAdderPathIsAPathNotAMaterialAndNotUnsupported() {
+        assertTrue(ItemPath.isItemsAdderPath("ia.tfmc:saucepan"));
+        assertFalse(ItemPath.isUnsupportedPath("ia.tfmc:saucepan"));
+        assertFalse(ItemPath.isPluginPath("ia.tfmc:saucepan"));
+        assertNull(ItemPath.material("ia.tfmc:saucepan"));
+        assertNull(ItemPath.pluginPath("ia.tfmc:saucepan"));
+    }
+
+    // The colon form goes to ItemsAdder untouched; the dotted form an admin
+    // writes by analogy with m.<type>.<id> means the same item
+    @Test
+    void bothSeparatorsNormalizeToTheColonForm() {
+        assertEquals("tfmc:saucepan", ItemPath.itemsAdderId("ia.tfmc:saucepan"));
+        assertEquals("tfmc:saucepan", ItemPath.itemsAdderId("ia.tfmc.saucepan"));
+        assertEquals("tfmc:saucepan", ItemPath.itemsAdderId("  IA.tfmc.saucepan  "));
+        assertEquals("tfmc:saucepan", ItemPath.itemsAdderId("  Ia.tfmc:saucepan  "));
+    }
+
+    // Every one of these is still an ia. path - so it never falls through to
+    // matchMaterial - but there is no id to hand over, and asking must not
+    // throw
+    @Test
+    void aMalformedItemsAdderPathIsRejectedAsAPathNotAsAMaterial() {
+        for (String broken : new String[]{"ia.", "ia.:", "ia.ns:", "ia.:id", "ia.a:b:c",
+                                          "ia.onepart", "ia.a.b.c", "ia..b", "ia.a."}) {
+            assertTrue(ItemPath.isItemsAdderPath(broken), broken);
+            assertNull(ItemPath.itemsAdderId(broken), broken);
+            assertNull(ItemPath.material(broken), broken);
+            assertFalse(ItemPath.isUnsupportedPath(broken), broken);
+        }
+    }
+
+    // 'ia' alone has no prefix at all: it is just an unknown material name,
+    // and asking for an id must answer null rather than index out of bounds
+    @Test
+    void theBarePrefixIsNotAnItemsAdderPath() {
+        assertFalse(ItemPath.isItemsAdderPath("ia"));
+        assertNull(ItemPath.itemsAdderId("ia"));
+        assertNull(ItemPath.itemsAdderId(null));
+        assertFalse(ItemPath.isItemsAdderPath(null));
+        assertNull(ItemPath.itemsAdderId("m.material.steel"));
+        assertNull(ItemPath.itemsAdderId("IRON_INGOT"));
     }
 }

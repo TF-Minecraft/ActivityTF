@@ -13,6 +13,7 @@ import java.util.Set;
 import java.util.function.Predicate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -76,6 +77,30 @@ class ActivityConfigurationTest {
 
         assertTrue(problem != null && problem.contains("Malformed item path"), problem);
         assertTrue(problem.contains("activities.craft_steel.craft"), problem);
+        assertTrue(crafts.isEmpty() && paths.isEmpty());
+    }
+
+    // ====================================
+    // A craft key is the one place an ia. path is not accepted: matching a
+    // crafted ItemStack back to an ItemsAdder id is the opposite lookup and is
+    // not implemented. It must say so - registering nothing quietly would give
+    // an activity that can never be fed and no hint why.
+    // ====================================
+    @Test
+    void anItemsAdderCraftKeyIsRefusedInItsOwnWords() {
+        Map<Material, String> crafts = new HashMap<>();
+
+        for (String path : new String[]{"ia.tfmc:saucepan", "ia.tfmc.saucepan", "ia.broken"}) {
+            String problem = register(crafts, path, "cook_dish");
+
+            assertTrue(problem != null && problem.contains("ItemsAdder item path"), problem);
+            assertTrue(problem.contains(path), problem);
+            assertTrue(problem.contains("activities.cook_dish.craft"), problem);
+            // not the generic "unsupported path" line: ia. does work elsewhere
+            assertFalse(problem.contains("Unsupported item path"), problem);
+            assertTrue(problem.contains("nothing will ever feed that activity"), problem);
+        }
+
         assertTrue(crafts.isEmpty() && paths.isEmpty());
     }
 

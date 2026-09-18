@@ -344,6 +344,22 @@ class ActivityManagerRewardItemsTest {
         assertFalse(loggedAtLeastOne(Level.SEVERE, "threw for"));
     }
 
+    // Same rule for an ItemsAdder path: ItemsAdder down, or the id removed
+    // from the pack since load, must leave the milestone unclaimed rather than
+    // burn it for nothing
+    @Test
+    void anItemsAdderPathThatDoesNotResolveAtPayoutHandsNothingOver() {
+        Handover handover = player();
+
+        assertFalse(give(handover, path -> null, new RewardEntry.Item("ia.tfmc:saucepan", 2)));
+
+        assertTrue(handover.added.isEmpty());
+        assertTrue(handover.dropped.isEmpty());
+        assertTrue(loggedAtLeastOne(Level.WARNING, "could not be resolved"));
+        assertTrue(loggedAtLeastOne(Level.WARNING, "ia.tfmc:saucepan"));
+        assertFalse(loggedAtLeastOne(Level.SEVERE, "threw for"));
+    }
+
     // A claim can be repeated at click rate, so a path that cannot resolve is
     // reported once rather than once per click
     @Test

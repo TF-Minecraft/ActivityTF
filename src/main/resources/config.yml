@@ -18,14 +18,21 @@ reset:
 # playtime: 'every' counts minutes online - see the playtime section at the
 #   bottom, and read what afk-minutes does and does not do before relying on it.
 # material: the GUI icon, and craft: the item this activity counts crafts of.
-#   Both accept the same three forms:
+#   material: accepts four forms, craft: the first three:
 #     IRON_INGOT        a bare vanilla Material name
 #     v.iron_ingot      the same thing written as a TLibs item path
 #     m.material.steel  an MMOItems item, as m.<type>.<id> - needs TLibs,
 #                       MMOItems and MythicLib all installed
+#     ia.tfmc:saucepan  an ItemsAdder item, as ia.<namespace:id> - the same id
+#                       /iagive takes - and needs ItemsAdder installed.
+#                       'ia.tfmc.saucepan' means the same item.
+#   An ia. path on craft: is reported at load and never credits anything:
+#   matching a crafted item back to an ItemsAdder id is the opposite lookup
+#   and is not supported. Use material: (and reward 'item:') for ia. items.
 #   Malformed and unsupported-prefix values are reported per entry at load
 #   (startup or /activity reload); a missing TLibs/MMOItems/MythicLib is
-#   reported once for the whole file, and only if an m. path is configured.
+#   reported once for the whole file, and only if an m. path is configured,
+#   and a missing ItemsAdder likewise if an ia. path is.
 #   A well-formed m. path that TLibs itself cannot resolve is reported once,
 #   the first time it is used (GUI open / craft), and TLibs is not asked
 #   about it again until a server restart (/activity reload does not clear
@@ -486,8 +493,9 @@ rewards:
     # %uuid%) instead of, or as well as, handing items over. Items are the
     # safer half: a failed 'give' is invisible to the plugin, so the player is
     # marked paid having received nothing, while a failed item hands the
-    # milestone back. 'item:' takes the same three forms as an activity icon -
-    # IRON_INGOT, v.iron_ingot, m.<type>.<id> - and 'amount:' is 1-64,
+    # milestone back. 'item:' takes the same four forms as an activity icon -
+    # IRON_INGOT, v.iron_ingot, m.<type>.<id>, ia.<namespace:id> - and
+    # 'amount:' is 1-64,
     # defaulting to 1. Anything that does not fit is dropped at the player's
     # feet. Unlike a 'give %player% ...' command this also pays a Bedrock or
     # otherwise unsafe player name.
