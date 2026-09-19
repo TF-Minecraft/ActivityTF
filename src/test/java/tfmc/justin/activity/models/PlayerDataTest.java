@@ -673,6 +673,26 @@ class PlayerDataTest {
         assertEquals(Recorded.ACTIVITY_CAP, record(data, VOTE, 1).outcome());
     }
 
+    // A cap in points > 1 per award: worth() must compare against capPoints(),
+    // not the raw award count, or a cap of 1 would let a second every:1 award
+    // through when its points happen to be more than 1.
+    @Test
+    void anActivityCapWithMultiPointAwardsStopsAtItsCapPoints() {
+        ActivityDef cappedAtOne =
+            new ActivityDef("richcap", "Rich Cap", Material.STONE, null, 1, 5, 1);
+        PlayerData data = data();
+
+        assertEquals(5, record(data, cappedAtOne, 1).pointsAwarded());
+        assertEquals(Recorded.ACTIVITY_CAP, record(data, cappedAtOne, 1).outcome());
+
+        ActivityDef cappedAtTwo =
+            new ActivityDef("richcap2", "Rich Cap Two", Material.STONE, null, 1, 5, 2);
+        PlayerData data2 = data();
+
+        assertEquals(5, record(data2, cappedAtTwo, 1).pointsAwarded());
+        assertEquals(5, record(data2, cappedAtTwo, 1).pointsAwarded());
+    }
+
     @Test
     void aSpentDailyBudgetSaysSo() {
         PlayerData data = data();
