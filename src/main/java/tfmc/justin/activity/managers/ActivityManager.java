@@ -507,7 +507,7 @@ public class ActivityManager {
         List<RewardEntry> pool = config.rewardPool();
         Map<Integer, RewardEntry> drops = config.milestoneDrops();
         // The pool refusals below only apply when a due milestone draws from it
-        boolean needsPool = !drops.keySet().containsAll(due);
+        boolean needsPool = needsPool(due, drops);
 
         // Nothing configured to hand over: burning the milestones here would
         // pay the player in silence. Load already warned about this, but a
@@ -518,6 +518,8 @@ public class ActivityManager {
                 plugin.getLogger().warning("Handed nothing to " + player.getUniqueId()
                     + ": rewards.pool has no usable entry, so the milestone stays claimable.");
             }
+            // The one refusal the player cannot read off the bar
+            player.sendMessage(messages.get("reward-unconfigured"));
             return 0;
         }
 
@@ -552,7 +554,8 @@ public class ActivityManager {
 
         int paid = 0;
         for (int i = 0; i < due.size(); i++) {
-            RewardEntry drawn = rewardFor(due.get(i), drops, runnablePool, ActivityManager::draw);
+            RewardEntry drawn = rewardFor(due.get(i), drops, config.rewardMultiplier(), runnablePool,
+                ActivityManager::draw);
             if (drawn == null || !dispatchRewards(player, drawn, due.get(i))) {
                 break;
             }
@@ -600,13 +603,25 @@ public class ActivityManager {
         return paid;
     }
 
+    // Does any of these milestones draw from the pool, rather than pay a
+    // fixed rewards.drops item?
+    public static boolean needsPool(List<Integer> milestones, Map<Integer, RewardEntry> drops) {
+        return !drops.keySet().containsAll(milestones);
+    }
+
     // What one milestone pays: its fixed drop, and the pool is never drawn
     // from for it; otherwise one draw. Takes the draw so a test can see it is
-    // skipped.
-    static RewardEntry rewardFor(int milestone, Map<Integer, RewardEntry> drops, List<RewardEntry> pool,
-                                 Function<List<RewardEntry>, RewardEntry> draw) {
+    // skipped. A fixed drop's display is its bare item name (see
+    // loadMilestoneDrops) and gets the amount this payout hands over, with
+    // the same multiplier giveItems applies.
+    static RewardEntry rewardFor(int milestone, Map<Integer, RewardEntry> drops, int multiplier,
+                                 List<RewardEntry> pool, Function<List<RewardEntry>, RewardEntry> draw) {
         RewardEntry fixed = drops.get(milestone);
-        return fixed != null ? fixed : draw.apply(pool);
+        if (fixed == null) {
+            return draw.apply(pool);
+        }
+        return new RewardEntry(fixed.weight(), "#50d990x" + fixed.items().get(0).amount() * multiplier
+            + " #b8906e" + fixed.display(), fixed.commands(), fixed.items());
     }
 
     // One weighted draw from the pool. Null only on an empty pool.

@@ -624,16 +624,15 @@ class ActivityManagerRewardItemsTest {
     void aMalformedItemsAdderRewardPathResolvesToNothing() {
         assertNull(resolveReward("ia.saucepan", true, true));
     }
+
     // ====================================
     // rewards.drops: a milestone with a fixed drop pays that entry and never
-    // draws from the pool; the rest draw as before. The fixed entry is built
-    // the way loadMilestoneDrops builds it, and then goes through the same
-    // giveItems every pool item does.
+    // draws from the pool, and says in chat what it actually hands over. The
+    // fixed entry is built the way loadMilestoneDrops builds it: its display
+    // is the bare item name.
     // ====================================
-    private static final RewardEntry STEEL = new RewardEntry(1, "#50d990x3 #b8906eSteel", List.of(),
-        List.of(new RewardEntry.Item("m.material.steel", 3)));
-    private static final RewardEntry DIAMONDS = new RewardEntry(1, "#50d990x2 #b8906eDiamond", List.of(),
-        List.of(new RewardEntry.Item("DIAMOND", 2)));
+    private static final RewardEntry DIAMONDS = new RewardEntry(1, "Diamond", List.of(),
+        List.of(new RewardEntry.Item("DIAMOND", 3)));
     private static final RewardEntry POOLED = new RewardEntry(1, "pooled", List.of("say hi"), List.of());
 
     private static final Function<List<RewardEntry>, RewardEntry> NO_DRAW = pool -> {
@@ -642,13 +641,16 @@ class ActivityManagerRewardItemsTest {
 
     @Test
     void aFixedDropIsPaidWithoutDrawingFromThePool() {
-        assertEquals(STEEL, ActivityManager.rewardFor(10, Map.of(10, STEEL), List.of(POOLED), NO_DRAW));
+        RewardEntry paid = ActivityManager.rewardFor(10, Map.of(10, DIAMONDS), 1, List.of(POOLED), NO_DRAW);
+
+        assertEquals(DIAMONDS.items(), paid.items());
+        assertTrue(paid.commands().isEmpty());
     }
 
     @Test
     void aPoolMilestoneStillDrawsFromThePool() {
         List<List<RewardEntry>> drawnFrom = new ArrayList<>();
-        RewardEntry drawn = ActivityManager.rewardFor(20, Map.of(10, STEEL), List.of(POOLED), pool -> {
+        RewardEntry drawn = ActivityManager.rewardFor(20, Map.of(10, DIAMONDS), 1, List.of(POOLED), pool -> {
             drawnFrom.add(pool);
             return pool.get(0);
         });
@@ -657,48 +659,29 @@ class ActivityManagerRewardItemsTest {
         assertEquals(List.of(List.of(POOLED)), drawnFrom);
     }
 
-    // What claim()'s loop hands out for due = [10, 20, 30] with drop_1 and
-    // drop_3 fixed: only the middle one draws
+    // 'DIAMOND 3' at rewards.multiplier 2 hands over six, so chat says six
     @Test
-    void aClaimMixingFixedAndPoolMilestonesDrawsOnlyForThePoolOnes() {
-        Map<Integer, RewardEntry> drops = Map.of(10, STEEL, 30, DIAMONDS);
-        int[] draws = {0};
-        List<RewardEntry> paid = new ArrayList<>();
-        for (int milestone : List.of(10, 20, 30)) {
-            paid.add(ActivityManager.rewardFor(milestone, drops, List.of(POOLED), pool -> {
-                draws[0]++;
-                return pool.get(0);
-            }));
-        }
+    void aFixedDropsChatLineCarriesTheMultipliedAmount() {
+        assertEquals("#50d990x3 #b8906eDiamond",
+            ActivityManager.rewardFor(10, Map.of(10, DIAMONDS), 1, List.of(), NO_DRAW).display());
+        assertEquals("#50d990x6 #b8906eDiamond",
+            ActivityManager.rewardFor(10, Map.of(10, DIAMONDS), 2, List.of(), NO_DRAW).display());
+    }
 
-        assertEquals(List.of(STEEL, POOLED, DIAMONDS), paid);
-        assertEquals(1, draws[0]);
+    // Whether claim() needs a usable pool at all: only when a due milestone
+    // has no fixed drop
+    @Test
+    void everyDueMilestoneFixedNeedsNoPool() {
+        assertFalse(ActivityManager.needsPool(List.of(10, 20), Map.of(10, DIAMONDS, 20, DIAMONDS)));
     }
 
     @Test
-    void theMultiplierAppliesToAFixedDrop() {
-        Handover handover = player();
-
-        assertTrue(ActivityManager.giveItems(handover.player, DIAMONDS, 3, 10, MATERIALS, logger()));
-
-        assertEquals(1, handover.added.size());
-        assertEquals(6, handover.added.get(0).getAmount());
+    void aMixOfFixedAndPoolMilestonesNeedsThePool() {
+        assertTrue(ActivityManager.needsPool(List.of(10, 20), Map.of(10, DIAMONDS)));
     }
 
-    // TLibs not up at payout: the real resolver answers null for the m. path,
-    // so nothing counts as handed over and the milestone is rolled back to
-    // where the click started - still claimable, exactly like a pool item
     @Test
-    void anUnresolvableFixedDropLeavesItsMilestoneClaimable() {
-        Handover handover = player();
-        Function<String, ItemStack> tlibsDown =
-            path -> ActivityManager.resolveRewardItem(path, false, false, TLIBS_ITEMS, IA_ITEMS);
-
-        boolean paid = ActivityManager.giveItems(handover.player, STEEL, 1, 10, tlibsDown, logger());
-
-        assertFalse(paid);
-        assertTrue(handover.added.isEmpty());
-        assertTrue(loggedAtLeastOne(Level.WARNING, "Reward item 'm.material.steel' (x3, milestone 10)"));
-        assertEquals(0, ActivityManager.rollbackClaimedPoints(0, 0, List.of(10)));
+    void noDropsAtAllNeedsThePool() {
+        assertTrue(ActivityManager.needsPool(List.of(10), Map.of()));
     }
 }

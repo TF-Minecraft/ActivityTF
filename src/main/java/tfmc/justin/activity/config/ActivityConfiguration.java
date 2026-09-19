@@ -7,6 +7,7 @@ import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 import tfmc.justin.activity.hooks.TLibsItems;
+import tfmc.justin.activity.managers.ActivityManager;
 import tfmc.justin.activity.models.ActivityDef;
 import tfmc.justin.activity.models.PlayerData;
 import tfmc.justin.activity.models.RewardEntry;
@@ -212,16 +213,27 @@ public class ActivityConfiguration {
         rewardPool = loadRewardPool(config);
         rewardMultiplier = rewardMultiplier(config);
 
+        barMax = Math.max(1, config.getInt("bar.max", 50));
+        dailyMax = Math.max(1, config.getInt("bar.daily-max", 10));
+        // After barMax: every milestone is validated against it
+        milestones = loadMilestones(config.getIntegerList("bar.milestones"));
+        // After milestones: drop_N names the Nth of them. Before the path
+        // warnings below: a drop's m. or ia. path counts towards them.
+        milestoneDrops = loadMilestoneDrops(config);
+        if (poolNeededButEmpty(rewardPool, milestoneDrops, milestones)) {
+            plugin.getLogger().warning("rewards.pool is empty or every entry in it was dropped - a milestone"
+                + " can be reached but nothing can ever be claimed.");
+        }
+
         // ====================================
         // One line for the whole file, and only when config.yml actually asks
         // for an m. path: the icons and the craft keys all fail for the same
         // reason, and repeating it per entry buried the rest of the startup log.
         // ====================================
-        if ((pluginPathConfigured || !craftPaths.isEmpty()) && !itemPathsUsable) {
-            plugin.getLogger().warning("config.yml uses m.<type>.<id> item paths but " + missingItemPathPlugins
-                + (missingItemPathPlugins.contains(",") ? " are" : " is") + " not enabled - those icons"
-                + " fall back to PAPER, those crafts are never credited, and any reward item on such a path"
-                + " hands over nothing and leaves its milestone unclaimed.");
+        String itemPathProblem = itemPathWarning(pluginPathConfigured || !craftPaths.isEmpty(),
+            itemPathsUsable, missingItemPathPlugins);
+        if (itemPathProblem != null) {
+            plugin.getLogger().warning(itemPathProblem);
         }
 
         String itemsAdderProblem = itemsAdderWarning(itemsAdderPathConfigured, itemsAdderUsable);
@@ -231,16 +243,6 @@ public class ActivityConfiguration {
 
         guiTitle = config.getString("gui.title", "&8Weekly Activity");
 
-        barMax = Math.max(1, config.getInt("bar.max", 50));
-        dailyMax = Math.max(1, config.getInt("bar.daily-max", 10));
-        // After barMax: every milestone is validated against it
-        milestones = loadMilestones(config.getIntegerList("bar.milestones"));
-        // After milestones: drop_N names the Nth of them
-        milestoneDrops = loadMilestoneDrops(config);
-        if (rewardPool.isEmpty() && milestoneDrops.size() < milestones.size()) {
-            plugin.getLogger().warning("rewards.pool is empty or every entry in it was dropped - a milestone"
-                + " can be reached but nothing can ever be claimed.");
-        }
         barLength = barLength(config.getInt("bar.length", 40));
 
         rerollsPerDay = parseRerollsPerDay(config);
@@ -983,12 +985,23 @@ public class ActivityConfiguration {
                 continue;
             }
             if (!validItemPath(parts[0], at)) {
+                plugin.getLogger().warning(at + " has no usable item path - milestone " + milestone
+                    + " draws from the pool.");
                 continue;
             }
-            drops.put(milestone, new RewardEntry(1, "#50d990x" + amount + " #b8906e" + itemName(parts[0]),
+            // display is the bare item name: claim() prefixes the amount it
+            // actually pays, multiplier included
+            drops.put(milestone, new RewardEntry(1, itemName(parts[0]),
                 List.of(), List.of(new RewardEntry.Item(parts[0], amount))));
         }
         return Map.copyOf(drops);
+    }
+
+    // The load-time "nothing can ever be claimed" check: only true when some
+    // milestone actually draws from the empty pool
+    static boolean poolNeededButEmpty(List<RewardEntry> pool, Map<Integer, RewardEntry> drops,
+                                      List<Integer> milestones) {
+        return pool.isEmpty() && ActivityManager.needsPool(milestones, drops);
     }
 
     // The chat name of a fixed drop, from its path alone - resolving it here
@@ -1379,6 +1392,17 @@ public class ActivityConfiguration {
     // payout, so ItemsAdder being absent costs ia. paths only.
     public boolean itemsAdderUsable() {
         return itemsAdderUsable;
+    }
+
+    // The same for m. paths and the TLibs/MMOItems/MythicLib trio
+    static String itemPathWarning(boolean configured, boolean usable, String missing) {
+        if (!configured || usable) {
+            return null;
+        }
+        return "config.yml uses m.<type>.<id> item paths but " + missing
+            + (missing.contains(",") ? " are" : " is") + " not enabled - those icons"
+            + " fall back to PAPER, those crafts are never credited, and any reward item on such a path"
+            + " hands over nothing and leaves its milestone unclaimed.";
     }
 
     // The one line the whole file gets when it asks for ia. paths and
