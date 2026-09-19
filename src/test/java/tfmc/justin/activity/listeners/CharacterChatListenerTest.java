@@ -110,21 +110,37 @@ class CharacterChatListenerTest {
 
     @Test
     void aChainOfSuffixVariationsIsRejected() {
-        assertTrue(say("blablablablablabla"));
-        assertFalse(say("blablablablablabla1"));
-        assertFalse(say("blablablablablabla2"));
+        assertTrue(say("I walk into the tavern slowly"));
+        assertFalse(say("I walk into the tavern slowly1"));
+        assertFalse(say("I walk into the tavern slowly2"));
     }
 
     @Test
     void oneLetterSuffixVariantsAreRejected() {
-        assertTrue(say("blablablablablabla a"));
-        assertFalse(say("blablablablablabla b"));
+        assertTrue(say("I walk quietly into the tavern a"));
+        assertFalse(say("I walk quietly into the tavern b"));
     }
 
     @Test
     void oneLetterPrefixVariantsAreRejected() {
-        assertTrue(say("a blablablablablabla"));
-        assertFalse(say("b blablablablablabla"));
+        assertTrue(say("a I walk quietly into the tavern"));
+        assertFalse(say("b I walk quietly into the tavern"));
+    }
+
+    @Test
+    void selfRepeatingMessagesNeverCountOrEnterHistory() {
+        assertFalse(say("aaaaaaaaaaaaaaaa"));
+        assertFalse(say("bbbbbbbbbbbbbbbb"));
+        assertFalse(say("hahahahahahahahaha"));
+        assertFalse(say("hehehehehehehehehe"));
+        assertFalse(say("blablablablablabla"));
+        assertFalse(say("I walk into the tavern I walk into the tavern"));
+        assertEquals(0, listener.historySize(player));
+    }
+
+    @Test
+    void genuineVariedLetterCountingStillCounts() {
+        assertTrue(say("No, no, no, I told you to wait outside"));
     }
 
     @Test
@@ -195,7 +211,9 @@ class CharacterChatListenerTest {
         String[] words = {"tavern", "silver", "hooded", "barkeep", "stranger",
                 "window", "candle", "forest", "river", "mountain", "castle",
                 "dragon", "market", "harbor", "shield", "lantern", "meadow",
-                "temple", "bridge", "garden", "orchard"};
+                "temple", "bridge", "garden", "orchard", "chapel", "quarry",
+                "cellar", "beacon", "hamlet", "prairie", "thicket", "citadel",
+                "wharf", "abbey"};
         return "I look at the " + words[i] + " " + words[(i * 7 + 3) % words.length]
                 + " " + words[(i * 11 + 5) % words.length];
     }

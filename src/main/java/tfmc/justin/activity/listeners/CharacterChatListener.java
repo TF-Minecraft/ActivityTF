@@ -23,18 +23,21 @@ import java.util.regex.Pattern;
 //
 // Anti-farm: a message only counts when it is longer than MIN_LENGTH, its
 // normalized form (lowercase letters only) has at least MIN_NORMALIZED
-// characters, and that form is less than SIMILARITY alike (Levenshtein) to
-// each of the sender's last HISTORY such messages. Messages failing either
-// length gate never enter the history, so filler can't reset it. History is
-// kept across quits so relogging can't clear it; memory is bounded at HISTORY
-// short strings per player who has chatted since startup. Main thread only,
-// so a plain HashMap is enough.
+// characters and MIN_DISTINCT distinct letters, is not itself periodic
+// (repeats of a short chunk, e.g. "hahaha" or a doubled sentence), and is
+// less than SIMILARITY alike (Levenshtein) to each of the sender's last
+// HISTORY such messages. Messages failing any gate never enter the history,
+// so filler or self-repetition can't reset it. History is kept across quits
+// so relogging can't clear it; memory is bounded at HISTORY short strings
+// per player who has chatted since startup. Main thread only, so a plain
+// HashMap is enough.
 // ====================================
 public class CharacterChatListener implements Listener {
 
     static final int MIN_LENGTH = 15;
     static final int MIN_NORMALIZED = 10;
-    static final int HISTORY = 20;
+    static final int MIN_DISTINCT = 5;
+    static final int HISTORY = 30;
     static final double SIMILARITY = 0.8;
 
     // &a / §a legacy codes and &#RRGGBB hex, as players type them
@@ -89,7 +92,33 @@ public class CharacterChatListener implements Listener {
 
     // text is stripped, norm is normalize(text)
     static boolean passesGate(String text, String norm) {
-        return text.length() > MIN_LENGTH && norm.length() >= MIN_NORMALIZED;
+        return text.length() > MIN_LENGTH && norm.length() >= MIN_NORMALIZED
+                && norm.chars().distinct().count() >= MIN_DISTINCT && !isPeriodic(norm);
+    }
+
+    // True when norm is built from a chunk repeated (possibly partially) to
+    // cover more than half its length, e.g. "hahaha" or a sentence said
+    // twice back to back. Uses the KMP prefix function: the string has
+    // period p = n - pi[n-1], where pi[n-1] is the longest proper
+    // prefix that is also a suffix.
+    static boolean isPeriodic(String s) {
+        int n = s.length();
+        if (n == 0) {
+            return false;
+        }
+        int[] pi = new int[n];
+        for (int i = 1; i < n; i++) {
+            int j = pi[i - 1];
+            while (j > 0 && s.charAt(i) != s.charAt(j)) {
+                j = pi[j - 1];
+            }
+            if (s.charAt(i) == s.charAt(j)) {
+                j++;
+            }
+            pi[i] = j;
+        }
+        int period = n - pi[n - 1];
+        return period <= n / 2;
     }
 
     // history holds normalize() of recent messages
