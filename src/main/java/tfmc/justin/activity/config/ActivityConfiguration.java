@@ -138,8 +138,10 @@ public class ActivityConfiguration {
     // total. A milestone with no entry here draws from the pool.
     private volatile Map<Integer, RewardEntry> milestoneDrops = Map.of();
 
-    // daily-reward.groups: group name -> the item it pays, in config order
+    // daily-reward.groups: group name -> the item it pays, in config order,
+    // or DAILY_POOL for a group that draws once from rewards.pool
     private volatile Map<String, RewardEntry> dailyRewards = Map.of();
+    public static final RewardEntry DAILY_POOL = new RewardEntry(0, "pool", List.of(), List.of());
 
     private String guiTitle;
 
@@ -1075,9 +1077,10 @@ public class ActivityConfiguration {
     }
 
     // ====================================
-    // daily-reward.groups: '<group>: <item path> [amount]', in config order -
-    // the first group a player is in wins, so the highest rank goes first. A
-    // value that does not parse is named and that group gets nothing.
+    // daily-reward.groups: '<group>: pool' or '<group>: <item path> [amount]',
+    // in config order - the first group a player is in wins, so the highest
+    // rank goes first. A value that does not parse is named and that group
+    // gets nothing. Read after rewardPool, which a 'pool' group draws from.
     // ====================================
     private Map<String, RewardEntry> loadDailyRewards(ConfigurationSection config) {
         ConfigurationSection section = config.getConfigurationSection(DAILY_REWARD_GROUPS_PATH);
@@ -1090,12 +1093,21 @@ public class ActivityConfiguration {
         }
         Map<String, RewardEntry> groups = new LinkedHashMap<>();
         for (String group : section.getKeys(false)) {
+            Object raw = section.get(group);
+            if (raw instanceof String string && string.strip().equalsIgnoreCase("pool")) {
+                groups.put(group, DAILY_POOL);
+                continue;
+            }
             RewardEntry reward = fixedItem(DAILY_REWARD_GROUPS_PATH + "." + Utils.safeForLog(group),
-                section.get(group),
+                raw,
                 "group " + Utils.safeForLog(group) + " gets no daily reward");
             if (reward != null) {
                 groups.put(group, reward);
             }
+        }
+        if (rewardPool.isEmpty() && groups.containsValue(DAILY_POOL)) {
+            plugin.getLogger().warning("rewards.pool is empty or every entry in it was dropped - a "
+                + DAILY_REWARD_GROUPS_PATH + " group set to 'pool' can never be paid its daily reward.");
         }
         return Collections.unmodifiableMap(groups);
     }

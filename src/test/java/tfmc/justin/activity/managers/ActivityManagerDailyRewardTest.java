@@ -6,6 +6,7 @@ import org.bukkit.entity.Player;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import tfmc.justin.activity.config.ActivityConfiguration;
 import tfmc.justin.activity.models.ActivityDef;
 import tfmc.justin.activity.models.PlayerData;
 import tfmc.justin.activity.models.RewardEntry;
@@ -54,6 +55,7 @@ class ActivityManagerDailyRewardTest {
     private final List<String> chat = new ArrayList<>();
     // What each payout was handed, and what it answers
     private final List<RewardEntry> paid = new ArrayList<>();
+    private final List<Integer> paidMultipliers = new ArrayList<>();
     private boolean payWorks = true;
     private boolean resolves = true;
     // Whether the claim was already on disk when the payout ran
@@ -82,6 +84,7 @@ class ActivityManagerDailyRewardTest {
     private Player player(Predicate<String> has, Predicate<String> set) {
         InvocationHandler handler = (proxy, method, args) -> switch (method.getName()) {
             case "getUniqueId" -> uuid;
+            case "getName" -> "Steve";
             case "hasPermission" -> has.test(String.valueOf(args[0]));
             case "isPermissionSet" -> set.test(String.valueOf(args[0]));
             case "sendMessage" -> chat.add(String.valueOf(args[0]));
@@ -95,9 +98,10 @@ class ActivityManagerDailyRewardTest {
     }
 
     private boolean claim(Player player) {
-        return manager.claimDailyReward(player, path -> resolves, reward -> {
+        return manager.claimDailyReward(player, path -> resolves, (reward, multiplier) -> {
             onDiskAtPayout.add(claimedOnDisk());
             paid.add(reward);
+            paidMultipliers.add(multiplier);
             return payWorks;
         });
     }
@@ -344,6 +348,90 @@ class ActivityManagerDailyRewardTest {
         assertFalse(claim(player(Set.of("group.vip"))));
         assertTrue(paid.isEmpty());
         assertFalse(data().dailyRewardClaimed());
+    }
+
+    // ====================================
+    // A 'pool' group: one draw from rewards.pool, paid as written - no
+    // multiplier on the amounts or the chat line - and announced with the
+    // entry's display
+    // ====================================
+    @Test
+    void aPoolGroupPaysOneDrawFromThePoolAtMultiplierOne() throws ReflectiveOperationException {
+        RewardEntry gem = new RewardEntry(1, "&dA Gem", List.of(), List.of(new RewardEntry.Item("EMERALD", 2)));
+        pool(List.of(gem));
+        Field multiplier = manager.getConfiguration().getClass().getDeclaredField("rewardMultiplier");
+        multiplier.setAccessible(true);
+        multiplier.set(manager.getConfiguration(), 3);
+        TestManagers.dailyRewards(manager, Map.of("vip", ActivityConfiguration.DAILY_POOL));
+        revealAllButLast();
+        revealLast();
+
+        assertTrue(claim(player(Set.of("group.vip"))));
+        assertEquals(List.of(gem), paid);
+        assertEquals(List.of(1), paidMultipliers);
+        assertTrue(data().dailyRewardClaimed());
+        assertTrue(chat.get(0).contains("A Gem"), chat.toString());
+    }
+
+    @Test
+    void aPoolGroupAndAnItemGroupEachPayTheirOwn() {
+        RewardEntry gem = new RewardEntry(1, "A Gem", List.of(), List.of(new RewardEntry.Item("EMERALD", 1)));
+        pool(List.of(gem));
+        Map<String, RewardEntry> groups = new LinkedHashMap<>();
+        groups.put("noble", DIAMOND);
+        groups.put("legacy", ActivityConfiguration.DAILY_POOL);
+        TestManagers.dailyRewards(manager, groups);
+        revealAllButLast();
+        revealLast();
+
+        assertTrue(claim(player(Set.of("group.legacy", "group.noble"))));
+        assertEquals(DIAMOND.items(), paid.get(0).items());
+
+        data().setDailyRewardClaimed(false);
+        assertTrue(claim(player(Set.of("group.legacy"))));
+        assertEquals(gem, paid.get(1));
+    }
+
+    // Nothing to draw: nothing is saved or marked, and the next open retries
+    @Test
+    void aPoolGroupWithAnEmptyPoolPaysNothingAndStaysUnclaimed() {
+        pool(List.of());
+        TestManagers.dailyRewards(manager, Map.of("vip", ActivityConfiguration.DAILY_POOL));
+        revealAllButLast();
+        revealLast();
+
+        assertFalse(claim(player(Set.of("group.vip"))));
+        assertTrue(paid.isEmpty());
+        assertFalse(data().dailyRewardClaimed());
+        assertFalse(file().exists(), "a refused claim wrote players.yml");
+        assertEquals(1, chat.size());
+    }
+
+    // The same rollback as a fixed item when the drawn entry hands nothing over
+    @Test
+    void aFailedPoolPayoutIsNotMarkedAndIsRetried() {
+        pool(List.of(new RewardEntry(1, "A Gem", List.of(), List.of(new RewardEntry.Item("EMERALD", 1)))));
+        TestManagers.dailyRewards(manager, Map.of("vip", ActivityConfiguration.DAILY_POOL));
+        Player player = player(Set.of("group.vip"));
+        revealAllButLast();
+        revealLast();
+        payWorks = false;
+        assertFalse(claim(player));
+        assertFalse(data().dailyRewardClaimed());
+
+        payWorks = true;
+        assertTrue(claim(player));
+        assertTrue(data().dailyRewardClaimed());
+    }
+
+    private void pool(List<RewardEntry> pool) {
+        try {
+            Field field = manager.getConfiguration().getClass().getDeclaredField("rewardPool");
+            field.setAccessible(true);
+            field.set(manager.getConfiguration(), pool);
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     // ====================================
