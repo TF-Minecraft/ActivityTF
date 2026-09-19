@@ -284,6 +284,7 @@ class ActivityCommandTest {
         assertEquals("admin.add-not-a-task", Outcome.NOT_A_TASK.messageKey());
         assertEquals("admin.add-capped-activity", Outcome.CAPPED_ACTIVITY.messageKey());
         assertEquals("admin.add-capped-daily", Outcome.CAPPED_DAILY.messageKey());
+        assertEquals("admin.add-capped-vote-share", Outcome.CAPPED_VOTE_SHARE.messageKey());
         assertEquals("admin.add-capped-weekly", Outcome.CAPPED_WEEKLY.messageKey());
         assertEquals("admin.add-clamped-weekly", Outcome.CLAMPED_WEEKLY.messageKey());
         assertEquals("admin.unknown-activity", Outcome.UNKNOWN_ACTIVITY.messageKey());

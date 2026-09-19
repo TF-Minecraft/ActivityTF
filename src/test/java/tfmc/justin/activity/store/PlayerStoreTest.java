@@ -129,6 +129,40 @@ class PlayerStoreTest {
         assertEquals(7, parsed.dailyPoints());
     }
 
+    @Test
+    void votePointsRoundTripThroughSnapshotAndReadEntry() {
+        UUID id = UUID.randomUUID();
+        PlayerData data = new PlayerData(5, 7, "2026-09-07", "2026-09-09", 0, Map.of());
+        data.setVotePoints(3);
+
+        ConfigurationSection players = PlayerStore.snapshot(Map.of(id, data)).getConfigurationSection("players");
+
+        assertEquals(3, PlayerStore.readEntry(players, id.toString(), BAR_MAX, DAILY_MAX, KNOWN).votePoints());
+    }
+
+    // ====================================
+    // A row saved before vote-points existed: today's vote count's worth
+    // (daily-cap 5 of the 7 votes) is taken as what voting put in, never more
+    // than the day's points. With no vote activity loaded there is nothing to
+    // go on, and 0 it is.
+    // ====================================
+    @Test
+    void aRowWithoutVotePointsFallsBackToWhatTodaysVotesAreWorth() {
+        ConfigurationSection root = new YamlConfiguration().createSection("players");
+        UUID id = UUID.randomUUID();
+        ConfigurationSection entry = root.createSection(id.toString());
+        entry.set("points", 8);
+        entry.set("daily-points", 8);
+        entry.createSection("daily", Map.of("vote", 7, "free", 3));
+        ActivityDef vote = new ActivityDef("vote", "Vote", Material.PAPER, null, 1, 1, 5);
+
+        assertEquals(5, PlayerStore.readEntry(root, id.toString(), BAR_MAX, DAILY_MAX, KNOWN, vote).votePoints());
+        assertEquals(0, PlayerStore.readEntry(root, id.toString(), BAR_MAX, DAILY_MAX, KNOWN).votePoints());
+
+        entry.set("daily-points", 2);
+        assertEquals(2, PlayerStore.readEntry(root, id.toString(), BAR_MAX, DAILY_MAX, KNOWN, vote).votePoints());
+    }
+
     // ====================================
     // /activity add --force awards past both daily limits, so what it leaves
     // behind has to survive a save and a load unchanged: parse() clamps points

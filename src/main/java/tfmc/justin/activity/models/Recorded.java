@@ -25,6 +25,10 @@ public enum Recorded {
     // Today's point budget (bar.daily-max) was already spent
     DAILY_MAX,
 
+    // Not vote, and every other activity together has already added its
+    // share of the day (bar.daily-max less bar.vote-share); voting still can
+    VOTE_SHARE,
+
     // The weekly bar (bar.max) was already full
     WEEKLY_MAX,
 
