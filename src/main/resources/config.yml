@@ -79,14 +79,15 @@ reset:
 #   (case and surrounding spaces do not matter). Station and recipe ids are
 #   matched case-insensitively and trimmed, but underscores and spaces are
 #   NOT folded to dashes - write the id exactly as the station file or recipe
-#   section is named. Only recipes that hand out an output item are counted;
-#   upgrade recipes and recipes without an 'output:' never feed an activity.
+#   section is named. Only crafting recipes are counted; upgrade recipes
+#   never feed an activity.
 #   One craft feeds exactly one activity: a '<station>/<recipe>' activity
 #   wins over one claiming the whole station. Two activities naming the same
 #   station/recipe is a config error and only the last one is fed. An activity
-#   is only counted when MMOItems actually hands the item over - instantly, or
-#   when a queued craft is claimed - so queueing and cancelling count nothing,
-#   and one craft counts as one action however big the output stack is. An
+#   is counted when the craft actually completes - instantly, or when a queued
+#   craft is claimed - so queueing and cancelling count nothing. A recipe with
+#   'output-item: false' still counts, and one craft counts as one action
+#   however big the output stack is. An
 #   activity with both 'station' and 'craft'/'profession' is a config error:
 #   the extra 'station' is reported at load and ignored.
 # click-commands: optional. Console commands run when the player clicks this

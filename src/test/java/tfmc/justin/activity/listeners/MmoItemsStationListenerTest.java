@@ -3,6 +3,7 @@ package tfmc.justin.activity.listeners;
 import net.Indyuce.mmoitems.api.crafting.CraftingStation;
 import net.Indyuce.mmoitems.api.crafting.recipe.Recipe;
 import net.Indyuce.mmoitems.api.event.PlayerUseCraftingStationEvent;
+import net.Indyuce.mmoitems.api.event.PlayerUseCraftingStationEvent.StationAction;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -10,6 +11,8 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.player.PlayerEvent;
 import org.bukkit.inventory.ItemStack;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import sun.reflect.ReflectionFactory;
 import tfmc.justin.activity.config.ActivityConfiguration;
 import tfmc.justin.activity.managers.ActivityManager;
@@ -33,7 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 // PlayerUseCraftingStationEvent, CraftingStation and Recipe all need a live
 // MMOItems/PlayerData setup to build through their real constructors (Recipe
 // is even abstract). The listener under test only ever calls
-// hasResult()/getStation()/getRecipe()/getPlayer() and, through those,
+// getInteraction()/getStation()/getRecipe()/getPlayer() and, through those,
 // CraftingStation#getId()/Recipe#getId() - so every one of these is built by
 // bypassing its constructor via ReflectionFactory, exactly like
 // DishCookedListenerTest builds its event, and only the handful of fields the
@@ -125,21 +128,27 @@ class MmoItemsStationListenerTest {
         return recipe;
     }
 
-    // hasResult() is exactly 'result != null' (see MmoItemsStationListener's
-    // own comment); the listener never reads the stack's contents, so an
-    // empty bypassed shell - built the same way, sidestepping ItemStack's
-    // Material-registry-touching constructor - is enough to make it non-null.
+    // The listener never reads the result at all any more, but events that
+    // carry one are still worth exercising; an empty bypassed shell - built
+    // the same way, sidestepping ItemStack's Material-registry-touching
+    // constructor - is enough to make it non-null.
     private static ItemStack anyResult() {
         return bypassNew(ItemStack.class);
     }
 
     private static PlayerUseCraftingStationEvent event(Player player, CraftingStation station, Recipe recipe,
                                                         ItemStack result) {
+        return event(player, station, recipe, result, StationAction.INSTANT_RECIPE);
+    }
+
+    private static PlayerUseCraftingStationEvent event(Player player, CraftingStation station, Recipe recipe,
+                                                        ItemStack result, StationAction action) {
         PlayerUseCraftingStationEvent event = bypassNew(PlayerUseCraftingStationEvent.class);
         setField(event, PlayerEvent.class, "player", player);
         setField(event, PlayerUseCraftingStationEvent.class, "station", station);
         setField(event, PlayerUseCraftingStationEvent.class, "recipe", recipe);
         setField(event, PlayerUseCraftingStationEvent.class, "result", result);
+        setField(event, PlayerUseCraftingStationEvent.class, "action", action);
         return event;
     }
 
@@ -180,14 +189,32 @@ class MmoItemsStationListenerTest {
         assertThrows(NullPointerException.class, () -> listener.onUseCraftingStation(craft));
     }
 
-    @Test
-    void noResultRecordsNothing() {
+    // Regression: 'output-item: false' recipes hand over no ItemStack, so both
+    // completed-craft paths fire with result == null. They must still count.
+    @ParameterizedTest
+    @EnumSource(value = StationAction.class, names = {"INSTANT_RECIPE", "CRAFTING_QUEUE"})
+    void aCompletedCraftWithoutAnOutputItemStillRecordsOneAction(StationAction action) {
         ActivityConfiguration config = configWithStation("forge", "smelt");
         ActivityManager manager = managerWithConfig(config);
         MmoItemsStationListener listener = new MmoItemsStationListener(manager);
         Player player = stubPlayer(UUID.randomUUID());
 
-        PlayerUseCraftingStationEvent craft = event(player, station("forge"), recipe("flint"), null);
+        PlayerUseCraftingStationEvent craft = event(player, station("forge"), recipe("flint"), null, action);
+
+        assertThrows(NullPointerException.class, () -> listener.onUseCraftingStation(craft));
+    }
+
+    // Queueing, cancelling and upgrading are not completed crafts, with or
+    // without an output item.
+    @ParameterizedTest
+    @EnumSource(value = StationAction.class, names = {"INTERACT_WITH_RECIPE", "CANCEL_QUEUE", "UPGRADE_RECIPE"})
+    void nonCraftInteractionsRecordNothing(StationAction action) {
+        ActivityConfiguration config = configWithStation("forge", "smelt");
+        ActivityManager manager = managerWithConfig(config);
+        MmoItemsStationListener listener = new MmoItemsStationListener(manager);
+        Player player = stubPlayer(UUID.randomUUID());
+
+        PlayerUseCraftingStationEvent craft = event(player, station("forge"), recipe("flint"), anyResult(), action);
 
         assertDoesNotThrow(() -> listener.onUseCraftingStation(craft));
     }
@@ -242,7 +269,7 @@ class MmoItemsStationListenerTest {
     // Sanity check that the NPE-as-witness approach above is not vacuous:
     // prove a genuine match really does reach the manager by also checking it
     // via the un-guarded static wiring below - MONITOR + ignoreCancelled, and
-    // no manager call happens before hasResult()/station/recipe/player all
+    // no manager call happens before interaction/station/recipe/player all
     // check out, which the six tests above already exercise from both sides.
     @Test
     void handlerIsMonitorPriorityAndIgnoresCancelled() throws NoSuchMethodException {
