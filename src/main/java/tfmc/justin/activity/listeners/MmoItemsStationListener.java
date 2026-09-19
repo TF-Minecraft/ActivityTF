@@ -3,6 +3,7 @@ package tfmc.justin.activity.listeners;
 import net.Indyuce.mmoitems.api.crafting.CraftingStation;
 import net.Indyuce.mmoitems.api.crafting.recipe.Recipe;
 import net.Indyuce.mmoitems.api.event.PlayerUseCraftingStationEvent;
+import net.Indyuce.mmoitems.api.event.PlayerUseCraftingStationEvent.StationAction;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -17,14 +18,21 @@ import tfmc.justin.activity.managers.ActivityManager;
 // MONITOR + ignoreCancelled: the craft only counts once every other plugin
 // has had its say and it is actually going through.
 //
-// Only a craft with a result counts. Verified with javap -c on
-// CraftingRecipe#whenUsed and EditableCraftingStationView$CraftingQueueItem
-// in MMOItems 6.10.1: both the instant craft and the claim of a finished
-// queue item construct the event through the constructor that takes the
-// output ItemStack, while queueing a recipe and cancelling a queued one use
-// the constructor without one. hasResult() is exactly 'result != null', so
-// it is true only at the moment MMOItems hands the item over - queueing and
-// cancelling count nothing.
+// Only a finished craft counts, and that is decided by getInteraction(), not
+// by hasResult(). Verified with javap -c on CraftingRecipe#whenUsed,
+// UpgradingRecipe#whenUsed and EditableCraftingStationView$CraftingQueueItem
+// in MMOItems 6.10.1 - the only three places that fire this event:
+//   INSTANT_RECIPE       instant craft went through
+//   CRAFTING_QUEUE       a finished queued craft was claimed
+//   INTERACT_WITH_RECIPE a non-instant recipe was only added to the queue
+//   CANCEL_QUEUE         a queued craft was cancelled
+//   UPGRADE_RECIPE       an upgrading recipe was applied
+// The first two are the completed craft; the rest are not. hasResult() is
+// exactly 'result != null', and both completed-craft paths pass the output
+// stack only when the recipe has the OUTPUT_ITEM option - with
+// 'output-item: false' they pass null, so hasResult() misses those crafts
+// entirely. Upgrade recipes never carry a result and are still not counted,
+// same as before.
 //
 // One event is one action regardless of the output stack size, like the
 // other one-per-action activities.
@@ -39,7 +47,8 @@ public class MmoItemsStationListener implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onUseCraftingStation(PlayerUseCraftingStationEvent event) {
-        if (!event.hasResult()) {
+        StationAction action = event.getInteraction();
+        if (action != StationAction.INSTANT_RECIPE && action != StationAction.CRAFTING_QUEUE) {
             return;
         }
 
