@@ -54,6 +54,11 @@ public class PlayerData {
     // budget in config is per day.
     private volatile int rerolls;
 
+    // Whether today's daily-reward has been handed over. Reset by every
+    // rollover like rerolls, but NOT by a reroll: a fresh draw revealed
+    // again must not pay a second time the same day.
+    private volatile boolean dailyRewardClaimed;
+
     public PlayerData(String weekKey, String dayKey) {
         this.weekKey = weekKey;
         this.dayKey = dayKey;
@@ -108,6 +113,7 @@ public class PlayerData {
             daily.clear();
             clearTasks();
             rerolls = 0;
+            dailyRewardClaimed = false;
             this.weekKey = weekKey;
             changed = true;
         }
@@ -117,6 +123,7 @@ public class PlayerData {
             daily.clear();
             clearTasks();
             rerolls = 0;
+            dailyRewardClaimed = false;
             this.dayKey = dayKey;
             changed = true;
         }
@@ -256,6 +263,11 @@ public class PlayerData {
         daily.clear();
         clearTasks();
         rerolls = 0;
+        // Kept when the reset lands on the same day: the reward was really
+        // handed over, and a fresh draw revealed again must not pay it twice
+        if (!dayKey.equals(this.dayKey) || !weekKey.equals(this.weekKey)) {
+            dailyRewardClaimed = false;
+        }
         this.weekKey = weekKey;
         this.dayKey = dayKey;
     }
@@ -480,6 +492,20 @@ public class PlayerData {
         }
         rerolls--;
         return true;
+    }
+
+    public boolean dailyRewardClaimed() {
+        return dailyRewardClaimed;
+    }
+
+    public void setDailyRewardClaimed(boolean dailyRewardClaimed) {
+        this.dailyRewardClaimed = dailyRewardClaimed;
+    }
+
+    // Every task of today's draw revealed - what daily-reward pays for. An
+    // empty draw is not "all revealed": there is nothing to have done.
+    public boolean allRevealed() {
+        return !tasks.isEmpty() && revealed.containsAll(tasks);
     }
 
     public int claimedPoints() {

@@ -19,6 +19,7 @@ import tfmc.justin.activity.utils.Weeks;
 import java.time.DayOfWeek;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -137,6 +138,9 @@ public class ActivityConfiguration {
     // total. A milestone with no entry here draws from the pool.
     private volatile Map<Integer, RewardEntry> milestoneDrops = Map.of();
 
+    // daily-reward.groups: group name -> the item it pays, in config order
+    private volatile Map<String, RewardEntry> dailyRewards = Map.of();
+
     private String guiTitle;
 
     private volatile int barMax;
@@ -224,6 +228,8 @@ public class ActivityConfiguration {
             plugin.getLogger().warning("rewards.pool is empty or every entry in it was dropped - a milestone"
                 + " can be reached but nothing can ever be claimed.");
         }
+        // Before the path warnings below, for the same reason as the drops
+        dailyRewards = loadDailyRewards(config);
 
         // ====================================
         // One line for the whole file, and only when config.yml actually asks
@@ -290,6 +296,7 @@ public class ActivityConfiguration {
     static final String REWARDS_MULTIPLIER_PATH = "rewards.multiplier";
     static final String REWARDS_POOL_PATH = "rewards.pool";
     static final String REWARDS_DROPS_PATH = "rewards.drops";
+    static final String DAILY_REWARD_GROUPS_PATH = "daily-reward.groups";
 
     // The per-activity key and the rate limit that guards it. A path constant
     // for the same reason as the ones above: DefaultResourcesTest asserts the
@@ -975,26 +982,62 @@ public class ActivityConfiguration {
             if (value.equalsIgnoreCase("pool")) {
                 continue;
             }
-            String[] parts = value.split("\\s+");
-            // 0 marks anything that is not one or two words with a 1-64 second one
-            int amount = parts.length == 1 ? 1
-                : parts.length == 2 && parts[1].matches("[0-9]{1,2}") ? Integer.parseInt(parts[1]) : 0;
-            if (amount < 1 || amount > 64) {
-                plugin.getLogger().warning(at + " '" + Utils.safeForLog(value) + "' is not '<item path>' or"
-                    + " '<item path> <amount 1-64>' - milestone " + milestone + " draws from the pool.");
-                continue;
+            RewardEntry drop = fixedItem(at, value, "milestone " + milestone + " draws from the pool");
+            if (drop != null) {
+                drops.put(milestone, drop);
             }
-            if (!validItemPath(parts[0], at)) {
-                plugin.getLogger().warning(at + " has no usable item path - milestone " + milestone
-                    + " draws from the pool.");
-                continue;
-            }
-            // display is the bare item name: claim() prefixes the amount it
-            // actually pays, multiplier included
-            drops.put(milestone, new RewardEntry(1, itemName(parts[0]),
-                List.of(), List.of(new RewardEntry.Item(parts[0], amount))));
         }
         return Map.copyOf(drops);
+    }
+
+    // ====================================
+    // One "<item path> [amount]" value as a one-item entry, or null when it
+    // does not parse - named in the log along with 'otherwise', what happens
+    // instead. Shared by rewards.drops and daily-reward.groups.
+    // ====================================
+    private RewardEntry fixedItem(String at, String value, String otherwise) {
+        String[] parts = value.split("\\s+");
+        // 0 marks anything that is not one or two words with a 1-64 second one
+        int amount = parts.length == 1 ? 1
+            : parts.length == 2 && parts[1].matches("[0-9]{1,2}") ? Integer.parseInt(parts[1]) : 0;
+        if (amount < 1 || amount > 64) {
+            plugin.getLogger().warning(at + " '" + Utils.safeForLog(value) + "' is not '<item path>' or"
+                + " '<item path> <amount 1-64>' - " + otherwise + ".");
+            return null;
+        }
+        if (!validItemPath(parts[0], at)) {
+            plugin.getLogger().warning(at + " has no usable item path - " + otherwise + ".");
+            return null;
+        }
+        // display is the bare item name: the payout prefixes the amount it
+        // actually hands over, multiplier included
+        return new RewardEntry(1, itemName(parts[0]), List.of(), List.of(new RewardEntry.Item(parts[0], amount)));
+    }
+
+    // ====================================
+    // daily-reward.groups: '<group>: <item path> [amount]', in config order -
+    // the first group a player is in wins, so the highest rank goes first. A
+    // value that does not parse is named and that group gets nothing.
+    // ====================================
+    private Map<String, RewardEntry> loadDailyRewards(ConfigurationSection config) {
+        ConfigurationSection section = config.getConfigurationSection(DAILY_REWARD_GROUPS_PATH);
+        if (section == null) {
+            if (config.contains(DAILY_REWARD_GROUPS_PATH)) {
+                plugin.getLogger().warning(DAILY_REWARD_GROUPS_PATH + " is not a section of <group>: <item>"
+                    + " lines - ignored, no daily reward is paid.");
+            }
+            return Map.of();
+        }
+        Map<String, RewardEntry> groups = new LinkedHashMap<>();
+        for (String group : section.getKeys(false)) {
+            RewardEntry reward = fixedItem(DAILY_REWARD_GROUPS_PATH + "." + Utils.safeForLog(group),
+                String.valueOf(section.get(group)).strip(),
+                "group " + Utils.safeForLog(group) + " gets no daily reward");
+            if (reward != null) {
+                groups.put(group, reward);
+            }
+        }
+        return Collections.unmodifiableMap(groups);
     }
 
     // The load-time "nothing can ever be claimed" check: only true when some
@@ -1317,6 +1360,11 @@ public class ActivityConfiguration {
     // Keyed by milestone point total; a milestone missing here draws from the pool
     public Map<Integer, RewardEntry> milestoneDrops() {
         return milestoneDrops;
+    }
+
+    // Group name -> daily reward, in config order: the first match wins
+    public Map<String, RewardEntry> dailyRewards() {
+        return dailyRewards;
     }
 
     public String guiTitle() {

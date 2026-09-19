@@ -8,6 +8,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import sun.reflect.ReflectionFactory;
 import tfmc.justin.activity.config.ActivityConfiguration;
 import tfmc.justin.activity.models.ActivityDef;
+import tfmc.justin.activity.models.RewardEntry;
 
 import java.io.File;
 import java.lang.reflect.Constructor;
@@ -18,6 +19,7 @@ import java.time.DayOfWeek;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
@@ -147,6 +149,47 @@ public final class TestManagers {
         } catch (ReflectiveOperationException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    // ====================================
+    // Points players.yml at a file of the test's choosing, for the paths that
+    // save before they pay (the daily reward). Pair with storeLoaded().
+    // ====================================
+    public static void storeFile(ActivityManager manager, File file) {
+        try {
+            set(manager.getStore(), "file", file);
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    // daily-reward.groups as load() would leave it: group -> reward, in order
+    public static void dailyRewards(ActivityManager manager, Map<String, RewardEntry> groups) {
+        try {
+            set(manager.getConfiguration(), "dailyRewards", groups);
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    // ====================================
+    // An online player for the GUI and command paths: his permissions (each
+    // one set, as a LuckPerms group node is), his chat, and a no-op for the
+    // sounds and the window a real client would get. Anything else throws.
+    // ====================================
+    public static Player player(UUID uuid, Set<String> permissions, List<String> chat) {
+        InvocationHandler handler = (proxy, method, args) -> switch (method.getName()) {
+            case "getUniqueId" -> uuid;
+            case "hasPermission", "isPermissionSet" -> permissions.contains(String.valueOf(args[0]));
+            case "sendMessage" -> chat.add(String.valueOf(args[0]));
+            case "getLocation", "playSound", "openInventory" -> null;
+            case "toString" -> "stub-player";
+            case "hashCode" -> uuid.hashCode();
+            case "equals" -> proxy == args[0];
+            default -> throw new UnsupportedOperationException("unexpected call to Player#" + method.getName());
+        };
+        return (Player) Proxy.newProxyInstance(
+            TestManagers.class.getClassLoader(), new Class<?>[] {Player.class}, handler);
     }
 
     // ====================================

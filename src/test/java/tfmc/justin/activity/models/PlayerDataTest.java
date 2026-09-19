@@ -1094,4 +1094,52 @@ class PlayerDataTest {
 
         assertThrows(UnsupportedOperationException.class, () -> drawn.add("a99"));
     }
+
+    // ====================================
+    // daily-reward's once-a-day flag
+    // ====================================
+
+    @Test
+    void theDailyRewardFlagIsClearedByTheNextDayAndTheNextWeek() {
+        PlayerData data = new PlayerData("2026-W38", "2026-09-19");
+        data.setDailyRewardClaimed(true);
+        data.roll("2026-W38", "2026-09-19");
+        assertTrue(data.dailyRewardClaimed());
+
+        data.roll("2026-W38", "2026-09-20");
+        assertFalse(data.dailyRewardClaimed());
+
+        data.setDailyRewardClaimed(true);
+        data.roll("2026-W39", "2026-09-20");
+        assertFalse(data.dailyRewardClaimed());
+    }
+
+    // A fresh draw revealed again the same day must not pay a second time
+    @Test
+    void aRerollKeepsTheDailyRewardFlag() {
+        PlayerData data = new PlayerData("2026-W38", "2026-09-19");
+        data.setDailyRewardClaimed(true);
+        data.reroll(List.of("a1"), 50);
+        assertTrue(data.dailyRewardClaimed());
+    }
+
+    @Test
+    void aResetKeepsTodaysDailyRewardFlagButNotAnEarlierDays() {
+        PlayerData data = new PlayerData("2026-W38", "2026-09-19");
+        data.setDailyRewardClaimed(true);
+        data.reset("2026-W38", "2026-09-19");
+        assertTrue(data.dailyRewardClaimed());
+
+        data.reset("2026-W38", "2026-09-20");
+        assertFalse(data.dailyRewardClaimed());
+    }
+
+    @Test
+    void allRevealedNeedsEveryTaskOfANonEmptyDraw() {
+        PlayerData data = new PlayerData(0, 0, "w", "d", 0, Map.of(), List.of("a", "b"), List.of("a"));
+        assertFalse(data.allRevealed());
+        data.reveal(1);
+        assertTrue(data.allRevealed());
+        assertFalse(new PlayerData("w", "d").allRevealed());
+    }
 }

@@ -203,8 +203,11 @@ public class PlayerStore {
         // there is no upper bound to enforce here, the budget lives in config
         int rerolls = Math.max(0, entry.getInt("rerolls"));
 
-        return new PlayerData(points, dailyPoints, entry.getString("week", ""), entry.getString("day", ""),
-            claimedPoints, daily, tasks, entry.getStringList("revealed"), rerolls);
+        PlayerData data = new PlayerData(points, dailyPoints, entry.getString("week", ""),
+            entry.getString("day", ""), claimedPoints, daily, tasks, entry.getStringList("revealed"), rerolls);
+        // A row written before daily-reward existed has no key: not claimed
+        data.setDailyRewardClaimed(entry.getBoolean("daily-reward-claimed", false));
+        return data;
     }
 
     // ====================================
@@ -377,7 +380,8 @@ public class PlayerStore {
             // versa) but is checked explicitly too - belt and braces.
             // Today's draw is kept too, or a restart would re-roll it.
             if (data.points() == 0 && data.claimedPoints() == 0 && data.dailyPoints() == 0
-                && data.daily().isEmpty() && data.tasks().isEmpty() && data.rerolls() == 0) {
+                && data.daily().isEmpty() && data.tasks().isEmpty() && data.rerolls() == 0
+                && !data.dailyRewardClaimed()) {
                 continue;
             }
 
@@ -389,6 +393,7 @@ public class PlayerStore {
             yaml.set(path + ".claimed-points", data.claimedPoints());
             yaml.set(path + ".daily-points", data.dailyPoints());
             yaml.set(path + ".rerolls", data.rerolls());
+            yaml.set(path + ".daily-reward-claimed", data.dailyRewardClaimed());
             yaml.set(path + ".daily", new LinkedHashMap<>(data.daily()));
             yaml.set(path + ".tasks", new ArrayList<>(data.tasks()));
             // Sorted, because revealed() is a hash set whose iteration order

@@ -7,6 +7,7 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.Inventory;
 import net.md_5.bungee.api.ChatColor;
 import tfmc.justin.activity.config.ActivityConfiguration;
 import tfmc.justin.activity.config.Messages;
@@ -163,7 +164,11 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
             player.sendMessage(messages().get("admin.no-permission"));
             return;
         }
-        player.openInventory(gui.build(player));
+        Inventory inventory = gui.build(player);
+        // After build(), which makes today's draw good: retries a daily reward
+        // that failed, or pays one a group joined since the last reveal earned
+        manager.claimDailyReward(player);
+        player.openInventory(inventory);
     }
 
     private void handleReset(CommandSender sender, String[] args) {
@@ -299,6 +304,9 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
             "%max%", config.dailyMax()));
         sender.sendMessage(messages().get("admin.check-rerolls", "%used%", today ? data.rerolls() : 0,
             "%max%", config.rerollsPerDay()));
+        // A stale day's flag is one the next login clears
+        sender.sendMessage(messages().get(today && data.dailyRewardClaimed()
+            ? "admin.check-daily-reward-claimed" : "admin.check-daily-reward-unclaimed"));
         sender.sendMessage(messages().get("admin.check-keys", "%week%", data.weekKey(),
             "%day%", data.dayKey()));
 

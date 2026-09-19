@@ -412,4 +412,28 @@ class PlayerStoreTest {
         assertEquals(fromDisk.tasks(), inMemory.tasks());
         assertFalse(fromDisk.tasks().contains("gone"));
     }
+
+    // A row saved before daily-reward existed has no key for it
+    @Test
+    void aRowWithoutTheDailyRewardKeyLoadsAsNotClaimed() {
+        ConfigurationSection root = new YamlConfiguration().createSection("players");
+        UUID id = UUID.randomUUID();
+        ConfigurationSection entry = root.createSection(id.toString());
+        entry.set("points", 5);
+        entry.set("tasks", List.of("a0"));
+
+        PlayerData data = PlayerStore.readEntry(root, id.toString(), BAR_MAX, DAILY_MAX, KNOWN);
+        assertFalse(data.dailyRewardClaimed());
+        assertEquals(5, data.points());
+    }
+
+    @Test
+    void theDailyRewardFlagSurvivesASaveAndLoad() {
+        UUID id = UUID.randomUUID();
+        PlayerData data = new PlayerData(0, 0, "w", "d", 0, Map.of(), List.of("a0"), List.of("a0"));
+        data.setDailyRewardClaimed(true);
+
+        ConfigurationSection root = PlayerStore.snapshot(Map.of(id, data)).getConfigurationSection("players");
+        assertTrue(PlayerStore.readEntry(root, id.toString(), BAR_MAX, DAILY_MAX, KNOWN).dailyRewardClaimed());
+    }
 }
