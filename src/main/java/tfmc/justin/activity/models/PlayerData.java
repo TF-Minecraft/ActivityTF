@@ -138,6 +138,21 @@ public class PlayerData {
     // day by the difference; acceptable
     // ====================================
     public RecordResult record(int amount, ActivityDef def, int max, int dailyMax, List<Integer> milestones) {
+        return record(amount, def, max, dailyMax, dailyMax, null, milestones);
+    }
+
+    // ====================================
+    // Same, with bar.vote-share: every activity but vote shares nonVoteMax of
+    // the day. Today's non-vote points are derived as dailyPoints minus what
+    // today's vote count is worth, so no new field is stored and a row saved
+    // before this existed works as is. 'vote' is the loaded vote activity, or
+    // null when there is none.
+    // ponytail: a reroll clears the vote count, so points carried past a
+    // reroll count as non-vote for the rest of that day; store a vote-points
+    // field if that matters
+    // ====================================
+    public RecordResult record(int amount, ActivityDef def, int max, int dailyMax, int nonVoteMax,
+                               ActivityDef vote, List<Integer> milestones) {
         int before = daily.getOrDefault(def.id(), 0);
         // Saturate: a bogus /activity add 2000000000 twice must not wrap the
         // counter negative and hand out awards all over again
@@ -148,6 +163,11 @@ public class PlayerData {
         // Everything past today's budget is lost outright - it must not reach
         // the weekly bar, today or later
         int budget = Math.max(0, dailyMax - dailyPoints);
+        if (!def.id().equals("vote")) {
+            int voteToday = vote == null ? 0
+                : Math.min(dailyPoints, vote.worth(daily.getOrDefault(vote.id(), 0)));
+            budget = Math.min(budget, Math.max(0, nonVoteMax - (dailyPoints - voteToday)));
+        }
         if (earned > 0 && budget <= 0) {
             return new RecordResult(0, 0, Recorded.DAILY_MAX);
         }

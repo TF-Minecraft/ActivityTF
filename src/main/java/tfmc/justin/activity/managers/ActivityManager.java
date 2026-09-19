@@ -260,7 +260,8 @@ public class ActivityManager {
         }
 
         RecordResult result = gated
-            ? data.record(amount, def, config.barMax(), config.dailyMax(), config.milestones())
+            ? data.record(amount, def, config.barMax(), config.dailyMax(), config.nonVoteDailyMax(),
+                config.activity("vote"), config.milestones())
             : data.recordForced(amount, def, config.barMax(), config.milestones());
         return credited(uuid, data, result, Utils.colorize(def.display()));
     }

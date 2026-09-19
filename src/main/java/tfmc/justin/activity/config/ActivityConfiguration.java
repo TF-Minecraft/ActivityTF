@@ -145,6 +145,8 @@ public class ActivityConfiguration {
 
     private volatile int barMax;
     private volatile int dailyMax;
+    // Percent of dailyMax only the vote activity can fill, 0..100
+    private volatile int voteShare;
     // Ascending, deduped, every value inside 1..barMax. Never empty.
     private volatile List<Integer> milestones = List.of();
     private volatile int barLength;
@@ -219,6 +221,7 @@ public class ActivityConfiguration {
 
         barMax = Math.max(1, config.getInt("bar.max", 50));
         dailyMax = Math.max(1, config.getInt("bar.daily-max", 10));
+        voteShare = Math.max(0, Math.min(100, config.getInt("bar.vote-share", 50)));
         // After barMax: every milestone is validated against it
         milestones = loadMilestones(config.getIntegerList("bar.milestones"));
         // After milestones: drop_N names the Nth of them. Before the path
@@ -1433,6 +1436,11 @@ public class ActivityConfiguration {
 
     public int dailyMax() {
         return dailyMax;
+    }
+
+    // Most points every activity but vote can add together in one day
+    public int nonVoteDailyMax() {
+        return dailyMax * (100 - voteShare) / 100;
     }
 
     public List<Integer> milestones() {

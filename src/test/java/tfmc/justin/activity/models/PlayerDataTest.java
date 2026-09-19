@@ -540,6 +540,51 @@ class PlayerDataTest {
         assertEquals(5, data.dailyPoints());
     }
 
+    // ====================================
+    // bar.vote-share 50 on a daily-max of 10: everything but vote shares 5
+    // ====================================
+    private RecordResult shared(PlayerData data, ActivityDef def, int amount, int nonVoteMax) {
+        return data.record(amount, def, MAX, 10, nonVoteMax, VOTE, MILESTONES);
+    }
+
+    @Test
+    void nonVoteActivitiesStopAtTheirShareAndVoteFillsTheRest() {
+        PlayerData data = data();
+
+        assertEquals(5, shared(data, UNCAPPED, 13, 5).pointsAwarded());
+        assertEquals(Recorded.DAILY_MAX, shared(data, UNCAPPED, 1, 5).outcome());
+        assertEquals(5, shared(data, VOTE, 5, 5).pointsAwarded());
+        assertEquals(10, data.dailyPoints());
+    }
+
+    @Test
+    void votingFirstLeavesTheNonVoteShareOpen() {
+        PlayerData data = data();
+
+        assertEquals(5, shared(data, VOTE, 5, 5).pointsAwarded());
+        assertEquals(5, shared(data, UNCAPPED, 13, 5).pointsAwarded());
+        assertEquals(10, data.dailyPoints());
+    }
+
+    // A row saved before vote-share existed: 8 non-vote points already in.
+    // Nothing is taken back, no more non-vote lands, vote still gets the rest.
+    @Test
+    void nonVotePointsAlreadyOverTheShareAreKept() {
+        PlayerData data = new PlayerData(8, 8, WEEK, DAY, 0, Map.of("free", 8));
+
+        assertEquals(0, shared(data, UNCAPPED, 3, 5).pointsAwarded());
+        assertEquals(2, shared(data, VOTE, 5, 5).pointsAwarded());
+        assertEquals(10, data.dailyPoints());
+    }
+
+    @Test
+    void aZeroVoteShareIsTheOldBehaviour() {
+        PlayerData data = data();
+
+        assertEquals(10, shared(data, UNCAPPED, 13, 10).pointsAwarded());
+        assertEquals(0, shared(data, VOTE, 5, 10).pointsAwarded());
+    }
+
     @Test
     void zeroDailyBudgetAwardsNothing() {
         PlayerData data = data();
