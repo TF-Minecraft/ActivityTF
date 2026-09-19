@@ -52,6 +52,14 @@ public record ActivityDef(String id, String display, Material icon, String iconP
         return (int) Math.min(Integer.MAX_VALUE, (long) dailyCap * points);
     }
 
+    // How many times 'every' has been met today - the payout count, not its
+    // point value. Clamped to dailyCap the same way worth() clamps to
+    // capPoints(), just one factor of 'points' earlier.
+    public int completions(int count) {
+        int raw = count / every;
+        return dailyCap > 0 ? Math.min(raw, dailyCap) : raw;
+    }
+
     // ====================================
     // The same figure before dailyCap is applied - what /activity add --force
     // credits, since the whole point of the flag is that no cap holds it back.
