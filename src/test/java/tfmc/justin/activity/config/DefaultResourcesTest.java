@@ -195,9 +195,10 @@ class DefaultResourcesTest {
         }
     }
 
-    // The multiplier the shipped file pays at. 1 is also the fallback, so this
-    // reads the key through the constant load() reads it through - a typo in
-    // either end fails here rather than paying every claim 1x in silence.
+    // The shipped multiplier: the number of pool spins, and the amount
+    // multiplier for fixed drops and the daily reward. 1 is also the fallback,
+    // so this reads the key through the constant load() reads it through - a
+    // typo in either end fails here rather than reading as 1 in silence.
     @Test
     void shippedConfigDefaultsTheRewardMultiplierToOne() {
         YamlConfiguration config = load("config.yml");
