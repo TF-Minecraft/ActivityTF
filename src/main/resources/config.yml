@@ -540,21 +540,25 @@ rewards:
 # permission) does count as in every group, and so gets the first one's
 # reward - there is no LuckPerms or Vault API here to ask about real group
 # membership instead. When several match, the first listed wins, so list the
-# highest rank first. Each value is a fixed item in the same form as a
-# rewards.drops entry: a block with 'item:' (required) and 'amount:'
+# highest rank first. Each value is 'pool' or a fixed item, as in
+# rewards.drops. 'pool' makes one weighted draw from rewards.pool, paid as
+# written (rewards.multiplier does not apply) and announced with the entry's
+# display; with rewards.pool empty it pays nothing, which load warns about.
+# A fixed item is a block with 'item:' (required) and 'amount:'
 # (optional, 1-64, default 1), or the one-line '<item path> [amount 1-64]'
 # form, multiplied by rewards.multiplier, dropped at the feet when it does
 # not fit, and reported at load when it does not parse. A player in no group
 # is not marked as paid, so joining a group later that day and opening
-# /activity still pays it. An item that cannot be resolved at payout hands
-# nothing over and leaves the reward unclaimed; opening /activity again
-# retries it.
+# /activity still pays it. A reward that hands nothing over at payout leaves
+# it unclaimed; opening /activity again retries it (a 'pool' group draws
+# again).
 daily-reward:
   groups: {}
   # groups:
   #   ascended:
   #     item: m.material.steel
   #     amount: 3
+  #   legacy: pool
   #   vip: DIAMOND
 
 gui:

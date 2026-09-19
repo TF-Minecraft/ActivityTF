@@ -32,6 +32,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.BiPredicate;
 import java.util.function.BooleanSupplier;
 import java.util.function.Predicate;
 import java.util.function.Function;
@@ -709,15 +710,22 @@ public class ActivityManager {
     // item goes out, so a crash cannot pay it twice, and handed back when
     // nothing reached the player, so the next open retries it. A player in no
     // listed group is not marked at all.
+    //
+    // A 'pool' group draws one entry from rewards.pool, paid as written - the
+    // multiplier is not applied to it - and then goes through the same rules:
+    // a drawn entry that has no commands and none of whose items resolve is
+    // refused before anything is touched. An empty pool, like claim()'s, pays
+    // nothing and is not marked.
     // ====================================
     public boolean claimDailyReward(Player player) {
         return claimDailyReward(player, path -> usable(resolveRewardItem(path)),
-            reward -> dispatchRewards(player, reward, "daily reward", config.rewardMultiplier()));
+            (reward, multiplier) -> dispatchRewards(player, reward, "daily reward", multiplier));
     }
 
     // The resolve check and the payout passed in, so the rules above can be
     // driven headless
-    boolean claimDailyReward(Player player, Predicate<String> resolvable, Predicate<RewardEntry> pay) {
+    boolean claimDailyReward(Player player, Predicate<String> resolvable,
+                             BiPredicate<RewardEntry, Integer> pay) {
         // tasks(), not get(): a draw a reload has left short is made good
         // first, so it cannot count as "all revealed"
         PlayerData data = tasks(player.getUniqueId());
@@ -730,20 +738,46 @@ public class ActivityManager {
         }
 
         Messages messages = config.messages();
-        String path = reward.items().get(0).path();
-        boolean resolved;
-        try {
-            resolved = resolvable.test(path);
-        } catch (Throwable t) {
-            resolved = false;
+        boolean fromPool = reward == ActivityConfiguration.DAILY_POOL;
+        if (fromPool) {
+            List<RewardEntry> pool = config.rewardPool();
+            if (pool.isEmpty()) {
+                if (!warnedEmptyPool) {
+                    warnedEmptyPool = true;
+                    plugin.getLogger().warning("Handed nothing to " + player.getUniqueId()
+                        + ": rewards.pool has no usable entry, so the daily reward stays unclaimed.");
+                }
+                player.sendMessage(messages.get("reward-unconfigured"));
+                return false;
+            }
+            reward = draw(runnableEntries(pool, player.getName()));
+            if (reward == null) {
+                plugin.getLogger().warning("No daily reward command could be run for '"
+                    + Utils.safeForLog(player.getName()) + "': the name cannot be safely pasted into a console"
+                    + " command. Use %uuid%-based reward commands to support Bedrock/unsafe names.");
+                player.sendMessage(messages.get("reward-failed"));
+                return false;
+            }
+        }
+
+        // A command-only entry has nothing to resolve up front
+        boolean resolved = !reward.commands().isEmpty();
+        for (RewardEntry.Item item : reward.items()) {
+            try {
+                resolved |= resolvable.test(item.path());
+            } catch (Throwable t) {
+                // not resolvable
+            }
         }
         if (!resolved) {
             // Once per path until a reload, like giveItems: this is reachable
             // on every open
-            if (reportedItemPaths.add(path)) {
-                plugin.getLogger().warning("Daily reward item '" + Utils.safeForLog(path) + "' could not be"
-                    + " resolved for " + player.getUniqueId() + " - nothing was handed over; it is retried"
-                    + " on the next /activity open.");
+            for (RewardEntry.Item item : reward.items()) {
+                if (reportedItemPaths.add(item.path())) {
+                    plugin.getLogger().warning("Daily reward item '" + Utils.safeForLog(item.path())
+                        + "' could not be resolved for " + player.getUniqueId() + " - nothing was handed"
+                        + " over; it is retried on the next /activity open.");
+                }
             }
             player.sendMessage(messages.get("reward-failed"));
             return false;
@@ -765,8 +799,9 @@ public class ActivityManager {
             return false;
         }
 
-        RewardEntry paid = withPaidAmount(reward, config.rewardMultiplier());
-        if (!pay.test(paid)) {
+        int multiplier = fromPool ? 1 : config.rewardMultiplier();
+        RewardEntry paid = fromPool ? reward : withPaidAmount(reward, multiplier);
+        if (!pay.test(paid, multiplier)) {
             data.setDailyRewardClaimed(false);
             store.markDirty();
             store.saveSoon();

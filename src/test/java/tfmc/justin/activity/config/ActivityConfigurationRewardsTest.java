@@ -26,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // ====================================
@@ -740,6 +741,40 @@ class ActivityConfigurationRewardsTest {
         assertTrue(loggedContains("Unknown material 'NOT_A_THING' at daily-reward.groups.b"));
         assertTrue(loggedContains("daily-reward.groups.c has no usable item path - group c gets no daily reward"));
         assertTrue(loggedContains("daily-reward.groups.d 'DIAMOND 2 3' is not"));
+    }
+
+    // 'pool' mixes with the item forms, in config order; with a pool to draw
+    // from nothing is logged
+    @Test
+    void aPoolDailyRewardGroupLoadsBesideAnItemGroup() throws ReflectiveOperationException {
+        ActivityConfiguration config = new ActivityConfiguration(stubPlugin());
+        Field pool = ActivityConfiguration.class.getDeclaredField("rewardPool");
+        pool.setAccessible(true);
+        pool.set(config, List.of(FIXED));
+        Map<String, RewardEntry> groups = loadDailyRewards(config, "daily-reward:\n  groups:\n"
+            + "    legacy: pool\n    noble:\n      item: DIAMOND\n      amount: 2\n    old: ' POOL '\n");
+
+        assertEquals(List.of("legacy", "noble", "old"), List.copyOf(groups.keySet()));
+        assertSame(ActivityConfiguration.DAILY_POOL, groups.get("legacy"));
+        assertSame(ActivityConfiguration.DAILY_POOL, groups.get("old"));
+        assertEquals(new RewardEntry(1, "Diamond", List.of(), List.of(new RewardEntry.Item("DIAMOND", 2))),
+            groups.get("noble"));
+        assertTrue(logged.isEmpty(), logged.toString());
+    }
+
+    @Test
+    void aPoolDailyRewardGroupWithAnEmptyPoolIsKeptAndWarnedAbout() {
+        Map<String, RewardEntry> groups = loadDailyRewards("daily-reward:\n  groups:\n    legacy: pool\n");
+
+        assertSame(ActivityConfiguration.DAILY_POOL, groups.get("legacy"));
+        assertTrue(loggedContains("rewards.pool is empty"));
+        assertTrue(loggedContains("set to 'pool' can never be paid"));
+    }
+
+    @Test
+    void anEmptyPoolIsNotWarnedAboutWithoutAPoolGroup() {
+        loadDailyRewards("daily-reward:\n  groups:\n    vip: DIAMOND\n");
+        assertTrue(logged.isEmpty(), logged.toString());
     }
 
     // Kept like a drop's, and counted towards the one missing-plugin warning
