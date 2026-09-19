@@ -110,7 +110,7 @@ public class PlaceholderHook extends PlaceholderExpansion {
             // at least one award earned today
             int today = currentWeek && data.dayKey().equals(keys.day())
                 ? def.worth(data.count(def.id())) : 0;
-            boolean done = def.dailyCap() > 0 ? today >= def.dailyCap() : today > 0;
+            boolean done = def.dailyCap() > 0 ? today >= def.capPoints() : today > 0;
             return Utils.colorize(config.messages().raw(done ? "placeholder.done" : "placeholder.not-done"));
         }
 

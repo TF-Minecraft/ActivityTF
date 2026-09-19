@@ -28,4 +28,42 @@ class ActivityDefTest {
 
         assertEquals("m.item.ballot", def.iconPath());
     }
+
+    // daily-cap counts awards, not points: a day is worth min(count / every,
+    // dailyCap) * points
+    @Test
+    void dailyCapCountsAwardsNotPoints() {
+        ActivityDef def = new ActivityDef("injured", "Injured", Material.BONE, null, 1, 5, 1);
+
+        assertEquals(5, def.worth(1));
+        assertEquals(5, def.worth(3));
+        assertEquals(5, def.capPoints());
+    }
+
+    @Test
+    void dailyCapWithEveryAboveOne() {
+        ActivityDef def = new ActivityDef("x", "X", Material.PAPER, null, 2, 3, 2);
+
+        assertEquals(0, def.worth(1));
+        assertEquals(3, def.worth(2));
+        assertEquals(3, def.worth(3));
+        assertEquals(6, def.worth(4));
+        assertEquals(6, def.worth(5));
+    }
+
+    @Test
+    void zeroDailyCapIsUnlimited() {
+        ActivityDef def = new ActivityDef("x", "X", Material.PAPER, null, 1, 5, 0);
+
+        assertEquals(500, def.worth(100));
+    }
+
+    @Test
+    void capPointsAndWorthSaturateInsteadOfOverflowing() {
+        ActivityDef def = new ActivityDef("x", "X", Material.PAPER, null, 1, 1_000_000, 1_000_000);
+
+        assertEquals(Integer.MAX_VALUE, def.capPoints());
+        assertEquals(Integer.MAX_VALUE, def.worth(Integer.MAX_VALUE));
+        assertEquals(1_000_000, def.worth(1));
+    }
 }

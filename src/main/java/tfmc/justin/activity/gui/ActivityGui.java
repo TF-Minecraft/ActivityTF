@@ -244,7 +244,7 @@ public class ActivityGui implements Listener {
             lore.add(messages.get("gui.activity-lore-progress", "%bar%", Utils.colorize(progress)));
         }
         lore.add(def.dailyCap() > 0
-            ? messages.get("gui.activity-lore-today-capped", "%today%", def.worth(count), "%cap%", def.dailyCap())
+            ? messages.get("gui.activity-lore-today-capped", "%today%", def.worth(count), "%cap%", def.capPoints())
             : messages.get("gui.activity-lore-today", "%today%", def.worth(count)));
         return lore;
     }
@@ -260,7 +260,7 @@ public class ActivityGui implements Listener {
     // Bukkit inventory.
     // ====================================
     static String progressBar(ActivityDef def, int count) {
-        if (def.dailyCap() > 0 && def.worth(count) >= def.dailyCap()) {
+        if (def.dailyCap() > 0 && def.worth(count) >= def.capPoints()) {
             return Bar.render(1, 1, PROGRESS_BAR_LENGTH);
         }
         if (def.every() > 1) {

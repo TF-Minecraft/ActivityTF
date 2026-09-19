@@ -4,8 +4,10 @@ reset:
 
 # Seven of these are drawn at random for each player every day and shown in
 # /activity; a task earns nothing until the player clicks it to reveal it.
-# Every 'every' actions → earn 'points'. 'daily-cap' = most points one
-# activity can add per day (0 = no cap). Bar caps at bar.max; bar.daily-max
+# Every 'every' actions → earn 'points'. 'daily-cap' = how many times per day
+# that can happen (0 = no cap), so a day is worth at most daily-cap × points
+# (every: 1, points: 5, daily-cap: 1 → the first action gives 5, later ones
+# that day give nothing). Bar caps at bar.max; bar.daily-max
 # caps what can reach it on any single day, first, and bar.vote-share keeps part
 # of that day for voting only. All are bypassed by
 # /activity add <player> <activity> <count> --force, which is staff-only and
@@ -15,7 +17,8 @@ reset:
 #   remaining slots are filled at random as usual. Marking more than seven
 #   activities guaranteed is reported at load - the draw would then be seven of
 #   them and nothing else could ever be drawn.
-# vote: one point per vote site, and always one of the day's tasks.
+# vote: one point per vote site (every: 1, points: 1), daily-cap = how many
+#   sites count per day, and always one of the day's tasks.
 # playtime: 'every' counts minutes online - see the playtime section at the
 #   bottom, and read what afk-minutes does and does not do before relying on it.
 # material: the GUI icon, and craft: the item this activity counts crafts of.
@@ -66,7 +69,8 @@ reset:
 #   'every' is XP, not actions. Fractional XP is carried over between gains
 #   rather than lost. Two activities naming the same profession is a config
 #   error and only the last one is fed. Always set a daily-cap on these:
-#   profession XP is unbounded, unlike the one-per-action activities.
+#   profession XP is unbounded, unlike the one-per-action activities. Here
+#   daily-cap counts awards, i.e. at most daily-cap × every XP counts a day.
 # station: optional, MMOItems only. Counts crafts made at an MMOItems
 #   crafting station, written as either
 #     ingot-station        any recipe crafted at that station
@@ -193,7 +197,7 @@ activities:
     material: BONE
     every: 1
     points: 5
-    daily-cap: 5
+    daily-cap: 1
   # InteractibleFurniture: furniture placed in the world
   furniture_place:
     display: "#e6ca40&lPlace Furniture"
