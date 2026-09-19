@@ -163,6 +163,25 @@ public final class TestManagers {
         }
     }
 
+    // ====================================
+    // A reward pool as load() would leave it: 'pool' is the default one,
+    // 'pool_<name>' a named one. Merges, so a test can install several.
+    // ====================================
+    public static void pool(ActivityManager manager, String name, List<RewardEntry> entries) {
+        try {
+            ActivityConfiguration config = manager.getConfiguration();
+            Field field = ActivityConfiguration.class.getDeclaredField("rewardPools");
+            field.setAccessible(true);
+            @SuppressWarnings("unchecked")
+            Map<String, List<RewardEntry>> current = (Map<String, List<RewardEntry>>) field.get(config);
+            Map<String, List<RewardEntry>> pools = new LinkedHashMap<>(current);
+            pools.put(name, entries);
+            field.set(config, Map.copyOf(pools));
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     // daily-reward.groups as load() would leave it: group -> reward, in order
     public static void dailyRewards(ActivityManager manager, Map<String, RewardEntry> groups) {
         try {

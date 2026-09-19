@@ -425,13 +425,7 @@ class ActivityManagerDailyRewardTest {
     }
 
     private void pool(List<RewardEntry> pool) {
-        try {
-            Field field = manager.getConfiguration().getClass().getDeclaredField("rewardPool");
-            field.setAccessible(true);
-            field.set(manager.getConfiguration(), pool);
-        } catch (ReflectiveOperationException e) {
-            throw new RuntimeException(e);
-        }
+        TestManagers.pool(manager, ActivityConfiguration.DEFAULT_POOL, pool);
     }
 
     // ====================================
@@ -448,4 +442,21 @@ class ActivityManagerDailyRewardTest {
         assertSame(DIAMOND, ActivityManager.dailyRewardFor(groups, player(Set.of("group.vip"))));
         assertNull(ActivityManager.dailyRewardFor(groups, player(Set.of("group.default", "vip"))));
     }
+    @Test
+    void namedDailyPoolPaysItsOwnRewardAndMissingPoolStaysUnclaimed() throws Exception {
+        Field pools = ActivityConfiguration.class.getDeclaredField("rewardPools");
+        pools.setAccessible(true);
+        pools.set(manager.getConfiguration(), Map.of("pool", List.of(DIAMOND), "pool_end", List.of(STEEL)));
+        TestManagers.dailyRewards(manager, Map.of("vip", ActivityConfiguration.poolRef("pool_missing")));
+        revealAllButLast();
+        revealLast();
+        assertFalse(claim(player(Set.of("group.vip"))));
+        assertTrue(paid.isEmpty());
+        assertFalse(data().dailyRewardClaimed());
+        TestManagers.dailyRewards(manager, Map.of("vip", ActivityConfiguration.poolRef("pool_end")));
+        assertTrue(claim(player(Set.of("group.vip"))));
+        assertEquals(List.of(STEEL), paid);
+        assertEquals(List.of(1), paidMultipliers);
+    }
+
 }

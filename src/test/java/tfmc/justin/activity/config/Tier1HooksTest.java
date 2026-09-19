@@ -35,7 +35,7 @@ class Tier1HooksTest {
     private static final List<String> NEW_ACTIVITY_IDS = List.of(
             "vehicle_build", "ic_chat", "furniture_place",
             "battle_joined", "advcraft_item", "market_sale",
-            "casino_win", "cook_dish"
+            "casino_win", "cook_dish", "animal_universal_feed"
     );
 
     // ====================================
@@ -56,7 +56,7 @@ class Tier1HooksTest {
             "engineer_bullet_box", "engineer_fuel",
             "fishing_rod", "fishing_iron_hook",
             "magic_basic_handle", "magic_iron_core",
-            "animal_universal_feed", "animal_whistle"
+            "animal_whistle"
     );
 
     private static YamlConfiguration loadConfig() {

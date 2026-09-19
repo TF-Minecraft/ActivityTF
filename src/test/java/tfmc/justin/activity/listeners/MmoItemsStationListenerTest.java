@@ -280,4 +280,26 @@ class MmoItemsStationListenerTest {
         assertEquals(EventPriority.MONITOR, annotation.priority());
         assertTrue(annotation.ignoreCancelled());
     }
+    @Test
+    void collectingCommandRewardFishingRodUpdatesTheRevealedTask() {
+        var def = new ActivityDef("fishing_rod", "Fishing", Material.FISHING_ROD, null, 1, 1, 1);
+        var manager = tfmc.justin.activity.managers.TestManagers.manager(def);
+        tfmc.justin.activity.managers.TestManagers.bukkit();
+        tfmc.justin.activity.managers.TestManagers.storeLoaded(manager);
+        tfmc.justin.activity.managers.TestManagers.guarantee(manager, def.id());
+        setField(manager.getConfiguration(), ActivityConfiguration.class, "stationActivities",
+            Map.of("fishing-station/fishing-rod", "fishing_rod"));
+        UUID uuid = UUID.randomUUID();
+        manager.reveal(uuid, 0);
+        var listener = new MmoItemsStationListener(manager);
+        var player = stubPlayer(uuid);
+        listener.onUseCraftingStation(event(player, station("fishing-station"), recipe("fishing-rod"),
+            null, StationAction.INTERACT_WITH_RECIPE));
+        org.junit.jupiter.api.Assertions.assertEquals(0, manager.tasks(uuid).count(def.id()));
+        listener.onUseCraftingStation(event(player, station("fishing-station"), recipe("fishing-rod"),
+            null, StationAction.CRAFTING_QUEUE));
+        org.junit.jupiter.api.Assertions.assertEquals(1, manager.tasks(uuid).count(def.id()));
+        org.junit.jupiter.api.Assertions.assertEquals(1, manager.tasks(uuid).points());
+    }
+
 }

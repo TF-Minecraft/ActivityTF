@@ -124,10 +124,13 @@ public class ActivityConfiguration {
     private volatile DayOfWeek resetDay;
     private volatile int resetHour;
 
-    // Replaced wholesale on reload and read on the main thread only, but kept
-    // immutable so a reward command that reloads mid-claim cannot change the
-    // list the claim is paying out of
-    private volatile List<RewardEntry> rewardPool = List.of();
+    // ====================================
+    // Every pool under rewards:, keyed by its lower-cased name: 'pool' (the
+    // default one) and any 'pool_<name>'. Replaced wholesale on reload and
+    // read on the main thread only, but kept immutable so a reward command
+    // that reloads mid-claim cannot change the list the claim is paying out of.
+    // ====================================
+    private volatile Map<String, List<RewardEntry>> rewardPools = Map.of();
 
     // What every 'items:' amount is multiplied by at payout. Read fresh on
     // every handover rather than folded into the pool at load, so a reload
@@ -139,9 +142,42 @@ public class ActivityConfiguration {
     private volatile Map<Integer, RewardEntry> milestoneDrops = Map.of();
 
     // daily-reward.groups: group name -> the item it pays, in config order,
-    // or DAILY_POOL for a group that draws once from rewards.pool
+    // or a pool reference (see poolRef) for a group that draws once from a pool
     private volatile Map<String, RewardEntry> dailyRewards = Map.of();
-    public static final RewardEntry DAILY_POOL = new RewardEntry(0, "pool", List.of(), List.of());
+
+    // ====================================
+    // A reference to a reward pool, used as a rewards.drops or a
+    // daily-reward.groups value so both stay one map of RewardEntry: weight 0
+    // with neither a command nor an item, which no parsed reward can be (both
+    // are refused at load), and the pool's name in 'display'. DAILY_POOL is
+    // the default pool's reference, kept as a constant because it is the one
+    // every 'pool' value has meant since before named pools existed.
+    // ====================================
+    public static final String DEFAULT_POOL = "pool";
+    public static final RewardEntry DAILY_POOL = new RewardEntry(0, DEFAULT_POOL, List.of(), List.of());
+
+    // A rewards: key, or a drop/group value, that names a pool - matched
+    // trimmed and case-insensitively, so 'Pool_Skins' and 'pool_skins' are one
+    public static boolean isPoolName(String value) {
+        String name = poolName(value);
+        return name.equals(DEFAULT_POOL) || name.startsWith(DEFAULT_POOL + "_");
+    }
+
+    public static String poolName(String value) {
+        return value.strip().toLowerCase(Locale.ROOT);
+    }
+
+    public static RewardEntry poolRef(String name) {
+        String pool = poolName(name);
+        return pool.equals(DEFAULT_POOL) ? DAILY_POOL : new RewardEntry(0, pool, List.of(), List.of());
+    }
+
+    // The pool this drop or group draws from, or null when it is a real reward
+    public static String referencedPool(RewardEntry entry) {
+        return entry.weight() == 0 && entry.commands().isEmpty() && entry.items().isEmpty()
+            ? entry.display()
+            : null;
+    }
 
     private String guiTitle;
 
@@ -218,7 +254,7 @@ public class ActivityConfiguration {
         itemsAdderPathConfigured = false;
         loadActivities(config.getConfigurationSection("activities"));
 
-        rewardPool = loadRewardPool(config);
+        rewardPools = loadRewardPools(config);
         rewardMultiplier = rewardMultiplier(config);
 
         barMax = Math.max(1, config.getInt("bar.max", 50));
@@ -230,7 +266,7 @@ public class ActivityConfiguration {
         // After milestones: drop_N names the Nth of them. Before the path
         // warnings below: a drop's m. or ia. path counts towards them.
         milestoneDrops = loadMilestoneDrops(config);
-        if (poolNeededButEmpty(rewardPool, milestoneDrops, milestones)) {
+        if (poolNeededButEmpty(rewardPool(), milestoneDrops, milestones)) {
             plugin.getLogger().warning("rewards.pool is empty or every entry in it was dropped - a milestone"
                 + " can be reached but nothing can ever be claimed.");
         }
@@ -299,8 +335,9 @@ public class ActivityConfiguration {
     // The reward keys, constants for the same reason: the shipped multiplier
     // is 1, which is also the fallback, so a typo in either path would leave
     // every claim paying 1x with nothing to show for it.
+    public static final String REWARDS_PATH = "rewards";
     static final String REWARDS_MULTIPLIER_PATH = "rewards.multiplier";
-    static final String REWARDS_POOL_PATH = "rewards.pool";
+    static final String REWARDS_POOL_PATH = REWARDS_PATH + "." + DEFAULT_POOL;
     static final String REWARDS_DROPS_PATH = "rewards.drops";
     static final String DAILY_REWARD_GROUPS_PATH = "daily-reward.groups";
 
@@ -751,16 +788,77 @@ public class ActivityConfiguration {
     }
 
     // ====================================
-    // The reward pool. Every entry is validated on its own: a bad weight or an
-    // entry with nothing to run is dropped with a warning rather than taking
-    // the rest of the pool down with it. Weights are clamped so a pool of
-    // absurd numbers cannot overflow the cumulative total the draw walks.
+    // Bukkit hands the jar's packaged config.yml to the server's own as
+    // defaults, so config.get*("rewards.pool") answers with the packaged pool
+    // on a server whose file has no such key - which would have it silently
+    // pay rewards nobody configured. Everything under rewards: and
+    // daily-reward: is therefore read through these two: contains(path, true)
+    // ignores the defaults, and a section's getKeys(false) merges the
+    // defaults' keys in, so every key is checked the same way.
     // ====================================
-    private List<RewardEntry> loadRewardPool(FileConfiguration config) {
+    private static boolean set(ConfigurationSection config, String path) {
+        return config.contains(path, true);
+    }
+
+    private static ConfigurationSection section(ConfigurationSection config, String path) {
+        return set(config, path) ? config.getConfigurationSection(path) : null;
+    }
+
+    private static List<String> keys(ConfigurationSection section) {
+        List<String> keys = new ArrayList<>();
+        for (String key : section.getKeys(false)) {
+            if (set(section, key)) {
+                keys.add(key);
+            }
+        }
+        return keys;
+    }
+
+    // ====================================
+    // Every pool under rewards:, by name: 'pool' and any 'pool_<name>', each
+    // read exactly the same way. A key that is not a pool (multiplier, drops)
+    // is left to its own parser.
+    // ====================================
+    private Map<String, List<RewardEntry>> loadRewardPools(ConfigurationSection config) {
+        ConfigurationSection rewards = section(config, REWARDS_PATH);
+        if (rewards == null) {
+            return Map.of();
+        }
+        Map<String, List<RewardEntry>> pools = new LinkedHashMap<>();
+        for (String key : keys(rewards)) {
+            if (isPoolName(key)) {
+                pools.put(poolName(key), loadRewardPool(config, REWARDS_PATH + "." + key));
+            }
+        }
+        ConfigurationSection named = section(config, "rewards.pools");
+        if (named != null) {
+            for (String key : keys(named)) {
+                if (!isPoolName(key) || poolName(key).equals(DEFAULT_POOL)) {
+                    plugin.getLogger().warning("rewards.pools." + Utils.safeForLog(key)
+                        + " must use a pool_<name> name - ignored.");
+                    continue;
+                }
+                pools.put(poolName(key), loadRewardPool(config, "rewards.pools." + key));
+            }
+        }
+        return Map.copyOf(pools);
+    }
+
+    // ====================================
+    // One reward pool. Every entry is validated on its own: a bad weight or an
+    // entry with nothing to run is dropped with a warning naming the pool
+    // rather than taking the rest of it down with it. Weights are clamped so a
+    // pool of absurd numbers cannot overflow the cumulative total the draw
+    // walks.
+    // ====================================
+    private List<RewardEntry> loadRewardPool(ConfigurationSection config, String path) {
         List<RewardEntry> pool = new ArrayList<>();
+        if (!set(config, path)) {
+            return List.of();
+        }
         int index = 0;
-        for (Map<?, ?> entry : config.getMapList(REWARDS_POOL_PATH)) {
-            String where = REWARDS_POOL_PATH + "[" + index++ + "]";
+        for (Map<?, ?> entry : config.getMapList(path)) {
+            String where = path + "[" + index++ + "]";
 
             int weight = entry.get("weight") instanceof Number number ? number.intValue() : 1;
             if (weight <= 0) {
@@ -951,24 +1049,25 @@ public class ActivityConfiguration {
     }
 
     // ====================================
-    // rewards.drops: 'drop_N: pool' or 'drop_N: <item path> [amount]' for the
-    // Nth milestone. Anything that does not parse is named and left to the
-    // pool, so a typo never pays less than the config did before drops
-    // existed. The path is checked the way a pool item's is - a well formed
-    // m. or ia. path is kept even when its plugin is not up yet and is left
-    // to resolve, or fail and stay claimable, at payout.
+    // rewards.drops: 'drop_N: pool', 'drop_N: pool_<name>' or
+    // 'drop_N: <item path> [amount]' for the Nth milestone. Anything that does
+    // not parse is named and left to the default pool, so a typo never pays
+    // less than the config did before drops existed. The path is checked the
+    // way a pool item's is - a well formed m. or ia. path is kept even when its
+    // plugin is not up yet and is left to resolve, or fail and stay claimable,
+    // at payout.
     // ====================================
     private Map<Integer, RewardEntry> loadMilestoneDrops(ConfigurationSection config) {
-        ConfigurationSection section = config.getConfigurationSection(REWARDS_DROPS_PATH);
+        ConfigurationSection section = section(config, REWARDS_DROPS_PATH);
         if (section == null) {
-            if (config.contains(REWARDS_DROPS_PATH)) {
+            if (set(config, REWARDS_DROPS_PATH)) {
                 plugin.getLogger().warning(REWARDS_DROPS_PATH + " is not a section of drop_<N> keys - ignored,"
                     + " every milestone draws from the pool.");
             }
             return Map.of();
         }
         Map<Integer, RewardEntry> drops = new HashMap<>();
-        for (String key : section.getKeys(false)) {
+        for (String key : keys(section)) {
             String at = REWARDS_DROPS_PATH + "." + key;
             String number = key.startsWith("drop_") ? key.substring(5) : "";
             if (!number.matches("[1-9][0-9]*")) {
@@ -985,7 +1084,14 @@ public class ActivityConfiguration {
             int milestone = milestones.get(Integer.parseInt(number) - 1);
 
             Object raw = section.get(key);
-            if (raw instanceof String string && string.strip().equalsIgnoreCase("pool")) {
+            if (raw instanceof String string && isPoolName(string)) {
+                // The default pool is what a milestone with no drop at all
+                // draws from, so 'pool' is left out of the map entirely
+                if (poolName(string).equals(DEFAULT_POOL)) {
+                    continue;
+                }
+                drops.put(milestone, warnedPoolRef(at, string, "milestone " + milestone
+                    + " pays nothing and stays claimable"));
                 continue;
             }
             RewardEntry drop = fixedItem(at, raw, "milestone " + milestone + " draws from the pool");
@@ -994,6 +1100,23 @@ public class ActivityConfiguration {
             }
         }
         return Map.copyOf(drops);
+    }
+
+    // ====================================
+    // A drop or group value that names a pool. A name no pool under rewards:
+    // matches, or one whose every entry was dropped, is warned about here and
+    // still kept as a reference: falling back to the default pool would pay a
+    // reward the admin never listed for it, and parsing 'pool_skins' as an
+    // item path would only warn about a material nobody meant. It pays
+    // nothing until the pool is there.
+    // ====================================
+    private RewardEntry warnedPoolRef(String at, String value, String otherwise) {
+        String pool = poolName(value);
+        if (rewardPool(pool).isEmpty()) {
+            plugin.getLogger().warning(at + " draws from '" + Utils.safeForLog(pool) + "', which is not a pool"
+                + " under rewards.pools or rewards, or has no usable entry - " + otherwise + ".");
+        }
+        return poolRef(pool);
     }
 
     // ====================================
@@ -1077,25 +1200,31 @@ public class ActivityConfiguration {
     }
 
     // ====================================
-    // daily-reward.groups: '<group>: pool' or '<group>: <item path> [amount]',
-    // in config order - the first group a player is in wins, so the highest
-    // rank goes first. A value that does not parse is named and that group
-    // gets nothing. Read after rewardPool, which a 'pool' group draws from.
+    // daily-reward.groups: '<group>: pool', '<group>: pool_<name>' or
+    // '<group>: <item path> [amount]', in config order - the first group a
+    // player is in wins, so the highest rank goes first. A value that does not
+    // parse is named and that group gets nothing. Read after the pools, which
+    // a pool group draws from.
     // ====================================
     private Map<String, RewardEntry> loadDailyRewards(ConfigurationSection config) {
-        ConfigurationSection section = config.getConfigurationSection(DAILY_REWARD_GROUPS_PATH);
+        ConfigurationSection section = section(config, DAILY_REWARD_GROUPS_PATH);
         if (section == null) {
-            if (config.contains(DAILY_REWARD_GROUPS_PATH)) {
+            if (set(config, DAILY_REWARD_GROUPS_PATH)) {
                 plugin.getLogger().warning(DAILY_REWARD_GROUPS_PATH + " is not a section of <group>: <item>"
                     + " lines - ignored, no daily reward is paid.");
             }
             return Map.of();
         }
         Map<String, RewardEntry> groups = new LinkedHashMap<>();
-        for (String group : section.getKeys(false)) {
+        for (String group : keys(section)) {
             Object raw = section.get(group);
-            if (raw instanceof String string && string.strip().equalsIgnoreCase("pool")) {
-                groups.put(group, DAILY_POOL);
+            if (raw instanceof String string && isPoolName(string)) {
+                // The default pool's own "it is empty" warning is the one
+                // below, which names every group at once
+                groups.put(group, poolName(string).equals(DEFAULT_POOL)
+                    ? DAILY_POOL
+                    : warnedPoolRef(DAILY_REWARD_GROUPS_PATH + "." + Utils.safeForLog(group), string,
+                        "group " + Utils.safeForLog(group) + " gets no daily reward"));
                 continue;
             }
             RewardEntry reward = fixedItem(DAILY_REWARD_GROUPS_PATH + "." + Utils.safeForLog(group),
@@ -1105,7 +1234,7 @@ public class ActivityConfiguration {
                 groups.put(group, reward);
             }
         }
-        if (rewardPool.isEmpty() && groups.containsValue(DAILY_POOL)) {
+        if (rewardPool().isEmpty() && groups.containsValue(DAILY_POOL)) {
             plugin.getLogger().warning("rewards.pool is empty or every entry in it was dropped - a "
                 + DAILY_REWARD_GROUPS_PATH + " group set to 'pool' can never be paid its daily reward.");
         }
@@ -1113,10 +1242,11 @@ public class ActivityConfiguration {
     }
 
     // The load-time "nothing can ever be claimed" check: only true when some
-    // milestone actually draws from the empty pool
+    // milestone actually draws from the empty default pool. A milestone whose
+    // drop names another pool has been warned about by warnedPoolRef already.
     static boolean poolNeededButEmpty(List<RewardEntry> pool, Map<Integer, RewardEntry> drops,
                                       List<Integer> milestones) {
-        return pool.isEmpty() && ActivityManager.needsPool(milestones, drops);
+        return pool.isEmpty() && ActivityManager.neededPools(milestones, drops).contains(DEFAULT_POOL);
     }
 
     // The chat name of a fixed drop, from its path alone - resolving it here
@@ -1454,7 +1584,12 @@ public class ActivityConfiguration {
     }
 
     public List<RewardEntry> rewardPool() {
-        return rewardPool;
+        return rewardPool(DEFAULT_POOL);
+    }
+
+    // A pool by name; empty for a name no rewards: key matched
+    public List<RewardEntry> rewardPool(String name) {
+        return rewardPools.getOrDefault(poolName(name), List.of());
     }
 
     public int rewardMultiplier() {

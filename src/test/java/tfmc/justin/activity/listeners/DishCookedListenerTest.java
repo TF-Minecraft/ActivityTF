@@ -84,4 +84,30 @@ class DishCookedListenerTest {
 
         assertThrows(NullPointerException.class, () -> listener.onDishCooked(dish(player)));
     }
+    @Test
+    void troughCompletionCreditsFeedOnly() throws Exception {
+        var feed = new tfmc.justin.activity.models.ActivityDef("animal_universal_feed", "Feed",
+            org.bukkit.Material.WHEAT, null, 2, 1, 1);
+        var food = new tfmc.justin.activity.models.ActivityDef("cook_dish", "Food",
+            org.bukkit.Material.WHEAT, null, 5, 1, 1);
+        var manager = tfmc.justin.activity.managers.TestManagers.manager(feed, food);
+        tfmc.justin.activity.managers.TestManagers.guarantee(manager, feed.id(), food.id());
+        tfmc.justin.activity.managers.TestManagers.storeLoaded(manager);
+        UUID uuid = UUID.randomUUID();
+        for (int slot = 0; slot < manager.tasks(uuid).tasks().size(); slot++) {
+            manager.reveal(uuid, slot);
+        }
+        DishCookedEvent event = dish(stubPlayer(uuid));
+        Field method = DishCookedEvent.class.getDeclaredField("method");
+        method.setAccessible(true);
+        method.set(event, "trough");
+        new DishCookedListener(manager).onDishCooked(event);
+        org.junit.jupiter.api.Assertions.assertEquals(1, manager.tasks(uuid).count(feed.id()));
+        org.junit.jupiter.api.Assertions.assertEquals(0, manager.tasks(uuid).count(food.id()));
+        method.set(event, "furnace");
+        new DishCookedListener(manager).onDishCooked(event);
+        org.junit.jupiter.api.Assertions.assertEquals(1, manager.tasks(uuid).count(feed.id()));
+        org.junit.jupiter.api.Assertions.assertEquals(1, manager.tasks(uuid).count(food.id()));
+    }
+
 }
