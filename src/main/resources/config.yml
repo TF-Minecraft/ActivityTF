@@ -442,15 +442,15 @@ activities:
 
 # The reward pool. Clicking the weekly bar in /activity claims every
 # milestone reached and not yet claimed (see bar.milestones), drawing one
-# entry from this pool at random per milestone, handing over that entry's
-# items and running its commands.
+# entry from this pool at random per spin (rewards.multiplier spins per
+# milestone), handing over that entry's items and running its commands.
 #   weight   - how likely the entry is, relative to the others. Optional,
 #              defaults to 1; an entry with weight 0 or less is dropped with a
 #              warning and can never be drawn.
 #   display  - one line, shown in chat when the entry is drawn.
-#   items    - items handed straight to the inventory for that draw, each
-#              multiplied by rewards.multiplier below.
-#   commands - console commands run for that draw, never multiplied.
+#   items    - items handed straight to the inventory for that draw, at the
+#              amounts written here.
+#   commands - console commands run for that draw.
 # %player% = name, %uuid% = the player's UUID.
 # A command containing %player% is skipped with a warning when the name is not
 # [A-Za-z0-9_.]{1,16} (e.g. a Bedrock name with a space); commands that only
@@ -461,18 +461,20 @@ activities:
 # Bedrock/Floodgate or other unsafe names, write reward commands using only
 # %uuid% (e.g. via a plugin that can look a player up by UUID).
 rewards:
-  # Multiplies every 'amount:' below at payout, so a reload changes what the
-  # next claim pays. 1-64; anything outside that is clamped, and 0 or a
-  # negative reads as 1 rather than as "pay nothing". Only items are
-  # multiplied - a 'commands:' line is an opaque string this plugin never
-  # rewrites. A total above one stack is handed over as whole stacks of the
-  # item's own maximum size.
+  # How many spins each pool milestone gets: at 2, claiming it draws from the
+  # pool twice, independently - the same entry can come up both times - and
+  # pays each draw's items and commands at the amounts written, with one chat
+  # line per draw. A fixed drop has nothing to spin and hands over its amount
+  # times this instead. Read at payout, so a reload changes what the next
+  # claim pays. 1-64; anything outside that is clamped, and 0 or a negative
+  # reads as 1 rather than as "pay nothing". A total above one stack is
+  # handed over as whole stacks of the item's own maximum size.
   multiplier: 1
   # What each milestone pays. N counts the bar.milestones that survive
   # loading - sorted, deduped, out-of-range values dropped - so drop_1 is the
   # lowest of those, drop_2 the next, and so on. Adding or removing a
-  # milestone renumbers every drop_N above it. 'pool' draws one entry from the
-  # pool below; anything else is a fixed item, written as a block:
+  # milestone renumbers every drop_N above it. 'pool' spins the pool (once per
+  # multiplier) below; anything else is a fixed item, written as a block:
   # 'item:' (required, the same four forms as a pool item) and 'amount:'
   # (optional, 1-64, default 1). The one-line form '<item path> [amount 1-64]'
   # (e.g. "m.material.steel 3") still works too. A fixed item is multiplied,
@@ -480,7 +482,7 @@ rewards:
   # its milestone claimable when it cannot be resolved, exactly like a pool
   # item; chat shows what was handed over, multiplier included ("x3 Steel" at
   # multiplier 1, "x6 Steel" at 2). A missing drop_N, or one that does not
-  # parse (it is named in the log), draws from the pool.
+  # parse (it is named in the log), spins the pool.
   drops:
     drop_1: pool
     drop_2: pool

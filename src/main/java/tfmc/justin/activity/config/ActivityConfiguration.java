@@ -904,11 +904,11 @@ public class ActivityConfiguration {
     }
 
     // ====================================
-    // rewards.multiplier: what every 'items:' amount is multiplied by at
-    // payout. 1-64 - 0 or negative would mean "hand nothing over", which is
-    // never what an admin meant (the way to pay nothing is to drop the entry),
-    // and 64 x a 64 amount is already 64 full stacks off one 'items:' line.
-    // Console 'give' commands are opaque strings and are never multiplied.
+    // rewards.multiplier: how many times a pool milestone is spun at payout,
+    // and what a fixed drop's amount is multiplied by. 1-64 - 0 or negative
+    // would mean "hand nothing over", which is never what an admin meant (the
+    // way to pay nothing is to drop the entry), and 64 spins or 64 x a 64
+    // amount is already plenty off one claim.
     //
     // Read raw rather than through getInt, and refused the same way an
     // 'amount:' is: getInt turns 2.9 into 2 in silence and reports a

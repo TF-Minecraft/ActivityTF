@@ -642,8 +642,10 @@ class ActivityManagerRewardItemsTest {
 
     @Test
     void aFixedDropIsPaidWithoutDrawingFromThePool() {
-        RewardEntry paid = ActivityManager.rewardFor(10, Map.of(10, DIAMONDS), 1, List.of(POOLED), NO_DRAW);
+        List<RewardEntry> spins = ActivityManager.rewardFor(10, Map.of(10, DIAMONDS), 1, List.of(POOLED), NO_DRAW);
 
+        assertEquals(1, spins.size());
+        RewardEntry paid = spins.get(0);
         assertEquals(DIAMONDS.items(), paid.items());
         assertTrue(paid.commands().isEmpty());
     }
@@ -651,12 +653,12 @@ class ActivityManagerRewardItemsTest {
     @Test
     void aPoolMilestoneStillDrawsFromThePool() {
         List<List<RewardEntry>> drawnFrom = new ArrayList<>();
-        RewardEntry drawn = ActivityManager.rewardFor(20, Map.of(10, DIAMONDS), 1, List.of(POOLED), pool -> {
+        List<RewardEntry> drawn = ActivityManager.rewardFor(20, Map.of(10, DIAMONDS), 1, List.of(POOLED), pool -> {
             drawnFrom.add(pool);
             return pool.get(0);
         });
 
-        assertEquals(POOLED, drawn);
+        assertEquals(List.of(POOLED), drawn);
         assertEquals(List.of(List.of(POOLED)), drawnFrom);
     }
 
@@ -664,9 +666,66 @@ class ActivityManagerRewardItemsTest {
     @Test
     void aFixedDropsChatLineCarriesTheMultipliedAmount() {
         assertEquals("#50d990x3 #b8906eDiamond",
-            ActivityManager.rewardFor(10, Map.of(10, DIAMONDS), 1, List.of(), NO_DRAW).display());
+            ActivityManager.rewardFor(10, Map.of(10, DIAMONDS), 1, List.of(), NO_DRAW).get(0).display());
         assertEquals("#50d990x6 #b8906eDiamond",
-            ActivityManager.rewardFor(10, Map.of(10, DIAMONDS), 2, List.of(), NO_DRAW).display());
+            ActivityManager.rewardFor(10, Map.of(10, DIAMONDS), 2, List.of(), NO_DRAW).get(0).display());
+    }
+
+    // A fixed drop has nothing to spin: one payout, its amount left as
+    // written for giveItems to multiply (see theMultiplierMultipliesTheConfiguredAmount)
+    @Test
+    void aFixedDropIsOnePayoutAtAnyMultiplier() {
+        List<RewardEntry> spins = ActivityManager.rewardFor(10, Map.of(10, DIAMONDS), 3, List.of(POOLED), NO_DRAW);
+
+        assertEquals(1, spins.size());
+        assertEquals(DIAMONDS.items(), spins.get(0).items());
+        assertEquals("#50d990x9 #b8906eDiamond", spins.get(0).display());
+    }
+
+    // ====================================
+    // rewards.multiplier on a pool milestone is the number of spins: that
+    // many independent draws, each paid at face value
+    // ====================================
+    private static final RewardEntry STEEL_PICK = new RewardEntry(1, "Steel Pickaxe", List.of("say pick"),
+        List.of(new RewardEntry.Item("m.tool.steel_pickaxe", 1)));
+
+    @Test
+    void aPoolMilestoneIsSpunMultiplierTimes() {
+        List<RewardEntry> pool = List.of(POOLED, STEEL_PICK);
+        List<RewardEntry> rolls = new ArrayList<>(List.of(STEEL_PICK, POOLED, STEEL_PICK));
+        List<List<RewardEntry>> drawnFrom = new ArrayList<>();
+
+        List<RewardEntry> spins = ActivityManager.rewardFor(20, Map.of(10, DIAMONDS), 3, pool, p -> {
+            drawnFrom.add(p);
+            return rolls.remove(0);
+        });
+
+        assertEquals(List.of(STEEL_PICK, POOLED, STEEL_PICK), spins);
+        assertEquals(List.of(pool, pool, pool), drawnFrom);
+    }
+
+    @Test
+    void aMultiplierOfOneSpinsThePoolOnce() {
+        int[] draws = {0};
+        List<RewardEntry> spins = ActivityManager.rewardFor(20, Map.of(), 1, List.of(POOLED, STEEL_PICK), p -> {
+            draws[0]++;
+            return p.get(1);
+        });
+
+        assertEquals(List.of(STEEL_PICK), spins);
+        assertEquals(1, draws[0]);
+    }
+
+    // With replacement: one entry can win every spin, and each spin is the
+    // entry as configured, not a multiplied copy
+    @Test
+    void spinsCanRepeatAnEntryAtItsOwnAmount() {
+        List<RewardEntry> spins = ActivityManager.rewardFor(20, Map.of(), 2, List.of(DIAMONDS, POOLED),
+            p -> p.get(0));
+
+        assertEquals(List.of(DIAMONDS, DIAMONDS), spins);
+        assertEquals(3, spins.get(1).items().get(0).amount());
+        assertEquals("Diamond", spins.get(1).display());
     }
 
     // Whether claim() needs a usable pool at all: only when a due milestone
