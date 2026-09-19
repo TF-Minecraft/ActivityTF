@@ -1,6 +1,7 @@
 package tfmc.justin.activity.gui;
 
 import org.bukkit.Material;
+import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.junit.jupiter.api.Test;
 import tfmc.justin.activity.config.ActivityConfiguration;
@@ -9,13 +10,17 @@ import tfmc.justin.activity.managers.ActivityManager;
 import tfmc.justin.activity.managers.TestManagers;
 import tfmc.justin.activity.models.ActivityDef;
 import tfmc.justin.activity.models.PlayerData;
+import tfmc.justin.activity.models.RewardEntry;
 import tfmc.justin.activity.utils.Bar;
 import tfmc.justin.activity.utils.Utils;
 
 import java.lang.reflect.Field;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -346,5 +351,33 @@ class ActivityGuiTest {
     void noPathAndAMalformedItemsAdderPathBuildNothing() {
         assertNull(fromPath(null, true, true));
         assertNull(fromPath("ia.saucepan", true, true));
+    }
+
+    // ====================================
+    // The reveal click's daily-reward hook, through revealTask - the part of
+    // onClick that runs without an InventoryClickEvent. The reward is an m.
+    // path with no TLibs behind it, so the attempt shows as a refusal in
+    // chat: that line is the proof the click asked for the reward, and only
+    // the last reveal of the draw may produce it.
+    // ====================================
+    @Test
+    void revealingTheLastTaskAsksForTheDailyReward() {
+        ActivityManager manager = TestManagers.manager(
+            new ActivityDef("a", "a", Material.PAPER, null, 1, 1, 0),
+            new ActivityDef("b", "b", Material.PAPER, null, 1, 1, 0));
+        TestManagers.messages(manager);
+        TestManagers.dailyRewards(manager, Map.of("vip", new RewardEntry(1, "Steel", List.of(),
+            List.of(new RewardEntry.Item("m.material.steel", 1)))));
+        UUID uuid = UUID.randomUUID();
+        List<String> chat = new ArrayList<>();
+        Player player = TestManagers.player(uuid, Set.of("group.vip"), chat);
+        ActivityGui gui = new ActivityGui(manager);
+        manager.tasks(uuid);
+
+        assertEquals(manager.tasks(uuid).tasks().get(0), gui.revealTask(player, 0).revealedId());
+        assertTrue(chat.isEmpty(), chat.toString());
+
+        gui.revealTask(player, 1);
+        assertTrue(chat.stream().anyMatch(line -> line.contains("could not be handed over")), chat.toString());
     }
 }

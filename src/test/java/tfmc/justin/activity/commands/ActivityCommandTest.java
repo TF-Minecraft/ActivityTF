@@ -2,13 +2,21 @@ package tfmc.justin.activity.commands;
 
 import org.bukkit.Material;
 import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.entity.Player;
+import org.bukkit.inventory.Inventory;
 import org.junit.jupiter.api.Test;
 import tfmc.justin.activity.commands.ActivityCommand.Outcome;
+import tfmc.justin.activity.gui.ActivityGui;
 import tfmc.justin.activity.managers.ActivityManager;
 import tfmc.justin.activity.managers.TestManagers;
 import tfmc.justin.activity.models.ActivityDef;
+import tfmc.justin.activity.models.RewardEntry;
 
 import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -297,5 +305,34 @@ class ActivityCommandTest {
         assertTrue(notATask.contains("%activity%"), notATask);
         assertTrue(notATask.contains("%player%"), notATask);
         assertTrue(notATask.contains("--force"), notATask);
+    }
+
+    // ====================================
+    // /activity asks for the daily reward on open, which is how a failed one
+    // is retried. build() needs a live server, so the GUI hands back no
+    // window; the reward is an m. path with no TLibs behind it, so the
+    // attempt shows as a refusal in chat - the proof the open asked for it.
+    // ====================================
+    @Test
+    void openingTheMenuAsksForTheDailyReward() {
+        ActivityManager manager = TestManagers.manager(
+            new ActivityDef("a", "a", Material.PAPER, null, 1, 1, 0));
+        TestManagers.messages(manager);
+        TestManagers.dailyRewards(manager, Map.of("vip", new RewardEntry(1, "Steel", List.of(),
+            List.of(new RewardEntry.Item("m.material.steel", 1)))));
+        UUID uuid = UUID.randomUUID();
+        manager.reveal(uuid, 0);
+        List<String> chat = new ArrayList<>();
+        Player player = TestManagers.player(uuid, Set.of("activity.use", "group.vip"), chat);
+        ActivityGui gui = new ActivityGui(manager) {
+            @Override
+            public Inventory build(Player who) {
+                return null;
+            }
+        };
+
+        new ActivityCommand(manager, gui).onCommand(player, null, "activity", new String[0]);
+
+        assertTrue(chat.stream().anyMatch(line -> line.contains("could not be handed over")), chat.toString());
     }
 }

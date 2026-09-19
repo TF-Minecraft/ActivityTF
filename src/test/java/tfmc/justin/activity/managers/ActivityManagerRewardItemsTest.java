@@ -223,7 +223,8 @@ class ActivityManagerRewardItemsTest {
 
     private boolean give(Handover handover, int multiplier, Function<String, ItemStack> resolver,
                          RewardEntry.Item... items) {
-        return ActivityManager.giveItems(handover.player, entry(items), multiplier, 10, resolver, logger());
+        return ActivityManager.giveItems(handover.player, entry(items), multiplier, "milestone 10", resolver,
+            logger());
     }
 
     private boolean loggedAtLeastOne(Level level, String fragment) {
@@ -435,7 +436,7 @@ class ActivityManagerRewardItemsTest {
         assertTrue(ActivityManager.giveItems(handover.player,
             new RewardEntry(1, "Steel Bundle", List.of(),
                 List.of(new RewardEntry.Item("NOT_A_MATERIAL", 1), new RewardEntry.Item("DIAMOND", 1))),
-            1, 20, MATERIALS, logger()));
+            1, "milestone 20", MATERIALS, logger()));
 
         assertEquals(1, handover.added.size());
         assertEquals(Material.DIAMOND, handover.added.get(0).getType());
@@ -511,7 +512,7 @@ class ActivityManagerRewardItemsTest {
 
         assertTrue(ActivityManager.giveItems(handover.player,
             new RewardEntry(1, "Steel Bundle", List.of(), List.of(new RewardEntry.Item("DIAMOND", 1))),
-            1, 20, MATERIALS, logger()));
+            1, "milestone 20", MATERIALS, logger()));
 
         assertTrue(loggedAtLeastOne(Level.SEVERE, "threw for"));
         assertFalse(loggedAtLeastOne(Level.WARNING, "Only part of reward"));
@@ -683,5 +684,18 @@ class ActivityManagerRewardItemsTest {
     @Test
     void noDropsAtAllNeedsThePool() {
         assertTrue(ActivityManager.needsPool(List.of(10), Map.of()));
+    }
+
+    // The log names what was being paid, so a daily reward does not read as
+    // a milestone
+    @Test
+    void theLogNamesTheDailyRewardRatherThanAMilestone() {
+        Handover handover = player();
+
+        assertFalse(ActivityManager.giveItems(handover.player, entry(new RewardEntry.Item("NOT_A_MATERIAL", 2)),
+            1, "daily reward", MATERIALS, logger()));
+
+        assertTrue(loggedAtLeastOne(Level.WARNING, "(x2, daily reward) could not be resolved"));
+        assertFalse(loggedAtLeastOne(Level.WARNING, "milestone"));
     }
 }

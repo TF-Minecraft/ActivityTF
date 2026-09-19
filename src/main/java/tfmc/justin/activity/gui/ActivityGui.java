@@ -391,12 +391,10 @@ public class ActivityGui implements Listener {
             return;
         }
 
-        ActivityManager.Reveal reveal = manager.reveal(player.getUniqueId(), task);
+        ActivityManager.Reveal reveal = revealTask(player, task);
         if (reveal.revealedId() != null) {
             clickSound(player);
             player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1f, 1f);
-            // Pays only when this reveal was the last of today's draw
-            manager.claimDailyReward(player);
         } else if (!reveal.drawChanged()) {
             // ====================================
             // Nothing to reveal and nothing to repaint: the task was already
@@ -434,6 +432,20 @@ public class ActivityGui implements Listener {
         } else {
             top.setItem(event.getRawSlot(), taskOrFiller(config, data, task));
         }
+    }
+
+    // ====================================
+    // The reveal half of a task click, apart from the event and the sounds
+    // (Sound needs a running server) so it can be driven headless: reveals
+    // the slot and, when that revealed something, pays the daily reward if
+    // this was the last of today's draw.
+    // ====================================
+    ActivityManager.Reveal revealTask(Player player, int task) {
+        ActivityManager.Reveal reveal = manager.reveal(player.getUniqueId(), task);
+        if (reveal.revealedId() != null) {
+            manager.claimDailyReward(player);
+        }
+        return reveal;
     }
 
     // Every slot build() paints, on the open view: used wherever a click

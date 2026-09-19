@@ -1030,8 +1030,9 @@ public class ActivityConfiguration {
         }
         Map<String, RewardEntry> groups = new LinkedHashMap<>();
         for (String group : section.getKeys(false)) {
-            RewardEntry reward = fixedItem(DAILY_REWARD_GROUPS_PATH + "." + group,
-                String.valueOf(section.get(group)).strip(), "group " + group + " gets no daily reward");
+            RewardEntry reward = fixedItem(DAILY_REWARD_GROUPS_PATH + "." + Utils.safeForLog(group),
+                String.valueOf(section.get(group)).strip(),
+                "group " + Utils.safeForLog(group) + " gets no daily reward");
             if (reward != null) {
                 groups.put(group, reward);
             }

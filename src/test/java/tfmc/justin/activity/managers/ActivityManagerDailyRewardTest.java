@@ -11,15 +11,20 @@ import tfmc.justin.activity.models.PlayerData;
 import tfmc.justin.activity.models.RewardEntry;
 
 import java.io.File;
+import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Proxy;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Predicate;
+import java.util.logging.Handler;
+import java.util.logging.LogRecord;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -30,8 +35,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 // ====================================
 // daily-reward: ActivityManager.claimDailyReward on a real manager built
 // without a server (see TestManagers). The store is pointed at a temp file,
-// since the payout saves before it pays; the payout itself is the seam the
-// package-private overload takes, because a real item needs a running server.
+// since the payout saves before it pays; the item check and the payout are
+// the seams the package-private overload takes, because a real item needs a
+// running server.
 // ====================================
 class ActivityManagerDailyRewardTest {
 
@@ -49,9 +55,12 @@ class ActivityManagerDailyRewardTest {
     // What each payout was handed, and what it answers
     private final List<RewardEntry> paid = new ArrayList<>();
     private boolean payWorks = true;
+    private boolean resolves = true;
+    // Whether the claim was already on disk when the payout ran
+    private final List<Boolean> onDiskAtPayout = new ArrayList<>();
 
     @BeforeEach
-    void setUp() throws ReflectiveOperationException {
+    void setUp() {
         ActivityDef[] defs = new ActivityDef[20];
         for (int i = 0; i < defs.length; i++) {
             defs[i] = new ActivityDef("a" + i, "a" + i, Material.PAPER, null, 1, 1, 0);
@@ -60,24 +69,21 @@ class ActivityManagerDailyRewardTest {
         TestManagers.messages(manager);
         TestManagers.storeLoaded(manager);
         TestManagers.rerollsPerDay(manager, 1);
-        set(manager.getStore(), "file", new File(dir, "players.yml"));
-        groups(Map.of("vip", DIAMOND));
+        TestManagers.storeFile(manager, new File(dir, "players.yml"));
+        TestManagers.dailyRewards(manager, Map.of("vip", DIAMOND));
+        ActivityManager.reportedItemPaths.clear();
     }
 
-    private void groups(Map<String, RewardEntry> groups) throws ReflectiveOperationException {
-        set(manager.getConfiguration(), "dailyRewards", groups);
-    }
-
-    private static void set(Object target, String name, Object value) throws ReflectiveOperationException {
-        Field field = target.getClass().getDeclaredField(name);
-        field.setAccessible(true);
-        field.set(target, value);
-    }
-
+    // A player whose group.<name> nodes are set exactly as given
     private Player player(Set<String> permissions) {
+        return player(permissions::contains, permissions::contains);
+    }
+
+    private Player player(Predicate<String> has, Predicate<String> set) {
         InvocationHandler handler = (proxy, method, args) -> switch (method.getName()) {
             case "getUniqueId" -> uuid;
-            case "hasPermission" -> permissions.contains(String.valueOf(args[0]));
+            case "hasPermission" -> has.test(String.valueOf(args[0]));
+            case "isPermissionSet" -> set.test(String.valueOf(args[0]));
             case "sendMessage" -> chat.add(String.valueOf(args[0]));
             case "toString" -> "stub-player";
             case "hashCode" -> 1;
@@ -89,7 +95,8 @@ class ActivityManagerDailyRewardTest {
     }
 
     private boolean claim(Player player) {
-        return manager.claimDailyReward(player, reward -> {
+        return manager.claimDailyReward(player, path -> resolves, reward -> {
+            onDiskAtPayout.add(claimedOnDisk());
             paid.add(reward);
             return payWorks;
         });
@@ -111,9 +118,12 @@ class ActivityManagerDailyRewardTest {
         return manager.getStore().get(uuid);
     }
 
+    private File file() {
+        return new File(dir, "players.yml");
+    }
+
     private boolean claimedOnDisk() {
-        return YamlConfiguration.loadConfiguration(new File(dir, "players.yml"))
-            .getBoolean("players." + uuid + ".daily-reward-claimed");
+        return YamlConfiguration.loadConfiguration(file()).getBoolean("players." + uuid + ".daily-reward-claimed");
     }
 
     @Test
@@ -128,7 +138,6 @@ class ActivityManagerDailyRewardTest {
         assertEquals(1, paid.size());
         assertEquals(DIAMOND.items(), paid.get(0).items());
         assertTrue(data().dailyRewardClaimed());
-        assertTrue(claimedOnDisk(), "the claim was not saved before the payout");
         assertTrue(chat.get(0).contains("x1") && chat.get(0).contains("Diamond"), chat.toString());
 
         // Another open or click the same day pays nothing more
@@ -136,10 +145,23 @@ class ActivityManagerDailyRewardTest {
         assertEquals(1, paid.size());
     }
 
+    // The claim is on disk before anything is handed over, so a crash
+    // mid-payout cannot pay it twice
+    @Test
+    void theClaimIsSavedBeforeThePayoutRuns() {
+        revealAllButLast();
+        revealLast();
+
+        assertTrue(claim(player(Set.of("group.vip"))));
+        assertEquals(List.of(true), onDiskAtPayout);
+    }
+
     @Test
     void theChatLineCarriesTheMultipliedAmount() throws ReflectiveOperationException {
-        groups(Map.of("vip", STEEL));
-        set(manager.getConfiguration(), "rewardMultiplier", 2);
+        TestManagers.dailyRewards(manager, Map.of("vip", STEEL));
+        Field multiplier = manager.getConfiguration().getClass().getDeclaredField("rewardMultiplier");
+        multiplier.setAccessible(true);
+        multiplier.set(manager.getConfiguration(), 2);
         revealAllButLast();
         revealLast();
 
@@ -194,6 +216,31 @@ class ActivityManagerDailyRewardTest {
         assertEquals(1, paid.size());
     }
 
+    // ====================================
+    // An operator (or a '*' holder whose wildcard does not set the node):
+    // hasPermission answers true for every node through its OP default, but
+    // none of the group nodes is actually set on him
+    // ====================================
+    @Test
+    void anOperatorInNoGroupGetsNothing() {
+        revealAllButLast();
+        revealLast();
+
+        assertFalse(claim(player(node -> true, node -> false)));
+        assertTrue(paid.isEmpty());
+        assertFalse(data().dailyRewardClaimed());
+    }
+
+    // A node set to false - a negated group permission - is not membership
+    @Test
+    void aNodeSetToFalseIsNotMembership() {
+        revealAllButLast();
+        revealLast();
+
+        assertFalse(claim(player(node -> false, node -> true)));
+        assertTrue(paid.isEmpty());
+    }
+
     @Test
     void aFailedPayoutIsNotMarkedAndIsRetried() {
         Player player = player(Set.of("group.vip"));
@@ -211,9 +258,87 @@ class ActivityManagerDailyRewardTest {
         assertTrue(data().dailyRewardClaimed());
     }
 
+    // ====================================
+    // An item that does not resolve is refused before the flag or the file is
+    // touched: every open reaches this, and must not cost a players.yml write.
+    // The warning is said once per path, however often it is hit.
+    // ====================================
     @Test
-    void nothingIsPaidWhenNoGroupsAreConfigured() throws ReflectiveOperationException {
-        groups(Map.of());
+    void anUnresolvableItemIsRefusedWithoutAnyWriteAndWarnedOnce() {
+        List<String> warnings = new ArrayList<>();
+        Handler capture = new Handler() {
+            @Override
+            public void publish(LogRecord record) {
+                warnings.add(record.getMessage());
+            }
+
+            @Override
+            public void flush() {
+            }
+
+            @Override
+            public void close() {
+            }
+        };
+        TestManagers.logger().addHandler(capture);
+        try {
+            Player player = player(Set.of("group.vip"));
+            revealAllButLast();
+            revealLast();
+            resolves = false;
+
+            assertFalse(claim(player));
+            assertFalse(claim(player));
+
+            assertTrue(paid.isEmpty());
+            assertFalse(data().dailyRewardClaimed());
+            assertFalse(file().exists(), "a refused claim wrote players.yml");
+            assertEquals(2, chat.stream().filter(line -> line.contains("could not be handed over")).count());
+            assertEquals(1, warnings.stream().filter(line -> line.contains("Daily reward item 'DIAMOND'")).count(),
+                warnings.toString());
+
+            // Fixed by the operator: the next open pays
+            resolves = true;
+            assertTrue(claim(player));
+            assertEquals(1, paid.size());
+        } finally {
+            TestManagers.logger().removeHandler(capture);
+        }
+    }
+
+    // A players.yml that cannot be written pays nothing and leaves the claim
+    // for later
+    @Test
+    void aClaimThatCannotBeSavedPaysNothing() throws IOException {
+        File notADirectory = new File(dir, "blocker");
+        Files.writeString(notADirectory.toPath(), "x");
+        TestManagers.storeFile(manager, new File(notADirectory, "players.yml"));
+        revealAllButLast();
+        revealLast();
+
+        assertFalse(claim(player(Set.of("group.vip"))));
+        assertTrue(paid.isEmpty());
+        assertFalse(data().dailyRewardClaimed());
+        assertTrue(chat.get(0).contains("could not be handed over"), chat.toString());
+    }
+
+    @Test
+    void aStoreThatNeverLoadedPaysNothing() throws ReflectiveOperationException {
+        revealAllButLast();
+        revealLast();
+        Field loaded = manager.getStore().getClass().getDeclaredField("loaded");
+        loaded.setAccessible(true);
+        loaded.set(manager.getStore(), false);
+
+        assertFalse(claim(player(Set.of("group.vip"))));
+        assertTrue(paid.isEmpty());
+        assertFalse(data().dailyRewardClaimed());
+        assertFalse(file().exists());
+    }
+
+    @Test
+    void nothingIsPaidWhenNoGroupsAreConfigured() {
+        TestManagers.dailyRewards(manager, Map.of());
         revealAllButLast();
         revealLast();
         assertFalse(claim(player(Set.of("group.vip"))));
@@ -231,8 +356,8 @@ class ActivityManagerDailyRewardTest {
         groups.put("ascended", STEEL);
         groups.put("vip", DIAMOND);
 
-        assertSame(STEEL, ActivityManager.dailyRewardFor(groups, Set.of("group.vip", "group.ascended")::contains));
-        assertSame(DIAMOND, ActivityManager.dailyRewardFor(groups, Set.of("group.vip")::contains));
-        assertNull(ActivityManager.dailyRewardFor(groups, Set.of("group.default", "vip")::contains));
+        assertSame(STEEL, ActivityManager.dailyRewardFor(groups, player(Set.of("group.vip", "group.ascended"))));
+        assertSame(DIAMOND, ActivityManager.dailyRewardFor(groups, player(Set.of("group.vip"))));
+        assertNull(ActivityManager.dailyRewardFor(groups, player(Set.of("group.default", "vip"))));
     }
 }

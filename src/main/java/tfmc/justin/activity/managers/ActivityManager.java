@@ -5,6 +5,7 @@ import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.InventoryView;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.permissions.Permissible;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
 import tfmc.justin.activity.config.ActivityConfiguration;
@@ -556,7 +557,7 @@ public class ActivityManager {
         for (int i = 0; i < due.size(); i++) {
             RewardEntry drawn = rewardFor(due.get(i), drops, config.rewardMultiplier(), runnablePool,
                 ActivityManager::draw);
-            if (drawn == null || !dispatchRewards(player, drawn, due.get(i))) {
+            if (drawn == null || !dispatchRewards(player, drawn, "milestone " + due.get(i))) {
                 break;
             }
             paid++;
@@ -635,27 +636,53 @@ public class ActivityManager {
     // everything. False when nothing was paid, which includes every case
     // where nothing is due.
     //
-    // The same burn-save-pay order as claim(): the flag is set and written
-    // before the item goes out, so a crash cannot pay it twice, and handed
-    // back when nothing reached the player, so the next open retries it. A
-    // player in no listed group is not marked at all.
+    // The item is resolved first, before anything is touched: a broken one
+    // is refused without a disk write, since every open would otherwise pay
+    // for a full players.yml save to find the same thing out. Then the same
+    // burn-save-pay order as claim(): the flag is set and written before the
+    // item goes out, so a crash cannot pay it twice, and handed back when
+    // nothing reached the player, so the next open retries it. A player in no
+    // listed group is not marked at all.
     // ====================================
     public boolean claimDailyReward(Player player) {
-        return claimDailyReward(player, reward -> dispatchRewards(player, reward, 0));
+        return claimDailyReward(player, path -> usable(resolveRewardItem(path)),
+            reward -> dispatchRewards(player, reward, "daily reward"));
     }
 
-    // The payout passed in, so the rules above can be driven headless
-    boolean claimDailyReward(Player player, Predicate<RewardEntry> pay) {
-        PlayerData data = store.get(player.getUniqueId());
+    // The resolve check and the payout passed in, so the rules above can be
+    // driven headless
+    boolean claimDailyReward(Player player, Predicate<String> resolvable, Predicate<RewardEntry> pay) {
+        // tasks(), not get(): a draw a reload has left short is made good
+        // first, so it cannot count as "all revealed"
+        PlayerData data = tasks(player.getUniqueId());
         if (data.dailyRewardClaimed() || !data.allRevealed()) {
             return false;
         }
-        RewardEntry reward = dailyRewardFor(config.dailyRewards(), player::hasPermission);
+        RewardEntry reward = dailyRewardFor(config.dailyRewards(), player);
         if (reward == null) {
             return false;
         }
 
         Messages messages = config.messages();
+        String path = reward.items().get(0).path();
+        boolean resolved;
+        try {
+            resolved = resolvable.test(path);
+        } catch (Throwable t) {
+            resolved = false;
+        }
+        if (!resolved) {
+            // Once per path until a reload, like giveItems: this is reachable
+            // on every open
+            if (reportedItemPaths.add(path)) {
+                plugin.getLogger().warning("Daily reward item '" + Utils.safeForLog(path) + "' could not be"
+                    + " resolved for " + player.getUniqueId() + " - nothing was handed over; it is retried"
+                    + " on the next /activity open.");
+            }
+            player.sendMessage(messages.get("reward-failed"));
+            return false;
+        }
+
         if (storeNeverLoaded("Refusing every daily reward")) {
             player.sendMessage(messages.get("reward-failed"));
             return false;
@@ -688,12 +715,20 @@ public class ActivityManager {
         return true;
     }
 
+    // ====================================
     // The reward of the first group, in config order, whose group.<name>
     // permission the player has - LuckPerms grants that to its members. Null
     // when he is in none of them.
-    static RewardEntry dailyRewardFor(Map<String, RewardEntry> groups, Predicate<String> hasPermission) {
+    //
+    // The node must be explicitly set, not just answered true: an unset node
+    // falls back to its default, which is OP, so hasPermission alone hands
+    // every operator the top group's reward. A '*' grant can still set it -
+    // see the daily-reward comment in config.yml.
+    // ====================================
+    static RewardEntry dailyRewardFor(Map<String, RewardEntry> groups, Permissible player) {
         for (Map.Entry<String, RewardEntry> group : groups.entrySet()) {
-            if (hasPermission.test("group." + group.getKey())) {
+            String node = "group." + group.getKey();
+            if (player.isPermissionSet(node) && player.hasPermission(node)) {
                 return group.getValue();
             }
         }
@@ -756,9 +791,9 @@ public class ActivityManager {
     // Both halves always run: the commands are not skipped just because the
     // items already succeeded.
     // ====================================
-    private boolean dispatchRewards(Player player, RewardEntry entry, int milestone) {
+    private boolean dispatchRewards(Player player, RewardEntry entry, String at) {
         return dispatchRewards(
-            () -> giveItems(player, entry, config.rewardMultiplier(), milestone,
+            () -> giveItems(player, entry, config.rewardMultiplier(), at,
                 this::resolveRewardItem, plugin.getLogger()),
             () -> dispatchCommands(player, entry.commands(), "reward", plugin.getLogger(), CONSOLE));
     }
@@ -825,6 +860,14 @@ public class ActivityManager {
     // real server, and refusing every stack without a registry would mean
     // handing nothing over at all.
     // ====================================
+    // A resolved stack an inventory can actually be handed: not nothing, not
+    // air, not a block-only material. Compared against AIR rather than
+    // through Material#isAir(), which needs the block registry of a running
+    // server.
+    static boolean usable(ItemStack stack) {
+        return stack != null && stack.getType() != Material.AIR && isItem(stack);
+    }
+
     static boolean isItem(ItemStack stack) {
         try {
             return stack.getType().isItem();
@@ -852,7 +895,9 @@ public class ActivityManager {
     // one and 192 diamonds are three of 64. The clone also keeps a stack TLibs
     // might be holding on to out of reach.
     // ====================================
-    static boolean giveItems(Player player, RewardEntry entry, int multiplier, int milestone,
+    // 'at' names what is being paid in the log lines: "milestone 20", or
+    // "daily reward".
+    static boolean giveItems(Player player, RewardEntry entry, int multiplier, String at,
                              Function<String, ItemStack> resolver, Logger logger) {
         boolean gaveAny = false;
         // Apart from gaveAny on purpose: gaveAny is set before addItem, so a
@@ -865,9 +910,7 @@ public class ActivityManager {
             int total = item.amount() * multiplier;
             try {
                 ItemStack stack = resolver.apply(item.path());
-                // Compared against AIR rather than through Material#isAir(),
-                // which needs the block registry of a running server
-                if (stack == null || stack.getType() == Material.AIR || !isItem(stack)) {
+                if (!usable(stack)) {
                     missedAny = true;
                     // Memoised the way TLibsItems memoises a failing path: a
                     // claim can be repeated at click rate, and a path TLibs was
@@ -875,7 +918,7 @@ public class ActivityManager {
                     // else
                     if (reportedItemPaths.add(item.path())) {
                         logger.warning("Reward item '" + Utils.safeForLog(item.path()) + "' (x" + total
-                            + ", milestone " + milestone + ") could not be resolved for "
+                            + ", " + at + ") could not be resolved for "
                             + player.getUniqueId() + " - nothing was handed over for it.");
                     }
                     continue;
@@ -911,7 +954,7 @@ public class ActivityManager {
                 // back rather than unwind through this loop.
                 missedAny = true;
                 logger.severe("Reward item '" + Utils.safeForLog(item.path()) + "' (x" + total
-                    + ", milestone " + milestone + ") threw for " + player.getUniqueId() + ": " + t);
+                    + ", " + at + ") threw for " + player.getUniqueId() + ": " + t);
             }
         }
 
@@ -921,7 +964,7 @@ public class ActivityManager {
         // player is an operator reading this line.
         if (insertedAny && missedAny) {
             logger.warning("Only part of reward '" + Utils.safeForLog(entry.display()) + "' reached "
-                + player.getUniqueId() + " at milestone " + milestone + " - the milestone stays claimed,"
+                + player.getUniqueId() + " at " + at + " - it stays claimed,"
                 + " so hand the rest over by hand.");
         }
         if (gaveAny) {
@@ -937,7 +980,7 @@ public class ActivityManager {
                 // claiming milestones nobody was ever paid for. A stale client
                 // view fixes itself on the next window open.
                 logger.warning("Could not resync the inventory of " + player.getUniqueId()
-                    + " after reward '" + Utils.safeForLog(entry.display()) + "' at milestone " + milestone
+                    + " after reward '" + Utils.safeForLog(entry.display()) + "' at " + at
                     + ": " + t);
             }
         }
