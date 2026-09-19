@@ -753,4 +753,227 @@ class ActivityConfigurationRewardsTest {
         assertTrue(flag(config, "pluginPathConfigured"));
         assertTrue(flag(config, "itemsAdderPathConfigured"));
     }
+
+    // ====================================
+    // The block form: '<key>: {item: <path>, amount: <n>}' in addition to the
+    // one-line string form, for both rewards.drops and daily-reward.groups.
+    // ====================================
+
+    @Test
+    void aBlockDropLoadsWithItsPathAndAmount() {
+        Map<Integer, RewardEntry> drops = loadDrops(List.of(10, 20),
+            "rewards:\n  drops:\n    drop_1:\n      item: m.material.steel\n      amount: 3\n");
+
+        assertEquals(Map.of(10, new RewardEntry(1, "Steel", List.of(),
+            List.of(new RewardEntry.Item("m.material.steel", 3)))), drops);
+        assertTrue(logged.isEmpty());
+    }
+
+    @Test
+    void aBlockDropWithNoAmountDefaultsToOne() {
+        Map<Integer, RewardEntry> drops = loadDrops(List.of(10, 20),
+            "rewards:\n  drops:\n    drop_1:\n      item: DIAMOND\n");
+
+        assertEquals(Map.of(10, new RewardEntry(1, "Diamond", List.of(),
+            List.of(new RewardEntry.Item("DIAMOND", 1)))), drops);
+        assertTrue(logged.isEmpty());
+    }
+
+    @Test
+    void aBlockDropAmountMayBeAQuotedString() {
+        Map<Integer, RewardEntry> drops = loadDrops(List.of(10, 20),
+            "rewards:\n  drops:\n    drop_1:\n      item: DIAMOND\n      amount: '3'\n");
+
+        assertEquals(Map.of(10, new RewardEntry(1, "Diamond", List.of(),
+            List.of(new RewardEntry.Item("DIAMOND", 3)))), drops);
+        assertTrue(logged.isEmpty());
+    }
+
+    @Test
+    void aBlockDropWithNoItemFallsBackToThePoolWithAWarning() {
+        Map<Integer, RewardEntry> drops = loadDrops(List.of(10, 20),
+            "rewards:\n  drops:\n    drop_1:\n      amount: 3\n");
+
+        assertTrue(drops.isEmpty());
+        assertTrue(loggedContains("rewards.drops.drop_1 has no 'item:' path"));
+        assertTrue(loggedContains("milestone 10 draws from the pool"));
+    }
+
+    @Test
+    void aBlockDropWithABadAmountFallsBackToThePoolWithAWarning() {
+        Map<Integer, RewardEntry> drops = loadDrops(List.of(10, 20, 30, 40),
+            "rewards:\n  drops:\n    drop_1:\n      item: DIAMOND\n      amount: 0\n"
+                + "    drop_2:\n      item: DIAMOND\n      amount: 65\n"
+                + "    drop_3:\n      item: DIAMOND\n      amount: x\n");
+
+        assertTrue(drops.isEmpty());
+        assertTrue(loggedContains("rewards.drops.drop_1.amount '0' is not 1-64"));
+        assertTrue(loggedContains("rewards.drops.drop_2.amount '65' is not 1-64"));
+        assertTrue(loggedContains("rewards.drops.drop_3.amount 'x' is not 1-64"));
+    }
+
+    // A fractional or boolean amount never matches the digit check any more
+    // than a non-numeric word does, so it takes the same "is not 1-64" path
+    // as amount: 0 or amount: 65 - not a separate "not a whole number" path
+    // the way the one-line string form's sibling key (rewards.multiplier) has
+    @Test
+    void aBlockDropWithAFractionalAmountFallsBackToThePoolWithAWarning() {
+        Map<Integer, RewardEntry> drops = loadDrops(List.of(10, 20),
+            "rewards:\n  drops:\n    drop_1:\n      item: DIAMOND\n      amount: 1.5\n");
+
+        assertTrue(drops.isEmpty());
+        assertTrue(loggedContains("rewards.drops.drop_1.amount '1.5' is not 1-64"));
+        assertTrue(loggedContains("milestone 10 draws from the pool"));
+    }
+
+    @Test
+    void aBlockDropWithABooleanAmountFallsBackToThePoolWithAWarning() {
+        Map<Integer, RewardEntry> drops = loadDrops(List.of(10, 20),
+            "rewards:\n  drops:\n    drop_1:\n      item: DIAMOND\n      amount: true\n");
+
+        assertTrue(drops.isEmpty());
+        assertTrue(loggedContains("rewards.drops.drop_1.amount 'true' is not 1-64"));
+        assertTrue(loggedContains("milestone 10 draws from the pool"));
+    }
+
+    // An empty block has no 'item:' key at all, same as the block that only
+    // sets 'amount:' - block.getString("item") returns null either way
+    @Test
+    void anEmptyBlockDropFallsBackToThePoolWithAWarning() {
+        Map<Integer, RewardEntry> drops = loadDrops(List.of(10, 20),
+            "rewards:\n  drops:\n    drop_1: {}\n");
+
+        assertTrue(drops.isEmpty());
+        assertTrue(loggedContains("rewards.drops.drop_1 has no 'item:' path"));
+        assertTrue(loggedContains("milestone 10 draws from the pool"));
+    }
+
+    @Test
+    void aBlockDropWithAnUnknownKeyWarnsButStillLoads() {
+        Map<Integer, RewardEntry> drops = loadDrops(List.of(10, 20),
+            "rewards:\n  drops:\n    drop_1:\n      item: DIAMOND\n      amount: 2\n      color: blue\n");
+
+        assertEquals(Map.of(10, new RewardEntry(1, "Diamond", List.of(),
+            List.of(new RewardEntry.Item("DIAMOND", 2)))), drops);
+        assertTrue(loggedContains("rewards.drops.drop_1 has unknown key(s) color"));
+    }
+
+    @Test
+    void aStringDropStillLoadsAlongsideBlockForm() {
+        Map<Integer, RewardEntry> drops = loadDrops(List.of(10, 20),
+            "rewards:\n  drops:\n    drop_1: m.material.steel 3\n    drop_2:\n      item: DIAMOND\n");
+
+        assertEquals(Map.of(10, new RewardEntry(1, "Steel", List.of(),
+                List.of(new RewardEntry.Item("m.material.steel", 3))),
+            20, new RewardEntry(1, "Diamond", List.of(),
+                List.of(new RewardEntry.Item("DIAMOND", 1)))), drops);
+        assertTrue(logged.isEmpty());
+    }
+
+    @Test
+    void aBlockDailyRewardLoadsWithItsPathAndAmount() {
+        Map<String, RewardEntry> groups = loadDailyRewards(
+            "daily-reward:\n  groups:\n    legacy:\n      item: m.loot.rare_item_skin_scroll\n      amount: 1\n");
+
+        assertEquals(Map.of("legacy", new RewardEntry(1, "Rare Item Skin Scroll", List.of(),
+            List.of(new RewardEntry.Item("m.loot.rare_item_skin_scroll", 1)))), groups);
+        assertTrue(logged.isEmpty());
+    }
+
+    @Test
+    void aBlockDailyRewardWithNoAmountDefaultsToOne() {
+        Map<String, RewardEntry> groups = loadDailyRewards(
+            "daily-reward:\n  groups:\n    vip:\n      item: DIAMOND\n");
+
+        assertEquals(Map.of("vip", new RewardEntry(1, "Diamond", List.of(),
+            List.of(new RewardEntry.Item("DIAMOND", 1)))), groups);
+        assertTrue(logged.isEmpty());
+    }
+
+    @Test
+    void aBlockDailyRewardAmountMayBeAQuotedString() {
+        Map<String, RewardEntry> groups = loadDailyRewards(
+            "daily-reward:\n  groups:\n    vip:\n      item: DIAMOND\n      amount: '3'\n");
+
+        assertEquals(Map.of("vip", new RewardEntry(1, "Diamond", List.of(),
+            List.of(new RewardEntry.Item("DIAMOND", 3)))), groups);
+        assertTrue(logged.isEmpty());
+    }
+
+    @Test
+    void aBlockDailyRewardWithNoItemIsLeftOutWithAWarning() {
+        Map<String, RewardEntry> groups = loadDailyRewards(
+            "daily-reward:\n  groups:\n    vip:\n      amount: 3\n");
+
+        assertTrue(groups.isEmpty());
+        assertTrue(loggedContains("daily-reward.groups.vip has no 'item:' path"));
+        assertTrue(loggedContains("group vip gets no daily reward"));
+    }
+
+    @Test
+    void aBlockDailyRewardWithABadAmountIsLeftOutWithAWarning() {
+        Map<String, RewardEntry> groups = loadDailyRewards("daily-reward:\n  groups:\n"
+            + "    a:\n      item: DIAMOND\n      amount: 0\n"
+            + "    b:\n      item: DIAMOND\n      amount: 65\n"
+            + "    c:\n      item: DIAMOND\n      amount: x\n");
+
+        assertTrue(groups.isEmpty());
+        assertTrue(loggedContains("daily-reward.groups.a.amount '0' is not 1-64"));
+        assertTrue(loggedContains("daily-reward.groups.b.amount '65' is not 1-64"));
+        assertTrue(loggedContains("daily-reward.groups.c.amount 'x' is not 1-64"));
+    }
+
+    @Test
+    void aBlockDailyRewardWithAFractionalAmountIsLeftOutWithAWarning() {
+        Map<String, RewardEntry> groups = loadDailyRewards(
+            "daily-reward:\n  groups:\n    vip:\n      item: DIAMOND\n      amount: 1.5\n");
+
+        assertTrue(groups.isEmpty());
+        assertTrue(loggedContains("daily-reward.groups.vip.amount '1.5' is not 1-64"));
+        assertTrue(loggedContains("group vip gets no daily reward"));
+    }
+
+    @Test
+    void aBlockDailyRewardWithABooleanAmountIsLeftOutWithAWarning() {
+        Map<String, RewardEntry> groups = loadDailyRewards(
+            "daily-reward:\n  groups:\n    vip:\n      item: DIAMOND\n      amount: true\n");
+
+        assertTrue(groups.isEmpty());
+        assertTrue(loggedContains("daily-reward.groups.vip.amount 'true' is not 1-64"));
+        assertTrue(loggedContains("group vip gets no daily reward"));
+    }
+
+    @Test
+    void anEmptyBlockDailyRewardIsLeftOutWithAWarning() {
+        Map<String, RewardEntry> groups = loadDailyRewards(
+            "daily-reward:\n  groups:\n    vip: {}\n");
+
+        assertTrue(groups.isEmpty());
+        assertTrue(loggedContains("daily-reward.groups.vip has no 'item:' path"));
+        assertTrue(loggedContains("group vip gets no daily reward"));
+    }
+
+    @Test
+    void aBlockDailyRewardWithAnUnknownKeyWarnsButStillLoads() {
+        Map<String, RewardEntry> groups = loadDailyRewards(
+            "daily-reward:\n  groups:\n    vip:\n      item: DIAMOND\n      amount: 2\n      color: blue\n");
+
+        assertEquals(Map.of("vip", new RewardEntry(1, "Diamond", List.of(),
+            List.of(new RewardEntry.Item("DIAMOND", 2)))), groups);
+        assertTrue(loggedContains("daily-reward.groups.vip has unknown key(s) color"));
+    }
+
+    @Test
+    void aStringDailyRewardStillLoadsAlongsideBlockForm() {
+        Map<String, RewardEntry> groups = loadDailyRewards(
+            "daily-reward:\n  groups:\n    vip: DIAMOND\n    ascended:\n      item: m.material.steel\n"
+                + "      amount: 3\n");
+
+        assertEquals(List.of("vip", "ascended"), List.copyOf(groups.keySet()));
+        assertEquals(new RewardEntry(1, "Diamond", List.of(), List.of(new RewardEntry.Item("DIAMOND", 1))),
+            groups.get("vip"));
+        assertEquals(new RewardEntry(1, "Steel", List.of(),
+            List.of(new RewardEntry.Item("m.material.steel", 3))), groups.get("ascended"));
+        assertTrue(logged.isEmpty());
+    }
 }

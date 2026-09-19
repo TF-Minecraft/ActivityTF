@@ -471,19 +471,22 @@ rewards:
   # What each milestone pays. N counts the bar.milestones that survive
   # loading - sorted, deduped, out-of-range values dropped - so drop_1 is the
   # lowest of those, drop_2 the next, and so on. Adding or removing a
-  # milestone renumbers every drop_N above it. 'pool' draws one
-  # entry from the pool below; anything else is a fixed item - the same four
-  # forms as a pool item, optionally followed by an amount of 1-64 (default
-  # 1), e.g. "m.material.steel 3". A fixed item is multiplied, split into
-  # stacks, dropped at the feet when it does not fit, and leaves its milestone
-  # claimable when it cannot be resolved, exactly like a pool item; chat shows
-  # what was handed over, multiplier included ("x3 Steel" at multiplier 1,
-  # "x6 Steel" at 2). A missing drop_N, or one that does not parse (it is
-  # named in the log), draws from the pool.
+  # milestone renumbers every drop_N above it. 'pool' draws one entry from the
+  # pool below; anything else is a fixed item, written as a block:
+  # 'item:' (required, the same four forms as a pool item) and 'amount:'
+  # (optional, 1-64, default 1). The one-line form '<item path> [amount 1-64]'
+  # (e.g. "m.material.steel 3") still works too. A fixed item is multiplied,
+  # split into stacks, dropped at the feet when it does not fit, and leaves
+  # its milestone claimable when it cannot be resolved, exactly like a pool
+  # item; chat shows what was handed over, multiplier included ("x3 Steel" at
+  # multiplier 1, "x6 Steel" at 2). A missing drop_N, or one that does not
+  # parse (it is named in the log), draws from the pool.
   drops:
     drop_1: pool
     drop_2: pool
-    # drop_3: m.material.steel 3
+    # drop_3:
+    #   item: m.material.steel
+    #   amount: 3
   pool:
     - weight: 4
       display: "#50d990x3 #b8906eDiamond"
@@ -531,16 +534,20 @@ rewards:
 # reward - there is no LuckPerms or Vault API here to ask about real group
 # membership instead. When several match, the first listed wins, so list the
 # highest rank first. Each value is a fixed item in the same form as a
-# rewards.drops entry - '<item path> [amount 1-64]' - multiplied by
-# rewards.multiplier, dropped at the feet when it does not fit, and reported
-# at load when it does not parse. A player in no group is not marked as paid,
-# so joining a group later that day and opening /activity still pays it. An
-# item that cannot be resolved at payout hands nothing over and leaves the
-# reward unclaimed; opening /activity again retries it.
+# rewards.drops entry: a block with 'item:' (required) and 'amount:'
+# (optional, 1-64, default 1), or the one-line '<item path> [amount 1-64]'
+# form, multiplied by rewards.multiplier, dropped at the feet when it does
+# not fit, and reported at load when it does not parse. A player in no group
+# is not marked as paid, so joining a group later that day and opening
+# /activity still pays it. An item that cannot be resolved at payout hands
+# nothing over and leaves the reward unclaimed; opening /activity again
+# retries it.
 daily-reward:
   groups: {}
   # groups:
-  #   ascended: m.material.steel 3
+  #   ascended:
+  #     item: m.material.steel
+  #     amount: 3
   #   vip: DIAMOND
 
 gui:
