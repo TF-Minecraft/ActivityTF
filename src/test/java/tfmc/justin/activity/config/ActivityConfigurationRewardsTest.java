@@ -812,6 +812,42 @@ class ActivityConfigurationRewardsTest {
         assertTrue(loggedContains("rewards.drops.drop_3.amount 'x' is not 1-64"));
     }
 
+    // A fractional or boolean amount never matches the digit check any more
+    // than a non-numeric word does, so it takes the same "is not 1-64" path
+    // as amount: 0 or amount: 65 - not a separate "not a whole number" path
+    // the way the one-line string form's sibling key (rewards.multiplier) has
+    @Test
+    void aBlockDropWithAFractionalAmountFallsBackToThePoolWithAWarning() {
+        Map<Integer, RewardEntry> drops = loadDrops(List.of(10, 20),
+            "rewards:\n  drops:\n    drop_1:\n      item: DIAMOND\n      amount: 1.5\n");
+
+        assertTrue(drops.isEmpty());
+        assertTrue(loggedContains("rewards.drops.drop_1.amount '1.5' is not 1-64"));
+        assertTrue(loggedContains("milestone 10 draws from the pool"));
+    }
+
+    @Test
+    void aBlockDropWithABooleanAmountFallsBackToThePoolWithAWarning() {
+        Map<Integer, RewardEntry> drops = loadDrops(List.of(10, 20),
+            "rewards:\n  drops:\n    drop_1:\n      item: DIAMOND\n      amount: true\n");
+
+        assertTrue(drops.isEmpty());
+        assertTrue(loggedContains("rewards.drops.drop_1.amount 'true' is not 1-64"));
+        assertTrue(loggedContains("milestone 10 draws from the pool"));
+    }
+
+    // An empty block has no 'item:' key at all, same as the block that only
+    // sets 'amount:' - block.getString("item") returns null either way
+    @Test
+    void anEmptyBlockDropFallsBackToThePoolWithAWarning() {
+        Map<Integer, RewardEntry> drops = loadDrops(List.of(10, 20),
+            "rewards:\n  drops:\n    drop_1: {}\n");
+
+        assertTrue(drops.isEmpty());
+        assertTrue(loggedContains("rewards.drops.drop_1 has no 'item:' path"));
+        assertTrue(loggedContains("milestone 10 draws from the pool"));
+    }
+
     @Test
     void aBlockDropWithAnUnknownKeyWarnsButStillLoads() {
         Map<Integer, RewardEntry> drops = loadDrops(List.of(10, 20),
@@ -885,6 +921,36 @@ class ActivityConfigurationRewardsTest {
         assertTrue(loggedContains("daily-reward.groups.a.amount '0' is not 1-64"));
         assertTrue(loggedContains("daily-reward.groups.b.amount '65' is not 1-64"));
         assertTrue(loggedContains("daily-reward.groups.c.amount 'x' is not 1-64"));
+    }
+
+    @Test
+    void aBlockDailyRewardWithAFractionalAmountIsLeftOutWithAWarning() {
+        Map<String, RewardEntry> groups = loadDailyRewards(
+            "daily-reward:\n  groups:\n    vip:\n      item: DIAMOND\n      amount: 1.5\n");
+
+        assertTrue(groups.isEmpty());
+        assertTrue(loggedContains("daily-reward.groups.vip.amount '1.5' is not 1-64"));
+        assertTrue(loggedContains("group vip gets no daily reward"));
+    }
+
+    @Test
+    void aBlockDailyRewardWithABooleanAmountIsLeftOutWithAWarning() {
+        Map<String, RewardEntry> groups = loadDailyRewards(
+            "daily-reward:\n  groups:\n    vip:\n      item: DIAMOND\n      amount: true\n");
+
+        assertTrue(groups.isEmpty());
+        assertTrue(loggedContains("daily-reward.groups.vip.amount 'true' is not 1-64"));
+        assertTrue(loggedContains("group vip gets no daily reward"));
+    }
+
+    @Test
+    void anEmptyBlockDailyRewardIsLeftOutWithAWarning() {
+        Map<String, RewardEntry> groups = loadDailyRewards(
+            "daily-reward:\n  groups:\n    vip: {}\n");
+
+        assertTrue(groups.isEmpty());
+        assertTrue(loggedContains("daily-reward.groups.vip has no 'item:' path"));
+        assertTrue(loggedContains("group vip gets no daily reward"));
     }
 
     @Test
