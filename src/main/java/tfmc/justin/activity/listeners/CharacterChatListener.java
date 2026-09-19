@@ -4,7 +4,6 @@ import net.tfminecraft.RPCharacters.chat.CharacterChatEvent;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
-import org.bukkit.event.player.PlayerQuitEvent;
 import tfmc.justin.activity.managers.ActivityManager;
 
 import java.util.ArrayDeque;
@@ -22,16 +21,20 @@ import java.util.regex.Pattern;
 //
 // MONITOR + ignoreCancelled: a message another plugin swallowed was never said.
 //
-// Anti-farm: a message only counts when it is longer than MIN_LENGTH, has at
-// least one letter, and its letters are less than SIMILARITY alike (Levenshtein)
-// to each of the sender's last HISTORY such messages. Short or letter-less
-// messages never enter the history, so filler can't reset it. Main thread
-// only, so a plain HashMap is enough.
+// Anti-farm: a message only counts when it is longer than MIN_LENGTH, its
+// normalized form (lowercase letters only) has at least MIN_NORMALIZED
+// characters, and that form is less than SIMILARITY alike (Levenshtein) to
+// each of the sender's last HISTORY such messages. Messages failing either
+// length gate never enter the history, so filler can't reset it. History is
+// kept across quits so relogging can't clear it; memory is bounded at HISTORY
+// short strings per player who has chatted since startup. Main thread only,
+// so a plain HashMap is enough.
 // ====================================
 public class CharacterChatListener implements Listener {
 
     static final int MIN_LENGTH = 15;
-    static final int HISTORY = 5;
+    static final int MIN_NORMALIZED = 10;
+    static final int HISTORY = 20;
     static final double SIMILARITY = 0.8;
 
     // &a / §a legacy codes and &#RRGGBB hex, as players type them
@@ -61,43 +64,55 @@ public class CharacterChatListener implements Listener {
     // text is already stripped. Stored whether or not it counts, so a chain
     // of variations never pays
     boolean process(UUID uuid, String text) {
-        if (!passesGate(text)) {
+        String norm = normalize(text);
+        if (!passesGate(text, norm)) {
             return false;
         }
         Deque<String> recent = history.computeIfAbsent(uuid, k -> new ArrayDeque<>());
-        boolean counts = counts(text, recent);
-        recent.addLast(letters(text));
+        boolean counts = isNovel(norm, recent);
+        recent.addLast(norm);
         if (recent.size() > HISTORY) {
             recent.removeFirst();
         }
         return counts;
     }
 
-    @EventHandler
-    public void onQuit(PlayerQuitEvent event) {
-        history.remove(event.getPlayer().getUniqueId());
+    // for tests
+    int historySize(UUID uuid) {
+        Deque<String> recent = history.get(uuid);
+        return recent == null ? 0 : recent.size();
     }
 
     static String strip(String message) {
         return COLOUR.matcher(message).replaceAll("").trim();
     }
 
-    // text is already stripped; history holds letters() of recent messages
-    static boolean counts(String text, Collection<String> history) {
-        if (!passesGate(text)) {
-            return false;
-        }
-        String a = letters(text);
+    // text is stripped, norm is normalize(text)
+    static boolean passesGate(String text, String norm) {
+        return text.length() > MIN_LENGTH && norm.length() >= MIN_NORMALIZED;
+    }
+
+    // history holds normalize() of recent messages
+    static boolean isNovel(String norm, Collection<String> history) {
         for (String b : history) {
-            if (1.0 - (double) distance(a, b) / Math.max(a.length(), b.length()) >= SIMILARITY) {
+            if (similar(norm, b)) {
                 return false;
             }
         }
         return true;
     }
 
-    private static boolean passesGate(String text) {
-        return text.length() > MIN_LENGTH && !letters(text).isEmpty();
+    static boolean similar(String a, String b) {
+        int max = Math.max(a.length(), b.length());
+        if (max == 0) {
+            return true;
+        }
+        // distance >= length difference, so this is an upper bound; same
+        // formula as below so the boundary can't drift on rounding
+        if (1.0 - (double) Math.abs(a.length() - b.length()) / max < SIMILARITY) {
+            return false;
+        }
+        return 1.0 - (double) distance(a, b) / max >= SIMILARITY;
     }
 
     // Levenshtein edit distance, two rolling rows
@@ -120,7 +135,7 @@ public class CharacterChatListener implements Listener {
         return prev[b.length()];
     }
 
-    static String letters(String s) {
+    static String normalize(String s) {
         StringBuilder out = new StringBuilder(s.length());
         for (char c : s.toLowerCase().toCharArray()) {
             if (Character.isLetter(c)) {

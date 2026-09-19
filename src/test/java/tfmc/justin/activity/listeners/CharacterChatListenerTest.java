@@ -1,7 +1,9 @@
 package tfmc.justin.activity.listeners;
 
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Method;
 import java.util.List;
 import java.util.UUID;
 
@@ -23,30 +25,63 @@ class CharacterChatListenerTest {
         return listener.process(player, CharacterChatListener.strip(message));
     }
 
+    private static boolean counts(String text, List<String> history) {
+        String norm = CharacterChatListener.normalize(text);
+        return CharacterChatListener.passesGate(text, norm) && CharacterChatListener.isNovel(norm, history);
+    }
+
     @Test
     void fifteenCharactersOrFewerNeverCount() {
-        assertFalse(CharacterChatListener.counts("123456789012345", List.of()));
-        assertFalse(CharacterChatListener.counts("hi", List.of()));
+        assertFalse(counts("123456789012345", List.of()));
+        assertFalse(counts("hi", List.of()));
     }
 
     @Test
     void sixteenLettersCount() {
-        assertTrue(CharacterChatListener.counts("abcdefghijklmnop", List.of()));
-        assertTrue(CharacterChatListener.counts("abcdefghijklmnop",
-                List.of(CharacterChatListener.letters("The rain keeps falling on the roof"))));
+        assertTrue(counts("abcdefghijklmnop", List.of()));
+        assertTrue(counts("abcdefghijklmnop",
+                List.of(CharacterChatListener.normalize("The rain keeps falling on the roof"))));
     }
 
     @Test
     void messagesWithoutLettersNeverCount() {
-        assertFalse(say("1234567890123456789"));
         assertFalse(say("..................."));
+        assertFalse(say("!!!??? ...,,, ---"));
+    }
+
+    @Test
+    void digitOnlyMessagesNeverCountOrEnterHistory() {
+        assertFalse(say("1234567890123456789"));
+        assertEquals(0, listener.historySize(player));
+    }
+
+    @Test
+    void paddedFewCharacterMessagesNeverCount() {
+        assertFalse(say("...............a"));
+        assertFalse(say("...............b"));
+        assertFalse(say("hi.............."));
+        assertFalse(say("yo.............."));
+        assertEquals(0, listener.historySize(player));
+    }
+
+    @Test
+    void nineNormalizedCharactersIsBelowTheGate() {
+        assertFalse(say("abcdefghi......."));
+        assertTrue(say("abcdefghij......"));
+    }
+
+    // Digits are dropped by normalization, so number-only differences are repeats (accepted)
+    @Test
+    void messagesDifferingOnlyInNumbersAreRepeats() {
+        assertTrue(say("I hand him 30 silver coins"));
+        assertFalse(say("I hand him 50 silver coins"));
     }
 
     @Test
     void colourCodesAndPaddingDoNotAddLength() {
         String text = CharacterChatListener.strip("  &aHello §bthere &#FF00FFfriend  ");
         assertEquals("Hello there friend", text);
-        assertFalse(CharacterChatListener.counts(CharacterChatListener.strip("&a&b&c&d&e&fshort"), List.of()));
+        assertFalse(counts(CharacterChatListener.strip("&a&b&c&d&e&fshort"), List.of()));
     }
 
     @Test
@@ -133,6 +168,71 @@ class CharacterChatListenerTest {
         assertTrue(say("I raise my mug toward him in greeting"));
         assertTrue(say("He stands and slowly walks over to my table"));
         assertTrue(say("Then I order a drink."));
+    }
+
+    @Test
+    void cyclingSixCannedLinesOnlyCountsEachOnce() {
+        cycle(6);
+    }
+
+    @Test
+    void cyclingTwentyLinesOnlyCountsEachOnce() {
+        cycle(CharacterChatListener.HISTORY);
+    }
+
+    // n distinct lines, then the same n again: the repeats never count
+    private void cycle(int n) {
+        for (int i = 0; i < n; i++) {
+            assertTrue(say(line(i)), "first " + i);
+        }
+        for (int i = 0; i < n; i++) {
+            assertFalse(say(line(i)), "repeat " + i);
+        }
+    }
+
+    // Distinct lines whose normalized forms are far apart
+    private static String line(int i) {
+        String[] words = {"tavern", "silver", "hooded", "barkeep", "stranger",
+                "window", "candle", "forest", "river", "mountain", "castle",
+                "dragon", "market", "harbor", "shield", "lantern", "meadow",
+                "temple", "bridge", "garden", "orchard"};
+        return "I look at the " + words[i] + " " + words[(i * 7 + 3) % words.length]
+                + " " + words[(i * 11 + 5) % words.length];
+    }
+
+    @Test
+    void similarityThreshold() {
+        String fifty = "a".repeat(50);
+        // exactly 0.8 is too similar
+        assertTrue(CharacterChatListener.similar(fifty, "a".repeat(40) + "b".repeat(10)));
+        // 0.78 is not
+        assertFalse(CharacterChatListener.similar(fifty, "a".repeat(39) + "b".repeat(11)));
+        // length-difference shortcut sits on the same boundary
+        assertTrue(CharacterChatListener.similar(fifty, "a".repeat(40)));
+        assertFalse(CharacterChatListener.similar(fifty, "a".repeat(39)));
+    }
+
+    @Test
+    void historyIsCappedOldestEvicted() {
+        for (int i = 0; i <= CharacterChatListener.HISTORY; i++) {
+            assertTrue(say(line(i)));
+        }
+        assertEquals(CharacterChatListener.HISTORY, listener.historySize(player));
+        // line 1 is still remembered, line 0 scrolled out
+        assertFalse(say(line(1)));
+        assertTrue(say(line(0)));
+    }
+
+    // Relogging must not clear the history, so nothing listens for quits
+    @Test
+    void historyPersistsWithoutQuitHandling() {
+        for (Method m : CharacterChatListener.class.getDeclaredMethods()) {
+            for (Class<?> p : m.getParameterTypes()) {
+                assertFalse(PlayerQuitEvent.class.isAssignableFrom(p), m.getName());
+            }
+        }
+        assertTrue(say("I walk into the tavern and sit down"));
+        assertFalse(say("I walk into the tavern and sit down"));
     }
 
     @Test
