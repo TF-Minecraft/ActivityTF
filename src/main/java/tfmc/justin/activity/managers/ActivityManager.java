@@ -648,8 +648,10 @@ public class ActivityManager {
             }
             paid++;
             if (spun < spins.size()) {
+                int owed = spins.size() - spun;
                 logger.severe("Milestone " + milestone + " paid " + spun + " of " + spins.size() + " spins for "
-                    + who + " - it stays claimed, so hand " + (spins.size() - spun) + " spins over by hand.");
+                    + who + "; it stays claimed, so " + owed + (owed == 1 ? " spin is" : " spins are")
+                    + " owed - see the 'milestone " + milestone + "' lines above for what failed.");
                 return new Payout(paid, true);
             }
         }

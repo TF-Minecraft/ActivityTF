@@ -796,7 +796,8 @@ class ActivityManagerRewardItemsTest {
         assertEquals(new ActivityManager.Payout(1, true), payout);
         assertEquals(3, calls.size());
         assertTrue(loggedAtLeastOne(Level.SEVERE,
-            "Milestone 20 paid 2 of 3 spins for Steve/uuid - it stays claimed, so hand 1 spins over by hand."));
+            "Milestone 20 paid 2 of 3 spins for Steve/uuid; it stays claimed, so 1 spin is owed - see the "
+                + "'milestone 20' lines above for what failed."));
     }
 
     // Not memoised: every partial milestone is logged
@@ -818,6 +819,23 @@ class ActivityManagerRewardItemsTest {
         // Milestone 30 is never spun: it stays claimable with 20
         assertEquals(2, calls.size());
         assertFalse(loggedAtLeastOne(Level.SEVERE, "spins for"));
+    }
+
+    // A milestone that only partly pays stops the loop before the next
+    // milestone is even attempted, and rollbackClaimedPoints keeps the
+    // partial one claimed while rolling the untouched one back.
+    @Test
+    void aPartialMilestoneStopsBeforeTheNextOneAndStaysClaimed() {
+        List<PaidSpin> calls = new ArrayList<>();
+
+        ActivityManager.Payout payout = payMilestones(List.of(20, 30), Map.of(), 2, calls, true, false);
+
+        assertEquals(new ActivityManager.Payout(1, true), payout);
+        assertEquals(2, calls.size());
+        assertEquals(20, calls.get(0).milestone());
+        assertEquals(20, calls.get(1).milestone());
+
+        assertEquals(20, ActivityManager.rollbackClaimedPoints(10, payout.paid(), List.of(20, 30)));
     }
 
     // The log names what was being paid, so a daily reward does not read as
