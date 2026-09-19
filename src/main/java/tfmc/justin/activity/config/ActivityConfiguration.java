@@ -145,6 +145,8 @@ public class ActivityConfiguration {
 
     private volatile int barMax;
     private volatile int dailyMax;
+    // Percent of dailyMax only the vote activity can fill, 0..100
+    private volatile int voteShare;
     // Ascending, deduped, every value inside 1..barMax. Never empty.
     private volatile List<Integer> milestones = List.of();
     private volatile int barLength;
@@ -219,6 +221,8 @@ public class ActivityConfiguration {
 
         barMax = Math.max(1, config.getInt("bar.max", 50));
         dailyMax = Math.max(1, config.getInt("bar.daily-max", 10));
+        voteShare = parseVoteShare(config);
+        warnIfVoteShareMisfits();
         // After barMax: every milestone is validated against it
         milestones = loadMilestones(config.getIntegerList("bar.milestones"));
         // After milestones: drop_N names the Nth of them. Before the path
@@ -1152,6 +1156,32 @@ public class ActivityConfiguration {
     }
 
     // ====================================
+    // bar.vote-share only makes sense when voting can actually fill what it
+    // keeps back: a vote activity every player is handed each day, with a
+    // daily-cap that leaves room for the whole reserved share.
+    // ====================================
+    private void warnIfVoteShareMisfits() {
+        if (voteShare == 0) {
+            return;
+        }
+        ActivityDef vote = activities.get("vote");
+        if (vote == null) {
+            plugin.getLogger().warning("bar.vote-share is " + voteShare + " but there is no 'vote' activity"
+                + " - the share is not applied.");
+            return;
+        }
+        if (!guaranteedActivities.contains("vote")) {
+            plugin.getLogger().warning("bar.vote-share is " + voteShare + " but 'vote' is not daily-guaranteed"
+                + " - on a day it is not drawn, the reserved share cannot be earned.");
+        }
+        int reserved = dailyMax - nonVoteDailyMax();
+        if (vote.dailyCap() > 0 && vote.dailyCap() < reserved) {
+            plugin.getLogger().warning("activities.vote.daily-cap " + vote.dailyCap() + " is below the "
+                + reserved + " points bar.vote-share keeps for voting - the rest of that share is never earned.");
+        }
+    }
+
+    // ====================================
     // A player can only earn from the TASKS_PER_DAY activities drawn for them,
     // so the daily ceiling is the worst draw they can get: the lowest
     // TASKS_PER_DAY daily-caps, itself capped by bar.daily-max. Seven days of
@@ -1171,9 +1201,14 @@ public class ActivityConfiguration {
             }
         }
 
-        String warning = unreachableWarning(caps, activities.size(), dailyMax, milestones.get(0));
+        // Counted for a player who never votes: with a vote activity loaded,
+        // bar.vote-share keeps part of the day out of their reach
+        boolean shared = voteShare > 0 && activities.containsKey("vote");
+        String warning = unreachableWarning(caps, activities.size(), shared ? nonVoteDailyMax() : dailyMax,
+            milestones.get(0));
         if (warning != null) {
-            plugin.getLogger().warning(warning);
+            plugin.getLogger().warning(shared ? warning + " This is without voting: bar.vote-share keeps "
+                + (dailyMax - nonVoteDailyMax()) + " of bar.daily-max for it." : warning);
         }
     }
 
@@ -1433,6 +1468,22 @@ public class ActivityConfiguration {
 
     public int dailyMax() {
         return dailyMax;
+    }
+
+    // Most points every activity but vote can add together in one day
+    public int nonVoteDailyMax() {
+        return nonVoteDailyMax(dailyMax, voteShare);
+    }
+
+    // Rounded down, so the share kept for voting rounds up
+    static int nonVoteDailyMax(int dailyMax, int voteShare) {
+        return dailyMax * (100 - voteShare) / 100;
+    }
+
+    // bar.vote-share, clamped to 0-100 with a warning. Package-private for
+    // the test, which has no server to run load() on.
+    int parseVoteShare(ConfigurationSection config) {
+        return clamped(config, "bar.vote-share", 50, 0, 100);
     }
 
     public List<Integer> milestones() {

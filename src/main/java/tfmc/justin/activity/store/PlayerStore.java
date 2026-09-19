@@ -5,6 +5,7 @@ import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
 import tfmc.justin.activity.config.ActivityConfiguration;
+import tfmc.justin.activity.models.ActivityDef;
 import tfmc.justin.activity.models.PlayerData;
 
 import java.io.File;
@@ -142,7 +143,8 @@ public class PlayerStore {
             return;
         }
 
-        players.put(uuid, parse(entry, config.barMax(), config.dailyMax(), id -> config.activity(id) != null));
+        players.put(uuid, parse(entry, config.barMax(), config.dailyMax(), id -> config.activity(id) != null,
+            config.activity("vote")));
     }
 
     // ====================================
@@ -153,6 +155,13 @@ public class PlayerStore {
     // ====================================
     static PlayerData readEntry(ConfigurationSection root, String key, int barMax, int dailyMax,
                                 Predicate<String> known) {
+        return readEntry(root, key, barMax, dailyMax, known, null);
+    }
+
+    // Same, with the loaded vote activity (or null) for a row saved before
+    // vote-points existed
+    static PlayerData readEntry(ConfigurationSection root, String key, int barMax, int dailyMax,
+                                Predicate<String> known, ActivityDef vote) {
         ConfigurationSection entry = root.getConfigurationSection(key);
         if (entry == null) {
             return null;
@@ -164,14 +173,14 @@ public class PlayerStore {
             return null;
         }
 
-        return parse(entry, barMax, dailyMax, known);
+        return parse(entry, barMax, dailyMax, known, vote);
     }
 
     // ====================================
     // One entry's values, with the key already dealt with by the caller.
     // ====================================
     private static PlayerData parse(ConfigurationSection entry, int barMax, int dailyMax,
-                                    Predicate<String> known) {
+                                    Predicate<String> known, ActivityDef vote) {
         Map<String, Integer> daily = new HashMap<>();
         ConfigurationSection dailySection = entry.getConfigurationSection("daily");
         if (dailySection != null) {
@@ -207,6 +216,11 @@ public class PlayerStore {
             entry.getString("day", ""), claimedPoints, daily, tasks, entry.getStringList("revealed"), rerolls);
         // A row written before daily-reward existed has no key: not claimed
         data.setDailyRewardClaimed(entry.getBoolean("daily-reward-claimed", false));
+        // A row written before vote-share existed has no key: today's vote
+        // count's worth is the best guess of what voting put in. setVotePoints
+        // clamps it to dailyPoints, and nothing already earned is taken back.
+        data.setVotePoints(entry.contains("vote-points") ? entry.getInt("vote-points")
+            : vote == null ? 0 : vote.worth(daily.getOrDefault(vote.id(), 0)));
         return data;
     }
 
@@ -392,6 +406,7 @@ public class PlayerStore {
             yaml.set(path + ".day", data.dayKey());
             yaml.set(path + ".claimed-points", data.claimedPoints());
             yaml.set(path + ".daily-points", data.dailyPoints());
+            yaml.set(path + ".vote-points", data.votePoints());
             yaml.set(path + ".rerolls", data.rerolls());
             yaml.set(path + ".daily-reward-claimed", data.dailyRewardClaimed());
             yaml.set(path + ".daily", new LinkedHashMap<>(data.daily()));

@@ -260,7 +260,11 @@ public class ActivityManager {
         }
 
         RecordResult result = gated
-            ? data.record(amount, def, config.barMax(), config.dailyMax(), config.milestones())
+            // No vote activity loaded: nothing could fill the reserved share,
+            // so there is no share to keep
+            ? data.record(amount, def, config.barMax(), config.dailyMax(),
+                config.activity("vote") == null ? config.dailyMax() : config.nonVoteDailyMax(),
+                config.milestones())
             : data.recordForced(amount, def, config.barMax(), config.milestones());
         return credited(uuid, data, result, Utils.colorize(def.display()));
     }

@@ -41,6 +41,11 @@ public class PlayerData {
     // Points accepted today across all activities; anything past dailyMax is
     // dropped and never reaches the weekly total
     private volatile int dailyPoints;
+    // The part of dailyPoints the vote activity put in through the gated
+    // path - what bar.vote-share leaves out of the non-vote share. Never above
+    // dailyPoints. A forced vote does not raise it, as it does not raise
+    // dailyPoints either.
+    private volatile int votePoints;
     private volatile String weekKey;
     private volatile String dayKey;
     // ====================================
@@ -110,6 +115,7 @@ public class PlayerData {
             points = 0;
             claimedPoints = 0;
             dailyPoints = 0;
+            votePoints = 0;
             daily.clear();
             clearTasks();
             rerolls = 0;
@@ -120,6 +126,7 @@ public class PlayerData {
 
         if (!this.dayKey.equals(dayKey)) {
             dailyPoints = 0;
+            votePoints = 0;
             daily.clear();
             clearTasks();
             rerolls = 0;
@@ -138,6 +145,16 @@ public class PlayerData {
     // day by the difference; acceptable
     // ====================================
     public RecordResult record(int amount, ActivityDef def, int max, int dailyMax, List<Integer> milestones) {
+        return record(amount, def, max, dailyMax, dailyMax, milestones);
+    }
+
+    // ====================================
+    // Same, with bar.vote-share: every activity but vote shares nonVoteMax of
+    // the day, and today's non-vote points are dailyPoints minus votePoints.
+    // A nonVoteMax equal to dailyMax is no share at all.
+    // ====================================
+    public RecordResult record(int amount, ActivityDef def, int max, int dailyMax, int nonVoteMax,
+                               List<Integer> milestones) {
         int before = daily.getOrDefault(def.id(), 0);
         // Saturate: a bogus /activity add 2000000000 twice must not wrap the
         // counter negative and hand out awards all over again
@@ -147,9 +164,12 @@ public class PlayerData {
         int earned = def.worth(after) - def.worth(before);
         // Everything past today's budget is lost outright - it must not reach
         // the weekly bar, today or later
-        int budget = Math.max(0, dailyMax - dailyPoints);
+        int dailyBudget = Math.max(0, dailyMax - dailyPoints);
+        boolean isVote = def.id().equals("vote");
+        int budget = isVote ? dailyBudget
+            : Math.min(dailyBudget, Math.max(0, nonVoteMax - (dailyPoints - votePoints)));
         if (earned > 0 && budget <= 0) {
-            return new RecordResult(0, 0, Recorded.DAILY_MAX);
+            return new RecordResult(0, 0, dailyBudget <= 0 ? Recorded.DAILY_MAX : Recorded.VOTE_SHARE);
         }
         earned = Math.min(earned, budget);
         if (earned <= 0) {
@@ -162,6 +182,9 @@ public class PlayerData {
         int pointsBefore = points;
         addPoints(earned, max);
         dailyPoints += points - pointsBefore;
+        if (isVote) {
+            votePoints += points - pointsBefore;
+        }
         if (points == pointsBefore) {
             return new RecordResult(0, 0, Recorded.WEEKLY_MAX);
         }
@@ -260,6 +283,7 @@ public class PlayerData {
         points = 0;
         claimedPoints = 0;
         dailyPoints = 0;
+        votePoints = 0;
         daily.clear();
         clearTasks();
         rerolls = 0;
@@ -300,7 +324,11 @@ public class PlayerData {
         // lowered and then raised back), before - points is negative and
         // must not be allowed to increase dailyPoints instead.
         int refund = Math.max(0, before - points);
+        int dailyBefore = dailyPoints;
         dailyPoints = Math.max(0, dailyPoints - refund);
+        // The carried points keep the day's vote/non-vote mix, so votes carried
+        // past a reroll still do not count against the non-vote share
+        votePoints = dailyBefore == 0 ? 0 : (int) ((long) votePoints * dailyPoints / dailyBefore);
         daily.clear();
         clearTasks();
         tasks.addAll(newTasks);
@@ -458,6 +486,16 @@ public class PlayerData {
 
     public int dailyPoints() {
         return dailyPoints;
+    }
+
+    public int votePoints() {
+        return votePoints;
+    }
+
+    // The store's, for the persisted value; clamped to 0..dailyPoints so the
+    // non-vote share can never read as negative or past the day
+    public void setVotePoints(int votePoints) {
+        this.votePoints = Math.max(0, Math.min(votePoints, dailyPoints));
     }
 
     public int count(String id) {

@@ -404,7 +404,7 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
         Added added = add(target.getUniqueId(), args[2], count, forced(args));
         Outcome outcome = added.outcome();
         sender.sendMessage(switch (outcome) {
-            case ADDED, CAPPED_ACTIVITY, CAPPED_DAILY, CAPPED_WEEKLY, CLAMPED_WEEKLY ->
+            case ADDED, CAPPED_ACTIVITY, CAPPED_DAILY, CAPPED_VOTE_SHARE, CAPPED_WEEKLY, CLAMPED_WEEKLY ->
                 messages().get(
                     outcome == Outcome.ADDED && added.points() > 0 ? ADD_DONE_POINTS : outcome.messageKey(),
                     "%count%", count, "%activity%", args[2], "%player%", name(target, args[1]),
@@ -476,6 +476,7 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
         NOT_A_TASK("admin.add-not-a-task"),
         CAPPED_ACTIVITY("admin.add-capped-activity"),
         CAPPED_DAILY("admin.add-capped-daily"),
+        CAPPED_VOTE_SHARE("admin.add-capped-vote-share"),
         CAPPED_WEEKLY("admin.add-capped-weekly"),
         // Forced only: some points landed and bar.max swallowed the rest
         CLAMPED_WEEKLY("admin.add-clamped-weekly"),
@@ -509,6 +510,7 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
             case NOT_A_TASK -> Outcome.NOT_A_TASK;
             case ACTIVITY_CAP -> Outcome.CAPPED_ACTIVITY;
             case DAILY_MAX -> Outcome.CAPPED_DAILY;
+            case VOTE_SHARE -> Outcome.CAPPED_VOTE_SHARE;
             case WEEKLY_MAX -> Outcome.CAPPED_WEEKLY;
             case WEEKLY_CLAMPED -> Outcome.CLAMPED_WEEKLY;
             case UNKNOWN -> Outcome.UNKNOWN_ACTIVITY;

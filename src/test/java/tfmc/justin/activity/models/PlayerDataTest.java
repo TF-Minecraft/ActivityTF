@@ -540,6 +540,93 @@ class PlayerDataTest {
         assertEquals(5, data.dailyPoints());
     }
 
+    // ====================================
+    // bar.vote-share 50 on a daily-max of 10: everything but vote shares 5
+    // ====================================
+    private RecordResult shared(PlayerData data, ActivityDef def, int amount, int nonVoteMax) {
+        return data.record(amount, def, MAX, 10, nonVoteMax, MILESTONES);
+    }
+
+    // A forced vote is not a vote point of the day: it must not open the
+    // non-vote share up past its 5
+    @Test
+    void aForcedVoteDoesNotWidenTheNonVoteShare() {
+        PlayerData data = data();
+        forced(data, VOTE, 5, MAX);
+
+        int nonVote = shared(data, UNCAPPED, 6, 5).pointsAwarded() + shared(data, UNCAPPED, 7, 5).pointsAwarded();
+
+        assertEquals(5, nonVote);
+        assertEquals(0, data.votePoints());
+    }
+
+    // 5 vote + 5 non-vote, then a reroll the claimed 8 lets only 2 come back
+    // off: the 8 carried keep the day's half-and-half mix, so 4 non-vote are
+    // spent and 1 is left - not 0, as if every carried point were non-vote
+    @Test
+    void votePointsCarriedPastARerollStillCountAsVote() {
+        PlayerData data = data();
+        shared(data, VOTE, 5, 5);
+        shared(data, UNCAPPED, 5, 5);
+        data.setClaimedPoints(8);
+
+        data.reroll(List.of("free", "vote"), MAX);
+
+        assertEquals(8, data.dailyPoints());
+        assertEquals(4, data.votePoints());
+        assertEquals(1, shared(data, UNCAPPED, 13, 5).pointsAwarded());
+        assertEquals(1, shared(data, VOTE, 5, 5).pointsAwarded());
+        assertEquals(10, data.dailyPoints());
+    }
+
+    @Test
+    void theDayRollClearsVotePoints() {
+        PlayerData data = data();
+        shared(data, VOTE, 5, 5);
+
+        data.roll(WEEK, "2026-09-10");
+
+        assertEquals(0, data.votePoints());
+    }
+
+    @Test
+    void nonVoteActivitiesStopAtTheirShareAndVoteFillsTheRest() {
+        PlayerData data = data();
+
+        assertEquals(5, shared(data, UNCAPPED, 13, 5).pointsAwarded());
+        assertEquals(Recorded.VOTE_SHARE, shared(data, UNCAPPED, 1, 5).outcome());
+        assertEquals(5, shared(data, VOTE, 5, 5).pointsAwarded());
+        assertEquals(10, data.dailyPoints());
+    }
+
+    @Test
+    void votingFirstLeavesTheNonVoteShareOpen() {
+        PlayerData data = data();
+
+        assertEquals(5, shared(data, VOTE, 5, 5).pointsAwarded());
+        assertEquals(5, shared(data, UNCAPPED, 13, 5).pointsAwarded());
+        assertEquals(10, data.dailyPoints());
+    }
+
+    // A row saved before vote-share existed: 8 non-vote points already in.
+    // Nothing is taken back, no more non-vote lands, vote still gets the rest.
+    @Test
+    void nonVotePointsAlreadyOverTheShareAreKept() {
+        PlayerData data = new PlayerData(8, 8, WEEK, DAY, 0, Map.of("free", 8));
+
+        assertEquals(0, shared(data, UNCAPPED, 3, 5).pointsAwarded());
+        assertEquals(2, shared(data, VOTE, 5, 5).pointsAwarded());
+        assertEquals(10, data.dailyPoints());
+    }
+
+    @Test
+    void aZeroVoteShareIsTheOldBehaviour() {
+        PlayerData data = data();
+
+        assertEquals(10, shared(data, UNCAPPED, 13, 10).pointsAwarded());
+        assertEquals(0, shared(data, VOTE, 5, 10).pointsAwarded());
+    }
+
     @Test
     void zeroDailyBudgetAwardsNothing() {
         PlayerData data = data();

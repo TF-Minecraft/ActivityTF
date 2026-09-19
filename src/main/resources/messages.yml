@@ -44,6 +44,7 @@ admin:
   add-not-a-task: "&cAdded nothing: %activity% is not one of %player%'s revealed tasks today. Use --force to credit it anyway."
   add-capped-activity: "&eAdded %count% to %activity% for %player%, but no points: %activity% has already given all it can today."
   add-capped-daily: "&eAdded %count% to %activity% for %player%, but no points: %player% has already earned today's maximum."
+  add-capped-vote-share: "&eAdded %count% to %activity% for %player%, but no points: %player% has used today's non-vote share - voting can still add the rest."
   add-capped-weekly: "&eAdded %count% to %activity% for %player%, but no points: %player%'s weekly bar is already full."
   add-clamped-weekly: "&eAdded %count% to %activity% for %player%, but only &f%points%&e points fit: %player%'s weekly bar hit its maximum of %max%."
   addpoints-done: "&aAdded &f%points%&a points to %player%."
