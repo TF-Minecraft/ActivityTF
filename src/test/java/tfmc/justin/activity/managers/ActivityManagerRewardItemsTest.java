@@ -642,8 +642,10 @@ class ActivityManagerRewardItemsTest {
 
     @Test
     void aFixedDropIsPaidWithoutDrawingFromThePool() {
-        RewardEntry paid = ActivityManager.rewardFor(10, Map.of(10, DIAMONDS), 1, List.of(POOLED), NO_DRAW);
+        List<RewardEntry> spins = ActivityManager.rewardFor(10, Map.of(10, DIAMONDS), 1, List.of(POOLED), NO_DRAW);
 
+        assertEquals(1, spins.size());
+        RewardEntry paid = spins.get(0);
         assertEquals(DIAMONDS.items(), paid.items());
         assertTrue(paid.commands().isEmpty());
     }
@@ -651,12 +653,12 @@ class ActivityManagerRewardItemsTest {
     @Test
     void aPoolMilestoneStillDrawsFromThePool() {
         List<List<RewardEntry>> drawnFrom = new ArrayList<>();
-        RewardEntry drawn = ActivityManager.rewardFor(20, Map.of(10, DIAMONDS), 1, List.of(POOLED), pool -> {
+        List<RewardEntry> drawn = ActivityManager.rewardFor(20, Map.of(10, DIAMONDS), 1, List.of(POOLED), pool -> {
             drawnFrom.add(pool);
             return pool.get(0);
         });
 
-        assertEquals(POOLED, drawn);
+        assertEquals(List.of(POOLED), drawn);
         assertEquals(List.of(List.of(POOLED)), drawnFrom);
     }
 
@@ -664,9 +666,66 @@ class ActivityManagerRewardItemsTest {
     @Test
     void aFixedDropsChatLineCarriesTheMultipliedAmount() {
         assertEquals("#50d990x3 #b8906eDiamond",
-            ActivityManager.rewardFor(10, Map.of(10, DIAMONDS), 1, List.of(), NO_DRAW).display());
+            ActivityManager.rewardFor(10, Map.of(10, DIAMONDS), 1, List.of(), NO_DRAW).get(0).display());
         assertEquals("#50d990x6 #b8906eDiamond",
-            ActivityManager.rewardFor(10, Map.of(10, DIAMONDS), 2, List.of(), NO_DRAW).display());
+            ActivityManager.rewardFor(10, Map.of(10, DIAMONDS), 2, List.of(), NO_DRAW).get(0).display());
+    }
+
+    // A fixed drop has nothing to spin: one payout, its amount left as
+    // written for giveItems to multiply (see theMultiplierMultipliesTheConfiguredAmount)
+    @Test
+    void aFixedDropIsOnePayoutAtAnyMultiplier() {
+        List<RewardEntry> spins = ActivityManager.rewardFor(10, Map.of(10, DIAMONDS), 3, List.of(POOLED), NO_DRAW);
+
+        assertEquals(1, spins.size());
+        assertEquals(DIAMONDS.items(), spins.get(0).items());
+        assertEquals("#50d990x9 #b8906eDiamond", spins.get(0).display());
+    }
+
+    // ====================================
+    // rewards.multiplier on a pool milestone is the number of spins: that
+    // many independent draws, each paid at face value
+    // ====================================
+    private static final RewardEntry STEEL_PICK = new RewardEntry(1, "Steel Pickaxe", List.of("say pick"),
+        List.of(new RewardEntry.Item("m.tool.steel_pickaxe", 1)));
+
+    @Test
+    void aPoolMilestoneIsSpunMultiplierTimes() {
+        List<RewardEntry> pool = List.of(POOLED, STEEL_PICK);
+        List<RewardEntry> rolls = new ArrayList<>(List.of(STEEL_PICK, POOLED, STEEL_PICK));
+        List<List<RewardEntry>> drawnFrom = new ArrayList<>();
+
+        List<RewardEntry> spins = ActivityManager.rewardFor(20, Map.of(10, DIAMONDS), 3, pool, p -> {
+            drawnFrom.add(p);
+            return rolls.remove(0);
+        });
+
+        assertEquals(List.of(STEEL_PICK, POOLED, STEEL_PICK), spins);
+        assertEquals(List.of(pool, pool, pool), drawnFrom);
+    }
+
+    @Test
+    void aMultiplierOfOneSpinsThePoolOnce() {
+        int[] draws = {0};
+        List<RewardEntry> spins = ActivityManager.rewardFor(20, Map.of(), 1, List.of(POOLED, STEEL_PICK), p -> {
+            draws[0]++;
+            return p.get(1);
+        });
+
+        assertEquals(List.of(STEEL_PICK), spins);
+        assertEquals(1, draws[0]);
+    }
+
+    // With replacement: one entry can win every spin, and each spin is the
+    // entry as configured, not a multiplied copy
+    @Test
+    void spinsCanRepeatAnEntryAtItsOwnAmount() {
+        List<RewardEntry> spins = ActivityManager.rewardFor(20, Map.of(), 2, List.of(DIAMONDS, POOLED),
+            p -> p.get(0));
+
+        assertEquals(List.of(DIAMONDS, DIAMONDS), spins);
+        assertEquals(3, spins.get(1).items().get(0).amount());
+        assertEquals("Diamond", spins.get(1).display());
     }
 
     // Whether claim() needs a usable pool at all: only when a due milestone
@@ -684,6 +743,99 @@ class ActivityManagerRewardItemsTest {
     @Test
     void noDropsAtAllNeedsThePool() {
         assertTrue(ActivityManager.needsPool(List.of(10), Map.of()));
+    }
+
+    // ====================================
+    // claim()'s payout loop: what each spin is paid at, and what one failed
+    // spin costs. The pay function records every call and answers from a
+    // script, so a failure can be put on any spin.
+    // ====================================
+    private record PaidSpin(int milestone, RewardEntry entry, int multiplier) {}
+
+    private static final Function<List<RewardEntry>, RewardEntry> FIRST = p -> p.get(0);
+
+    private ActivityManager.Payout payMilestones(List<Integer> due, Map<Integer, RewardEntry> drops,
+                                                 int multiplier, List<PaidSpin> calls, boolean... answers) {
+        int[] next = {0};
+        return ActivityManager.payMilestones(due, drops, multiplier, List.of(POOLED), FIRST,
+            (milestone, entry, m) -> {
+                calls.add(new PaidSpin(milestone, entry, m));
+                return next[0] < answers.length ? answers[next[0]++] : true;
+            }, "Steve/uuid", logger());
+    }
+
+    @Test
+    void aPoolSpinIsPaidAtMultiplierOne() {
+        List<PaidSpin> calls = new ArrayList<>();
+
+        ActivityManager.Payout payout = payMilestones(List.of(20), Map.of(), 3, calls);
+
+        assertEquals(new ActivityManager.Payout(1, false), payout);
+        assertEquals(List.of(new PaidSpin(20, POOLED, 1), new PaidSpin(20, POOLED, 1),
+            new PaidSpin(20, POOLED, 1)), calls);
+    }
+
+    @Test
+    void aFixedDropIsPaidAtTheConfiguredMultiplier() {
+        List<PaidSpin> calls = new ArrayList<>();
+
+        ActivityManager.Payout payout = payMilestones(List.of(10), Map.of(10, DIAMONDS), 3, calls);
+
+        assertEquals(new ActivityManager.Payout(1, false), payout);
+        assertEquals(1, calls.size());
+        assertEquals(3, calls.get(0).multiplier());
+        assertEquals(DIAMONDS.items(), calls.get(0).entry().items());
+    }
+
+    @Test
+    void aFailedSpinDoesNotStopTheOthers() {
+        List<PaidSpin> calls = new ArrayList<>();
+
+        ActivityManager.Payout payout = payMilestones(List.of(20), Map.of(), 3, calls, true, false, true);
+
+        assertEquals(new ActivityManager.Payout(1, true), payout);
+        assertEquals(3, calls.size());
+        assertTrue(loggedAtLeastOne(Level.SEVERE,
+            "Milestone 20 paid 2 of 3 spins for Steve/uuid; it stays claimed, so 1 spin is owed - see the "
+                + "'milestone 20' lines above for what failed."));
+    }
+
+    // Not memoised: every partial milestone is logged
+    @Test
+    void everyPartialMilestoneIsLogged() {
+        payMilestones(List.of(20), Map.of(), 2, new ArrayList<>(), false, true);
+        payMilestones(List.of(20), Map.of(), 2, new ArrayList<>(), false, true);
+
+        assertEquals(2, logged.stream().filter(r -> r.getLevel() == Level.SEVERE).count());
+    }
+
+    @Test
+    void aMilestoneWhoseSpinsAllFailIsNotCounted() {
+        List<PaidSpin> calls = new ArrayList<>();
+
+        ActivityManager.Payout payout = payMilestones(List.of(20, 30), Map.of(), 2, calls, false, false);
+
+        assertEquals(new ActivityManager.Payout(0, true), payout);
+        // Milestone 30 is never spun: it stays claimable with 20
+        assertEquals(2, calls.size());
+        assertFalse(loggedAtLeastOne(Level.SEVERE, "spins for"));
+    }
+
+    // A milestone that only partly pays stops the loop before the next
+    // milestone is even attempted, and rollbackClaimedPoints keeps the
+    // partial one claimed while rolling the untouched one back.
+    @Test
+    void aPartialMilestoneStopsBeforeTheNextOneAndStaysClaimed() {
+        List<PaidSpin> calls = new ArrayList<>();
+
+        ActivityManager.Payout payout = payMilestones(List.of(20, 30), Map.of(), 2, calls, true, false);
+
+        assertEquals(new ActivityManager.Payout(1, true), payout);
+        assertEquals(2, calls.size());
+        assertEquals(20, calls.get(0).milestone());
+        assertEquals(20, calls.get(1).milestone());
+
+        assertEquals(20, ActivityManager.rollbackClaimedPoints(10, payout.paid(), List.of(20, 30)));
     }
 
     // The log names what was being paid, so a daily reward does not read as

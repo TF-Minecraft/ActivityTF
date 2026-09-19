@@ -458,7 +458,7 @@ public class ActivityManager {
 
     // ====================================
     // Hands over every milestone the player has reached but not yet claimed:
-    // its fixed rewards.drops item, or else one draw from the reward pool.
+    // its fixed rewards.drops item, or else rewards.multiplier draws from the reward pool.
     // Only ever called for an online player (a GUI click), so %player% always
     // resolves. Returns how
     // many milestones were actually paid: 0 covers both "nothing was due" and
@@ -553,16 +553,18 @@ public class ActivityManager {
             return 0;
         }
 
-        int paid = 0;
-        for (int i = 0; i < due.size(); i++) {
-            RewardEntry drawn = rewardFor(due.get(i), drops, config.rewardMultiplier(), runnablePool,
-                ActivityManager::draw);
-            if (drawn == null || !dispatchRewards(player, drawn, "milestone " + due.get(i))) {
-                break;
-            }
-            paid++;
-            player.sendMessage(messages.get("reward-claimed", "%reward%", Utils.colorize(drawn.display())));
-        }
+        // Snapshotted with the pool (see payMilestones)
+        Payout payout = payMilestones(due, drops, config.rewardMultiplier(), runnablePool, ActivityManager::draw,
+            (milestone, drawn, itemMultiplier) -> {
+                if (!dispatchRewards(player, drawn, "milestone " + milestone, itemMultiplier)) {
+                    return false;
+                }
+                player.sendMessage(messages.get("reward-claimed", "%reward%", Utils.colorize(drawn.display())));
+                return true;
+            },
+            Utils.safeForLog(player.getName()) + "/" + player.getUniqueId(), plugin.getLogger());
+        int paid = payout.paid();
+        boolean spinFailed = payout.failed();
 
         // ====================================
         // Only what actually went out stays paid for. The second save is the
@@ -600,8 +602,60 @@ public class ActivityManager {
             return paid;
         }
 
+        if (spinFailed) {
+            player.sendMessage(messages.get("reward-failed"));
+            return paid;
+        }
+
         playSound(player, config.barCompleteSound());
         return paid;
+    }
+
+    // ====================================
+    // The payout loop of claim(), in order over the due milestones: a fixed
+    // drop is paid multiplier times its amount, a pool milestone is spun
+    // multiplier times, each spin paid at multiplier 1. The spins are
+    // independent, so one that fails does not stop the rest. A milestone
+    // counts as paid once any of its spins went out - rolling it back would
+    // spin it again on the next click and pay those twice - and the spins it
+    // lost are logged every time, since only an operator can hand them over.
+    // A milestone that paid nothing ends the loop and stays claimable, as does
+    // every milestone after one that failed a spin. Takes the draw and the
+    // payout so the loop can be pinned headless.
+    // ====================================
+    record Payout(int paid, boolean failed) {}
+
+    @FunctionalInterface
+    interface SpinPayer {
+        boolean pay(int milestone, RewardEntry entry, int multiplier);
+    }
+
+    static Payout payMilestones(List<Integer> due, Map<Integer, RewardEntry> drops, int multiplier,
+                                List<RewardEntry> pool, Function<List<RewardEntry>, RewardEntry> draw,
+                                SpinPayer pay, String who, Logger logger) {
+        int paid = 0;
+        for (int milestone : due) {
+            int itemMultiplier = drops.containsKey(milestone) ? multiplier : 1;
+            List<RewardEntry> spins = rewardFor(milestone, drops, multiplier, pool, draw);
+            int spun = 0;
+            for (RewardEntry drawn : spins) {
+                if (drawn != null && pay.pay(milestone, drawn, itemMultiplier)) {
+                    spun++;
+                }
+            }
+            if (spun == 0) {
+                return new Payout(paid, true);
+            }
+            paid++;
+            if (spun < spins.size()) {
+                int owed = spins.size() - spun;
+                logger.severe("Milestone " + milestone + " paid " + spun + " of " + spins.size() + " spins for "
+                    + who + "; it stays claimed, so " + owed + (owed == 1 ? " spin is" : " spins are")
+                    + " owed - see the 'milestone " + milestone + "' lines above for what failed.");
+                return new Payout(paid, true);
+            }
+        }
+        return new Payout(paid, false);
     }
 
     // Does any of these milestones draw from the pool, rather than pay a
@@ -610,15 +664,23 @@ public class ActivityManager {
         return !drops.keySet().containsAll(milestones);
     }
 
-    // What one milestone pays: its fixed drop, and the pool is never drawn
-    // from for it; otherwise one draw. Takes the draw so a test can see it is
-    // skipped. A fixed drop's display is its bare item name (see
-    // loadMilestoneDrops) and gets the amount this payout hands over, with
-    // the same multiplier giveItems applies.
-    static RewardEntry rewardFor(int milestone, Map<Integer, RewardEntry> drops, int multiplier,
-                                 List<RewardEntry> pool, Function<List<RewardEntry>, RewardEntry> draw) {
+    // What one milestone pays, one element per spin: its fixed drop alone,
+    // and the pool is never drawn from for it; otherwise 'multiplier'
+    // independent draws, so the same entry can come up more than once. Takes
+    // the draw so a test can see it is skipped. A fixed drop's display is its
+    // bare item name (see loadMilestoneDrops) and gets the amount this payout
+    // hands over, with the same multiplier giveItems applies to it.
+    static List<RewardEntry> rewardFor(int milestone, Map<Integer, RewardEntry> drops, int multiplier,
+                                       List<RewardEntry> pool, Function<List<RewardEntry>, RewardEntry> draw) {
         RewardEntry fixed = drops.get(milestone);
-        return fixed == null ? draw.apply(pool) : withPaidAmount(fixed, multiplier);
+        if (fixed != null) {
+            return List.of(withPaidAmount(fixed, multiplier));
+        }
+        List<RewardEntry> spins = new ArrayList<>();
+        for (int spin = 0; spin < multiplier; spin++) {
+            spins.add(draw.apply(pool));
+        }
+        return spins;
     }
 
     // A fixed one-item entry with the amount it hands over put in front of its
@@ -646,7 +708,7 @@ public class ActivityManager {
     // ====================================
     public boolean claimDailyReward(Player player) {
         return claimDailyReward(player, path -> usable(resolveRewardItem(path)),
-            reward -> dispatchRewards(player, reward, "daily reward"));
+            reward -> dispatchRewards(player, reward, "daily reward", config.rewardMultiplier()));
     }
 
     // The resolve check and the payout passed in, so the rules above can be
@@ -791,9 +853,9 @@ public class ActivityManager {
     // Both halves always run: the commands are not skipped just because the
     // items already succeeded.
     // ====================================
-    private boolean dispatchRewards(Player player, RewardEntry entry, String at) {
+    private boolean dispatchRewards(Player player, RewardEntry entry, String at, int multiplier) {
         return dispatchRewards(
-            () -> giveItems(player, entry, config.rewardMultiplier(), at,
+            () -> giveItems(player, entry, multiplier, at,
                 this::resolveRewardItem, plugin.getLogger()),
             () -> dispatchCommands(player, entry.commands(), "reward", plugin.getLogger(), CONSOLE));
     }
@@ -889,10 +951,12 @@ public class ActivityManager {
     // InventoryClickEvent handler - so the inventory is touched inline.
     //
     // The resolved stack's own amount is whatever built it, so the total is set
-    // on a clone rather than multiplied: 'amount: 3' at rewards.multiplier 2
-    // means six items. That total goes over as whole stacks of at most the
-    // resolved item's own getMaxStackSize(), so six swords are six stacks of
-    // one and 192 diamonds are three of 64. The clone also keeps a stack TLibs
+    // on a clone rather than multiplied: 'amount: 3' at multiplier 2 means six
+    // items (a fixed drop or the daily reward; a pool spin is paid at multiplier 1,
+    // i.e. its amounts as written). That
+    // total goes over as whole stacks of at most the resolved item's own
+    // getMaxStackSize(), so six swords are six stacks of one and 192 diamonds
+    // are three of 64. The clone also keeps a stack TLibs
     // might be holding on to out of reach.
     // ====================================
     // 'at' names what is being paid in the log lines: "milestone 20", or

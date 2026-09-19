@@ -400,8 +400,8 @@ class ActivityConfigurationRewardsTest {
     }
 
     // ====================================
-    // rewards.multiplier - what every 'items:' amount is multiplied by at
-    // payout. Clamped the way every other numeric key here is; 0 or negative
+    // rewards.multiplier - the number of pool spins per milestone, and the
+    // amount multiplier for fixed drops and the daily reward. Clamped the way every other numeric key here is; 0 or negative
     // reads as 1, never as "hand nothing over".
     // ====================================
 
