@@ -6,7 +6,8 @@ import java.util.List;
 
 // ====================================
 // every: actions per award. points: awarded each time 'every' is met.
-// dailyCap: most points this activity can add in one day, 0 = unlimited.
+// dailyCap: most awards ('every' met) that count in one day, 0 = unlimited;
+// capPoints() is the same limit in points.
 // iconPath: the item path the GUI icon comes from - either the TLibs
 // m.<type>.<id> form or the normalized ItemsAdder ia.<namespace:id> one,
 // which is what routes ActivityGui.fromPath to the right hook - or null when
@@ -42,7 +43,13 @@ public record ActivityDef(String id, String display, Material icon, String iconP
     // What a day's action count is worth in points, after every and dailyCap
     public int worth(int count) {
         int raw = rawWorth(count);
-        return dailyCap > 0 ? Math.min(raw, dailyCap) : raw;
+        return dailyCap > 0 ? Math.min(raw, capPoints()) : raw;
+    }
+
+    // dailyCap in points - the most worth() can reach in a day. Saturates like
+    // rawWorth. Only meaningful when dailyCap > 0.
+    public int capPoints() {
+        return (int) Math.min(Integer.MAX_VALUE, (long) dailyCap * points);
     }
 
     // ====================================

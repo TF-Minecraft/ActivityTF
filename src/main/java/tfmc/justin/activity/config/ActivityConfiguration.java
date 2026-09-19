@@ -1175,8 +1175,9 @@ public class ActivityConfiguration {
                 + " - on a day it is not drawn, the reserved share cannot be earned.");
         }
         int reserved = dailyMax - nonVoteDailyMax();
-        if (vote.dailyCap() > 0 && vote.dailyCap() < reserved) {
-            plugin.getLogger().warning("activities.vote.daily-cap " + vote.dailyCap() + " is below the "
+        if (vote.dailyCap() > 0 && vote.capPoints() < reserved) {
+            plugin.getLogger().warning("activities.vote.daily-cap " + vote.dailyCap() + " (" + vote.capPoints()
+                + " points) is below the "
                 + reserved + " points bar.vote-share keeps for voting - the rest of that share is never earned.");
         }
     }
@@ -1184,7 +1185,7 @@ public class ActivityConfiguration {
     // ====================================
     // A player can only earn from the TASKS_PER_DAY activities drawn for them,
     // so the daily ceiling is the worst draw they can get: the lowest
-    // TASKS_PER_DAY daily-caps, itself capped by bar.daily-max. Seven days of
+    // TASKS_PER_DAY daily-caps in points, itself capped by bar.daily-max. Seven days of
     // that is the weekly ceiling - if it is under the first milestone, an
     // unlucky week can never be claimed on.
     //
@@ -1197,7 +1198,7 @@ public class ActivityConfiguration {
         List<Integer> caps = new ArrayList<>();
         for (ActivityDef def : activities.values()) {
             if (def.dailyCap() > 0) {
-                caps.add(def.dailyCap());
+                caps.add(def.capPoints());
             }
         }
 
@@ -1241,8 +1242,8 @@ public class ActivityConfiguration {
     }
 
     // ====================================
-    // The arithmetic above, pure so it can be tested: the daily-caps of the
-    // capped activities (in any order), how many activities are loaded in
+    // The arithmetic above, pure so it can be tested: the daily-caps, in
+    // points, of the capped activities (in any order), how many activities are loaded in
     // total, and bar.daily-max. Package-private for the test.
     // ====================================
     static long dailyCeiling(List<Integer> dailyCaps, int activityCount, int dailyMax) {

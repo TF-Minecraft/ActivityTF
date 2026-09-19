@@ -333,7 +333,7 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
             // stand in for a placeholder that has not been filled yet
             sender.sendMessage(data.isRevealed(id)
                 ? messages().get("admin.check-task-revealed", "%slot%", slot + 1, "%count%", count,
-                    "%points%", def == null ? 0 : def.worth(count), "%activity%", display)
+                    "%points%", def == null ? 0 : def.rawWorth(count), "%activity%", display)
                 : messages().get("admin.check-task-hidden", "%slot%", slot + 1, "%activity%", display));
         }
     }

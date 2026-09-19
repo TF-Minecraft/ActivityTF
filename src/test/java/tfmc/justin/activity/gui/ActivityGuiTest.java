@@ -275,6 +275,20 @@ class ActivityGuiTest {
             messages.get("gui.activity-lore-today-capped", "%today%", 0, "%cap%", 5)), lore);
     }
 
+    // daily-cap counts awards, so the lore's cap is shown in points
+    // (daily-cap × points) alongside today's points, and the bar reads full
+    @Test
+    void theTodayLineShowsTheCapInPoints() {
+        Messages messages = shippedMessages();
+        ActivityDef def = activity("injured", 1, 5, 1);
+
+        List<String> lore = ActivityGui.activityLore(messages, def, 3);
+
+        assertEquals(List.of(
+            messages.get("gui.activity-lore-progress", "%bar%", Utils.colorize(Bar.render(1, 1, 20))),
+            messages.get("gui.activity-lore-today-capped", "%today%", 5, "%cap%", 5)), lore);
+    }
+
     // No description configured - the lore is exactly what it has always been
     @Test
     void anActivityWithoutADescriptionRendersTheSameTwoLines() {

@@ -494,13 +494,21 @@ class ActivityAdminCommandTest {
 
     @Test
     void checkPrintsEveryFieldOfThePlayersDay() {
-        ActivityManager manager = manager();
+        // daily-cap 1 makes worth(3) = 1, distinct from rawWorth(3) = 3, so
+        // the "before any cap" text below is checked against the uncapped
+        // figure the message promises rather than the capped one - which
+        // 'check' must read off config's own def, not merely echo the count
+        ActivityManager manager = TestManagers.manager(
+            new ActivityDef("vote", "Vote", Material.PAPER, null, 1, 1, 1),
+            new ActivityDef("quest", "Quest", Material.PAPER, null, 2, 1, 0));
+        TestManagers.messages(manager);
+        TestManagers.rerollsPerDay(manager, 1);
         UUID player = UUID.randomUUID();
         manager.reveal(player, manager.tasks(player).tasks().indexOf("vote"));
         PlayerData data = manager.getStore().peek(player);
         // Straight through the POJO: crediting a point through the manager
         // would announce it, and that needs a running server
-        data.record(3, new ActivityDef("vote", "Vote", Material.PAPER, null, 2, 1, 0), 50, 10, List.of(10, 20));
+        data.record(3, new ActivityDef("vote", "Vote", Material.PAPER, null, 1, 1, 1), 50, 10, List.of(10, 20));
 
         Sender sender = admin();
         command(manager, player, "Steve").onCommand(sender.bukkit, null, "activity", new String[] {"check", "Steve"});
@@ -521,7 +529,7 @@ class ActivityAdminCommandTest {
         assertTrue(out.contains("Vote"), out);
         assertTrue(out.contains("revealed"), out);
         assertTrue(out.contains("count 3"), out);
-        assertTrue(out.contains("that count is worth 1 points before any cap"), out);
+        assertTrue(out.contains("that count is worth 3 points before any cap"), out);
         // and every slot of the draw is listed
         assertEquals(data.tasks().size(),
             sender.sent.stream().filter(line -> line.contains("revealed") || line.contains("hidden")).count());
