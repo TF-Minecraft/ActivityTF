@@ -101,10 +101,12 @@ class ActivityConfigurationRewardsTest {
     private static List<RewardEntry> loadRewardPool(String yamlContent) {
         try {
             ActivityConfiguration config = new ActivityConfiguration(stubPlugin());
-            Method method = ActivityConfiguration.class.getDeclaredMethod("loadRewardPool", FileConfiguration.class);
+            Method method = ActivityConfiguration.class.getDeclaredMethod("loadRewardPool",
+                ConfigurationSection.class, String.class);
             method.setAccessible(true);
             @SuppressWarnings("unchecked")
-            List<RewardEntry> result = (List<RewardEntry>) method.invoke(config, yaml(yamlContent));
+            List<RewardEntry> result = (List<RewardEntry>) method.invoke(config, yaml(yamlContent),
+                ActivityConfiguration.REWARDS_POOL_PATH);
             return result;
         } catch (ReflectiveOperationException e) {
             throw new RuntimeException(e);
@@ -748,9 +750,9 @@ class ActivityConfigurationRewardsTest {
     @Test
     void aPoolDailyRewardGroupLoadsBesideAnItemGroup() throws ReflectiveOperationException {
         ActivityConfiguration config = new ActivityConfiguration(stubPlugin());
-        Field pool = ActivityConfiguration.class.getDeclaredField("rewardPool");
+        Field pool = ActivityConfiguration.class.getDeclaredField("rewardPools");
         pool.setAccessible(true);
-        pool.set(config, List.of(FIXED));
+        pool.set(config, Map.of(ActivityConfiguration.DEFAULT_POOL, List.of(FIXED)));
         Map<String, RewardEntry> groups = loadDailyRewards(config, "daily-reward:\n  groups:\n"
             + "    legacy: pool\n    noble:\n      item: DIAMOND\n      amount: 2\n    old: ' POOL '\n");
 
@@ -1011,4 +1013,41 @@ class ActivityConfigurationRewardsTest {
             List.of(new RewardEntry.Item("m.material.steel", 3))), groups.get("ascended"));
         assertTrue(logged.isEmpty());
     }
+    @Test
+    void namedPoolsDoNotInheritPackagedRewardsAndReloadReplacesThem() throws Exception {
+        ActivityConfiguration config = new ActivityConfiguration(stubPlugin());
+        FileConfiguration input = yaml("rewards:\n  pools:\n    pool_prologue:\n"
+            + "      - commands: ['say prologue']\n    pool_end:\n      - commands: ['say end']\n");
+        input.setDefaults(yaml("rewards:\n  pool:\n    - commands: ['give diamond']\n"
+            + "  pool_hidden:\n    - commands: ['say hidden']\n"));
+        Method loader = ActivityConfiguration.class.getDeclaredMethod("loadRewardPools", ConfigurationSection.class);
+        loader.setAccessible(true);
+        Field pools = ActivityConfiguration.class.getDeclaredField("rewardPools");
+        pools.setAccessible(true);
+        pools.set(config, loader.invoke(config, input));
+        assertTrue(config.rewardPool().isEmpty());
+        assertTrue(config.rewardPool("pool_hidden").isEmpty());
+        assertEquals(List.of("say prologue"), config.rewardPool("POOL_PROLOGUE").getFirst().commands());
+        assertEquals(List.of("say end"), config.rewardPool("pool_end").getFirst().commands());
+        Map<String, RewardEntry> groups = loadDailyRewards(config,
+            "daily-reward:\n  groups:\n    vip: pool_end\n    member: pool_missing\n");
+        assertEquals("pool_end", ActivityConfiguration.referencedPool(groups.get("vip")));
+        assertEquals("pool_missing", ActivityConfiguration.referencedPool(groups.get("member")));
+        assertTrue(loggedContains("pool_missing"));
+        pools.set(config, loader.invoke(config, yaml("rewards:\n  pool_end: []\n")));
+        assertTrue(config.rewardPool("pool_prologue").isEmpty());
+        assertTrue(config.rewardPool("pool_end").isEmpty());
+    }
+
+    @Test
+    void missingNamedDropNeverFallsBackToDefaultPool() {
+        Map<Integer, RewardEntry> drops = loadDrops(List.of(10, 20),
+            "rewards:\n  drops:\n    drop_1: pool_prologue\n    drop_2: pool_end\n");
+        assertEquals("pool_prologue", ActivityConfiguration.referencedPool(drops.get(10)));
+        assertEquals("pool_end", ActivityConfiguration.referencedPool(drops.get(20)));
+        assertTrue(loggedContains("pool_prologue"));
+        assertTrue(loggedContains("pool_end"));
+        assertFalse(ActivityConfiguration.poolNeededButEmpty(List.of(), drops, List.of(10, 20)));
+    }
+
 }

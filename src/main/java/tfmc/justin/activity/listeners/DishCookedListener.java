@@ -26,6 +26,10 @@ public class DishCookedListener implements Listener {
             return;
         }
 
-        manager.recordAction(event.getPlayer().getUniqueId(), "cook_dish", 1);
+        if ("trough".equals(event.getMethod())) {
+            manager.recordAction(event.getPlayer().getUniqueId(), "animal_universal_feed", 1);
+        } else {
+            manager.recordAction(event.getPlayer().getUniqueId(), "cook_dish", 1);
+        }
     }
 }

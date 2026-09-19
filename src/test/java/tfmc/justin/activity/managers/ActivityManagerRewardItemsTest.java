@@ -640,9 +640,16 @@ class ActivityManagerRewardItemsTest {
         throw new AssertionError("a fixed drop drew from the pool");
     };
 
+    // The pool lookup rewardFor() and payMilestones() take: one pool under
+    // every name, which is what every case here but the named-pool ones needs
+    private static Function<String, List<RewardEntry>> pools(RewardEntry... entries) {
+        List<RewardEntry> pool = List.of(entries);
+        return name -> pool;
+    }
+
     @Test
     void aFixedDropIsPaidWithoutDrawingFromThePool() {
-        List<RewardEntry> spins = ActivityManager.rewardFor(10, Map.of(10, DIAMONDS), 1, List.of(POOLED), NO_DRAW);
+        List<RewardEntry> spins = ActivityManager.rewardFor(10, Map.of(10, DIAMONDS), 1, pools(POOLED), NO_DRAW);
 
         assertEquals(1, spins.size());
         RewardEntry paid = spins.get(0);
@@ -653,7 +660,7 @@ class ActivityManagerRewardItemsTest {
     @Test
     void aPoolMilestoneStillDrawsFromThePool() {
         List<List<RewardEntry>> drawnFrom = new ArrayList<>();
-        List<RewardEntry> drawn = ActivityManager.rewardFor(20, Map.of(10, DIAMONDS), 1, List.of(POOLED), pool -> {
+        List<RewardEntry> drawn = ActivityManager.rewardFor(20, Map.of(10, DIAMONDS), 1, pools(POOLED), pool -> {
             drawnFrom.add(pool);
             return pool.get(0);
         });
@@ -666,16 +673,16 @@ class ActivityManagerRewardItemsTest {
     @Test
     void aFixedDropsChatLineCarriesTheMultipliedAmount() {
         assertEquals("#50d990x3 #b8906eDiamond",
-            ActivityManager.rewardFor(10, Map.of(10, DIAMONDS), 1, List.of(), NO_DRAW).get(0).display());
+            ActivityManager.rewardFor(10, Map.of(10, DIAMONDS), 1, pools(), NO_DRAW).get(0).display());
         assertEquals("#50d990x6 #b8906eDiamond",
-            ActivityManager.rewardFor(10, Map.of(10, DIAMONDS), 2, List.of(), NO_DRAW).get(0).display());
+            ActivityManager.rewardFor(10, Map.of(10, DIAMONDS), 2, pools(), NO_DRAW).get(0).display());
     }
 
     // A fixed drop has nothing to spin: one payout, its amount left as
     // written for giveItems to multiply (see theMultiplierMultipliesTheConfiguredAmount)
     @Test
     void aFixedDropIsOnePayoutAtAnyMultiplier() {
-        List<RewardEntry> spins = ActivityManager.rewardFor(10, Map.of(10, DIAMONDS), 3, List.of(POOLED), NO_DRAW);
+        List<RewardEntry> spins = ActivityManager.rewardFor(10, Map.of(10, DIAMONDS), 3, pools(POOLED), NO_DRAW);
 
         assertEquals(1, spins.size());
         assertEquals(DIAMONDS.items(), spins.get(0).items());
@@ -695,7 +702,7 @@ class ActivityManagerRewardItemsTest {
         List<RewardEntry> rolls = new ArrayList<>(List.of(STEEL_PICK, POOLED, STEEL_PICK));
         List<List<RewardEntry>> drawnFrom = new ArrayList<>();
 
-        List<RewardEntry> spins = ActivityManager.rewardFor(20, Map.of(10, DIAMONDS), 3, pool, p -> {
+        List<RewardEntry> spins = ActivityManager.rewardFor(20, Map.of(10, DIAMONDS), 3, name -> pool, p -> {
             drawnFrom.add(p);
             return rolls.remove(0);
         });
@@ -707,7 +714,7 @@ class ActivityManagerRewardItemsTest {
     @Test
     void aMultiplierOfOneSpinsThePoolOnce() {
         int[] draws = {0};
-        List<RewardEntry> spins = ActivityManager.rewardFor(20, Map.of(), 1, List.of(POOLED, STEEL_PICK), p -> {
+        List<RewardEntry> spins = ActivityManager.rewardFor(20, Map.of(), 1, pools(POOLED, STEEL_PICK), p -> {
             draws[0]++;
             return p.get(1);
         });
@@ -720,7 +727,7 @@ class ActivityManagerRewardItemsTest {
     // entry as configured, not a multiplied copy
     @Test
     void spinsCanRepeatAnEntryAtItsOwnAmount() {
-        List<RewardEntry> spins = ActivityManager.rewardFor(20, Map.of(), 2, List.of(DIAMONDS, POOLED),
+        List<RewardEntry> spins = ActivityManager.rewardFor(20, Map.of(), 2, pools(DIAMONDS, POOLED),
             p -> p.get(0));
 
         assertEquals(List.of(DIAMONDS, DIAMONDS), spins);
@@ -757,7 +764,7 @@ class ActivityManagerRewardItemsTest {
     private ActivityManager.Payout payMilestones(List<Integer> due, Map<Integer, RewardEntry> drops,
                                                  int multiplier, List<PaidSpin> calls, boolean... answers) {
         int[] next = {0};
-        return ActivityManager.payMilestones(due, drops, multiplier, List.of(POOLED), FIRST,
+        return ActivityManager.payMilestones(due, drops, multiplier, pools(POOLED), FIRST,
             (milestone, entry, m) -> {
                 calls.add(new PaidSpin(milestone, entry, m));
                 return next[0] < answers.length ? answers[next[0]++] : true;
@@ -850,4 +857,23 @@ class ActivityManagerRewardItemsTest {
         assertTrue(loggedAtLeastOne(Level.WARNING, "(x2, daily reward) could not be resolved"));
         assertFalse(loggedAtLeastOne(Level.WARNING, "milestone"));
     }
+    @Test
+    void eachMilestoneDrawsOnlyItsNamedPoolWithIndependentSpins() {
+        Map<Integer, RewardEntry> drops = Map.of(10,
+            tfmc.justin.activity.config.ActivityConfiguration.poolRef("pool_prologue"), 20,
+            tfmc.justin.activity.config.ActivityConfiguration.poolRef("pool_end"));
+        Map<String, List<RewardEntry>> pools = Map.of("pool_prologue", List.of(DIAMONDS),
+            "pool_end", List.of(POOLED));
+        List<PaidSpin> calls = new ArrayList<>();
+        assertEquals(new ActivityManager.Payout(2, false), ActivityManager.payMilestones(
+            List.of(10, 20), drops, 2, name -> pools.getOrDefault(name, List.of()), FIRST,
+            (milestone, reward, multiplier) -> { calls.add(new PaidSpin(milestone, reward, multiplier)); return true; },
+            "test", logger()));
+        assertEquals(List.of(new PaidSpin(10, DIAMONDS, 1), new PaidSpin(10, DIAMONDS, 1),
+            new PaidSpin(20, POOLED, 1), new PaidSpin(20, POOLED, 1)), calls);
+        assertEquals(new ActivityManager.Payout(0, true), ActivityManager.payMilestones(
+            List.of(10), drops, 1, name -> List.of(), pool -> RewardEntry.pick(pool, 0),
+            (milestone, reward, multiplier) -> { throw new AssertionError("Missing pool paid"); }, "test", logger()));
+    }
+
 }

@@ -430,14 +430,15 @@ activities:
     points: 1
     daily-cap: 1
     station: magic-station/iron-core
-  # Animal station
+  # Cooking trough: fill with wheat/vegetables, then empty-hand click to mix.
   animal_universal_feed:
     display: "#e6ca40&lMix Universal Feed"
     material: WHEAT
     every: 2
     points: 1
     daily-cap: 1
-    station: animal-station/universal-feed
+    description: "Fill a trough with wheat or vegetables and collect the feed."
+  # Animal station
   animal_whistle:
     display: "#e6ca40&lCraft Animal Whistles"
     material: GOAT_HORN
@@ -495,6 +496,28 @@ rewards:
     # drop_3:
     #   item: m.material.steel
     #   amount: 3
+  # Named pools may be selected by any drop or daily-reward group:
+  # drops:
+  #   drop_1: pool_prologue
+  #   drop_2: pool_prologue
+  #   drop_3: pool_end
+  # pools:
+  #   pool_prologue:
+  #     - weight: 65
+  #       display: "#50d990x2 #7f7d80Ignitium"
+  #       items:
+  #         - item: m.materials.ignitium
+  #           amount: 2
+  #   pool_end:
+  #     - weight: 1
+  #       display: "End reward"
+  #       items:
+  #         - item: NETHERITE_INGOT
+  #           amount: 1
+  # Direct rewards.pool_<name> lists are also supported. Nested pools win
+  # if both locations define the same name. Names are case-insensitive.
+  # Missing/empty pools pay nothing and leave the claim available.
+  # An omitted rewards.pool never inherits the jar's example rewards.
   pool:
     - weight: 4
       display: "#50d990x3 #b8906eDiamond"
@@ -541,7 +564,7 @@ rewards:
 # permission) does count as in every group, and so gets the first one's
 # reward - there is no LuckPerms or Vault API here to ask about real group
 # membership instead. When several match, the first listed wins, so list the
-# highest rank first. Each value is 'pool' or a fixed item, as in
+# highest rank first. Each value is 'pool', 'pool_<name>', or a fixed item, as in
 # rewards.drops. 'pool' makes one weighted draw from rewards.pool, paid as
 # written (rewards.multiplier does not apply) and announced with the entry's
 # display; with rewards.pool empty it pays nothing, which load warns about.

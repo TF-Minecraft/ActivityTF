@@ -25,7 +25,9 @@ import tfmc.justin.activity.utils.Utils;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -37,6 +39,7 @@ import java.util.function.BooleanSupplier;
 import java.util.function.Predicate;
 import java.util.function.Function;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 import java.util.regex.Pattern;
 
 // ====================================
@@ -68,12 +71,21 @@ public class ActivityManager {
     private final Set<String> warnedStoreNotLoaded = new HashSet<>();
 
     // Same idea for an empty reward pool, which a player can hit at click rate
-    // - said once per load rather than once per click
-    private boolean warnedEmptyPool;
+    // - said once per load rather than once per click, and once per set of
+    // pools, so a second broken pool is not swallowed by the first one's line
+    private final Set<String> warnedEmptyPools = new HashSet<>();
+
+    // The config.yml paths of a set of pool names, for a log line an operator
+    // can go and edit: [pool, pool_skins] -> "rewards.pool, rewards.pool_skins"
+    private static String poolPaths(Set<String> pools) {
+        return pools.stream().map(name -> name.equals(ActivityConfiguration.DEFAULT_POOL) ? "rewards.pool"
+            : "rewards.pools." + name + " (or rewards." + name + ")")
+            .collect(Collectors.joining(", "));
+    }
 
     // Reward item paths already reported as unresolvable, so a broken config
     // warns once rather than once per claim click. Static because giveItems is,
-    // and cleared by reload() the way warnedEmptyPool is.
+    // and cleared by reload() the way warnedEmptyPools is.
     static final Set<String> reportedItemPaths = ConcurrentHashMap.newKeySet();
 
     // ====================================
@@ -510,19 +522,21 @@ public class ActivityManager {
             return 0;
         }
 
-        List<RewardEntry> pool = config.rewardPool();
         Map<Integer, RewardEntry> drops = config.milestoneDrops();
-        // The pool refusals below only apply when a due milestone draws from it
-        boolean needsPool = needsPool(due, drops);
+        // The pool refusals below only apply when a due milestone draws from
+        // one - and then only to the pools those milestones actually name
+        Set<String> needed = neededPools(due, drops);
+        boolean needsPool = !needed.isEmpty();
 
         // Nothing configured to hand over: burning the milestones here would
         // pay the player in silence. Load already warned about this, but a
         // claim is the moment an operator can tie the warning to a player.
-        if (needsPool && pool.isEmpty()) {
-            if (!warnedEmptyPool) {
-                warnedEmptyPool = true;
+        Set<String> empty = needed.stream().filter(name -> config.rewardPool(name).isEmpty())
+            .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (!empty.isEmpty()) {
+            if (warnedEmptyPools.add(String.join(", ", empty))) {
                 plugin.getLogger().warning("Handed nothing to " + player.getUniqueId()
-                    + ": rewards.pool has no usable entry, so the milestone stays claimable.");
+                    + ": " + poolPaths(empty) + " has no usable entry, so the milestone stays claimable.");
             }
             // The one refusal the player cannot read off the bar
             player.sendMessage(messages.get("reward-unconfigured"));
@@ -534,8 +548,15 @@ public class ActivityManager {
         // because it is the one refusal a player can trigger at click rate.
         // Entries that can pay only sometimes (a mix of %player% and %uuid%
         // commands) stay in; only the ones this name cannot pay at all drop out.
-        List<RewardEntry> runnablePool = runnableEntries(pool, player.getName());
-        if (needsPool && runnablePool.isEmpty()) {
+        // Narrowed once per pool and snapshotted, so a reward command that
+        // runs /activity reload cannot change what the rest of the loop
+        // hands out
+        Map<String, List<RewardEntry>> snapshot = new HashMap<>();
+        for (String name : needed) {
+            snapshot.put(name, runnableEntries(config.rewardPool(name), player.getName()));
+        }
+        Function<String, List<RewardEntry>> pools = name -> snapshot.getOrDefault(name, List.of());
+        if (needsPool && needed.stream().anyMatch(name -> pools.apply(name).isEmpty())) {
             plugin.getLogger().warning("No reward command could be run for '"
                 + Utils.safeForLog(player.getName()) + "': the name cannot be safely pasted into a console"
                 + " command. Use %uuid%-based reward commands to support Bedrock/unsafe names.");
@@ -559,7 +580,7 @@ public class ActivityManager {
         }
 
         // Snapshotted with the pool (see payMilestones)
-        Payout payout = payMilestones(due, drops, config.rewardMultiplier(), runnablePool, ActivityManager::draw,
+        Payout payout = payMilestones(due, drops, config.rewardMultiplier(), pools, ActivityManager::draw,
             (milestone, drawn, itemMultiplier) -> {
                 if (!dispatchRewards(player, drawn, "milestone " + milestone, itemMultiplier)) {
                     return false;
@@ -636,12 +657,13 @@ public class ActivityManager {
     }
 
     static Payout payMilestones(List<Integer> due, Map<Integer, RewardEntry> drops, int multiplier,
-                                List<RewardEntry> pool, Function<List<RewardEntry>, RewardEntry> draw,
+                                Function<String, List<RewardEntry>> pools,
+                                Function<List<RewardEntry>, RewardEntry> draw,
                                 SpinPayer pay, String who, Logger logger) {
         int paid = 0;
         for (int milestone : due) {
-            int itemMultiplier = drops.containsKey(milestone) ? multiplier : 1;
-            List<RewardEntry> spins = rewardFor(milestone, drops, multiplier, pool, draw);
+            int itemMultiplier = poolOf(drops.get(milestone)) == null ? multiplier : 1;
+            List<RewardEntry> spins = rewardFor(milestone, drops, multiplier, pools, draw);
             int spun = 0;
             for (RewardEntry drawn : spins) {
                 if (drawn != null && pay.pay(milestone, drawn, itemMultiplier)) {
@@ -663,10 +685,32 @@ public class ActivityManager {
         return new Payout(paid, false);
     }
 
-    // Does any of these milestones draw from the pool, rather than pay a
+    // Does any of these milestones draw from a pool, rather than pay a
     // fixed rewards.drops item?
     public static boolean needsPool(List<Integer> milestones, Map<Integer, RewardEntry> drops) {
-        return !drops.keySet().containsAll(milestones);
+        return !neededPools(milestones, drops).isEmpty();
+    }
+
+    // ====================================
+    // The pools these milestones draw from, by name: the default one for a
+    // milestone with no fixed drop, and the named one for a drop written as
+    // 'pool_<name>'. Empty when every one of them pays a fixed item.
+    // ====================================
+    public static Set<String> neededPools(List<Integer> milestones, Map<Integer, RewardEntry> drops) {
+        Set<String> pools = new LinkedHashSet<>();
+        for (int milestone : milestones) {
+            String pool = poolOf(drops.get(milestone));
+            if (pool != null) {
+                pools.add(pool);
+            }
+        }
+        return pools;
+    }
+
+    // The pool a milestone draws from: the default one when it has no drop at
+    // all, the named one when its drop is a reference, null for a fixed item
+    private static String poolOf(RewardEntry drop) {
+        return drop == null ? ActivityConfiguration.DEFAULT_POOL : ActivityConfiguration.referencedPool(drop);
     }
 
     // What one milestone pays, one element per spin: its fixed drop alone,
@@ -676,14 +720,17 @@ public class ActivityManager {
     // bare item name (see loadMilestoneDrops) and gets the amount this payout
     // hands over, with the same multiplier giveItems applies to it.
     static List<RewardEntry> rewardFor(int milestone, Map<Integer, RewardEntry> drops, int multiplier,
-                                       List<RewardEntry> pool, Function<List<RewardEntry>, RewardEntry> draw) {
+                                       Function<String, List<RewardEntry>> pools,
+                                       Function<List<RewardEntry>, RewardEntry> draw) {
         RewardEntry fixed = drops.get(milestone);
-        if (fixed != null) {
+        String pool = poolOf(fixed);
+        if (pool == null) {
             return List.of(withPaidAmount(fixed, multiplier));
         }
+        List<RewardEntry> entries = pools.apply(pool);
         List<RewardEntry> spins = new ArrayList<>();
         for (int spin = 0; spin < multiplier; spin++) {
-            spins.add(draw.apply(pool));
+            spins.add(draw.apply(entries));
         }
         return spins;
     }
@@ -738,14 +785,14 @@ public class ActivityManager {
         }
 
         Messages messages = config.messages();
-        boolean fromPool = reward == ActivityConfiguration.DAILY_POOL;
-        if (fromPool) {
-            List<RewardEntry> pool = config.rewardPool();
+        String fromPool = ActivityConfiguration.referencedPool(reward);
+        if (fromPool != null) {
+            List<RewardEntry> pool = config.rewardPool(fromPool);
             if (pool.isEmpty()) {
-                if (!warnedEmptyPool) {
-                    warnedEmptyPool = true;
+                if (warnedEmptyPools.add(fromPool)) {
                     plugin.getLogger().warning("Handed nothing to " + player.getUniqueId()
-                        + ": rewards.pool has no usable entry, so the daily reward stays unclaimed.");
+                        + ": " + poolPaths(Set.of(fromPool)) + " has no usable entry, so the daily reward"
+                        + " stays unclaimed.");
                 }
                 player.sendMessage(messages.get("reward-unconfigured"));
                 return false;
@@ -799,8 +846,8 @@ public class ActivityManager {
             return false;
         }
 
-        int multiplier = fromPool ? 1 : config.rewardMultiplier();
-        RewardEntry paid = fromPool ? reward : withPaidAmount(reward, multiplier);
+        int multiplier = fromPool != null ? 1 : config.rewardMultiplier();
+        RewardEntry paid = fromPool != null ? reward : withPaidAmount(reward, multiplier);
         if (!pay.test(paid, multiplier)) {
             data.setDailyRewardClaimed(false);
             store.markDirty();
@@ -1428,9 +1475,9 @@ public class ActivityManager {
 
     public void reload() {
         config.load();
-        // An operator who fixed rewards.pool deserves to hear about it again
+        // An operator who fixed a reward pool deserves to hear about it again
         // if they got it wrong twice
-        warnedEmptyPool = false;
+        warnedEmptyPools.clear();
         reportedItemPaths.clear();
         // The hook's own memo of ids whose call threw is otherwise permanent
         // for the JVM: this is the only way short of a restart to give an id
