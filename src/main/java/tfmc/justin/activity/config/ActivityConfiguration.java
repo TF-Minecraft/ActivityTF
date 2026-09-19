@@ -978,11 +978,11 @@ public class ActivityConfiguration {
             }
             int milestone = milestones.get(Integer.parseInt(number) - 1);
 
-            String value = String.valueOf(section.get(key)).strip();
-            if (value.equalsIgnoreCase("pool")) {
+            Object raw = section.get(key);
+            if (raw instanceof String string && string.strip().equalsIgnoreCase("pool")) {
                 continue;
             }
-            RewardEntry drop = fixedItem(at, value, "milestone " + milestone + " draws from the pool");
+            RewardEntry drop = fixedItem(at, raw, "milestone " + milestone + " draws from the pool");
             if (drop != null) {
                 drops.put(milestone, drop);
             }
@@ -991,11 +991,24 @@ public class ActivityConfiguration {
     }
 
     // ====================================
-    // One "<item path> [amount]" value as a one-item entry, or null when it
-    // does not parse - named in the log along with 'otherwise', what happens
-    // instead. Shared by rewards.drops and daily-reward.groups.
+    // The value at a rewards.drops.drop_N or daily-reward.groups.<group> key,
+    // either the one-line "<item path> [amount]" string or a block
+    // '{item: <path>, amount: <n>}' - a nested map loads as a
+    // ConfigurationSection the same way an activity entry does. Dispatches to
+    // whichever form was written and shares the rest of the parsing.
     // ====================================
-    private RewardEntry fixedItem(String at, String value, String otherwise) {
+    private RewardEntry fixedItem(String at, Object raw, String otherwise) {
+        if (raw instanceof ConfigurationSection block) {
+            return fixedItemBlock(at, block, otherwise);
+        }
+        return fixedItemString(at, String.valueOf(raw).strip(), otherwise);
+    }
+
+    // ====================================
+    // The one-line "<item path> [amount]" form, or null when it does not
+    // parse - named in the log along with 'otherwise', what happens instead.
+    // ====================================
+    private RewardEntry fixedItemString(String at, String value, String otherwise) {
         String[] parts = value.split("\\s+");
         // 0 marks anything that is not one or two words with a 1-64 second one
         int amount = parts.length == 1 ? 1
@@ -1015,6 +1028,49 @@ public class ActivityConfiguration {
     }
 
     // ====================================
+    // The block form: 'item:' required, 'amount:' optional (default 1) and
+    // validated the same 1-64 way the string form's second word is - it may
+    // come in as a YAML int or a quoted string, so both are read back through
+    // the same digit check. An unknown extra key only gets its own warning;
+    // it does not fail the entry the way a bad 'item:' or 'amount:' does.
+    // ====================================
+    private RewardEntry fixedItemBlock(String at, ConfigurationSection block, String otherwise) {
+        String path = block.getString("item");
+        if (path == null || path.isBlank()) {
+            plugin.getLogger().warning(at + " has no 'item:' path - " + otherwise + ".");
+            return null;
+        }
+        path = path.strip();
+
+        Object amountRaw = block.get("amount");
+        String amountText = amountRaw == null ? "" : String.valueOf(amountRaw).strip();
+        int amount = amountRaw == null ? 1 : amountText.matches("[0-9]{1,2}") ? Integer.parseInt(amountText) : 0;
+        if (amount < 1 || amount > 64) {
+            plugin.getLogger().warning(at + ".amount '" + Utils.safeForLog(amountText) + "' is not 1-64 - "
+                + otherwise + ".");
+            return null;
+        }
+
+        if (!validItemPath(path, at)) {
+            plugin.getLogger().warning(at + " has no usable item path - " + otherwise + ".");
+            return null;
+        }
+
+        List<String> unknown = new ArrayList<>();
+        for (String key : block.getKeys(false)) {
+            if (!key.equals("item") && !key.equals("amount")) {
+                unknown.add(key);
+            }
+        }
+        if (!unknown.isEmpty()) {
+            plugin.getLogger().warning(at + " has unknown key(s) " + Utils.safeForLog(String.join(", ", unknown))
+                + " - ignored.");
+        }
+
+        return new RewardEntry(1, itemName(path), List.of(), List.of(new RewardEntry.Item(path, amount)));
+    }
+
+    // ====================================
     // daily-reward.groups: '<group>: <item path> [amount]', in config order -
     // the first group a player is in wins, so the highest rank goes first. A
     // value that does not parse is named and that group gets nothing.
@@ -1031,7 +1087,7 @@ public class ActivityConfiguration {
         Map<String, RewardEntry> groups = new LinkedHashMap<>();
         for (String group : section.getKeys(false)) {
             RewardEntry reward = fixedItem(DAILY_REWARD_GROUPS_PATH + "." + Utils.safeForLog(group),
-                String.valueOf(section.get(group)).strip(),
+                section.get(group),
                 "group " + Utils.safeForLog(group) + " gets no daily reward");
             if (reward != null) {
                 groups.put(group, reward);
