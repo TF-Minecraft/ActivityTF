@@ -66,4 +66,35 @@ class ActivityDefTest {
         assertEquals(Integer.MAX_VALUE, def.worth(Integer.MAX_VALUE));
         assertEquals(1_000_000, def.worth(1));
     }
+
+    // The GUI's "Today" line counts payouts, not points: every 1, points 5,
+    // daily-cap 1 reads 0/1 before an action and 1/1 after - never "0/5" or
+    // "5/5", which players misread as "do it five times"
+    @Test
+    void completionsCountPayoutsNotPoints() {
+        ActivityDef def = new ActivityDef("injured", "Injured", Material.BONE, null, 1, 5, 1);
+
+        assertEquals(0, def.completions(0));
+        assertEquals(1, def.completions(1));
+        assertEquals(1, def.completions(2));
+        assertEquals(1, def.completions(5));
+    }
+
+    @Test
+    void completionsWithEveryAboveOneAndDailyCap() {
+        ActivityDef def = new ActivityDef("x", "X", Material.PAPER, null, 3, 1, 2);
+
+        assertEquals(0, def.completions(0));
+        assertEquals(0, def.completions(2));
+        assertEquals(1, def.completions(3));
+        assertEquals(2, def.completions(6));
+        assertEquals(2, def.completions(9));
+    }
+
+    @Test
+    void uncappedCompletionsAreNotClamped() {
+        ActivityDef def = new ActivityDef("x", "X", Material.PAPER, null, 1, 2, 0);
+
+        assertEquals(4, def.completions(4));
+    }
 }
