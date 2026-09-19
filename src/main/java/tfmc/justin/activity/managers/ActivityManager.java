@@ -617,11 +617,87 @@ public class ActivityManager {
     static RewardEntry rewardFor(int milestone, Map<Integer, RewardEntry> drops, int multiplier,
                                  List<RewardEntry> pool, Function<List<RewardEntry>, RewardEntry> draw) {
         RewardEntry fixed = drops.get(milestone);
-        if (fixed == null) {
-            return draw.apply(pool);
-        }
+        return fixed == null ? draw.apply(pool) : withPaidAmount(fixed, multiplier);
+    }
+
+    // A fixed one-item entry with the amount it hands over put in front of its
+    // bare-name display: "x3 Steel" at multiplier 1, "x6 Steel" at 2
+    static RewardEntry withPaidAmount(RewardEntry fixed, int multiplier) {
         return new RewardEntry(fixed.weight(), "#50d990x" + fixed.items().get(0).amount() * multiplier
             + " #b8906e" + fixed.display(), fixed.commands(), fixed.items());
+    }
+
+    // ====================================
+    // daily-reward: paid once a day to a player in one of its groups, the
+    // moment every task of today's draw is revealed. Called after a reveal
+    // click and on every GUI open - the open is what retries a payout that
+    // failed, and what pays a player who joined a group after revealing
+    // everything. False when nothing was paid, which includes every case
+    // where nothing is due.
+    //
+    // The same burn-save-pay order as claim(): the flag is set and written
+    // before the item goes out, so a crash cannot pay it twice, and handed
+    // back when nothing reached the player, so the next open retries it. A
+    // player in no listed group is not marked at all.
+    // ====================================
+    public boolean claimDailyReward(Player player) {
+        return claimDailyReward(player, reward -> dispatchRewards(player, reward, 0));
+    }
+
+    // The payout passed in, so the rules above can be driven headless
+    boolean claimDailyReward(Player player, Predicate<RewardEntry> pay) {
+        PlayerData data = store.get(player.getUniqueId());
+        if (data.dailyRewardClaimed() || !data.allRevealed()) {
+            return false;
+        }
+        RewardEntry reward = dailyRewardFor(config.dailyRewards(), player::hasPermission);
+        if (reward == null) {
+            return false;
+        }
+
+        Messages messages = config.messages();
+        if (storeNeverLoaded("Refusing every daily reward")) {
+            player.sendMessage(messages.get("reward-failed"));
+            return false;
+        }
+
+        data.setDailyRewardClaimed(true);
+        store.markDirty();
+        if (!store.saveNow()) {
+            data.setDailyRewardClaimed(false);
+            store.markDirty();
+            plugin.getLogger().severe("Handed nothing to " + player.getUniqueId() + ": the daily reward could"
+                + " not be saved as claimed before it was paid, so nothing was handed over.");
+            player.sendMessage(messages.get("reward-failed"));
+            return false;
+        }
+
+        RewardEntry paid = withPaidAmount(reward, config.rewardMultiplier());
+        if (!pay.test(paid)) {
+            data.setDailyRewardClaimed(false);
+            store.markDirty();
+            store.saveSoon();
+            plugin.getLogger().warning("Daily reward for " + player.getUniqueId() + " handed nothing over:"
+                + " it is unclaimed again in memory, and on disk once the queued save lands.");
+            player.sendMessage(messages.get("reward-failed"));
+            return false;
+        }
+
+        player.sendMessage(messages.get("daily-reward-claimed", "%reward%", Utils.colorize(paid.display())));
+        playSound(player, config.barCompleteSound());
+        return true;
+    }
+
+    // The reward of the first group, in config order, whose group.<name>
+    // permission the player has - LuckPerms grants that to its members. Null
+    // when he is in none of them.
+    static RewardEntry dailyRewardFor(Map<String, RewardEntry> groups, Predicate<String> hasPermission) {
+        for (Map.Entry<String, RewardEntry> group : groups.entrySet()) {
+            if (hasPermission.test("group." + group.getKey())) {
+                return group.getValue();
+            }
+        }
+        return null;
     }
 
     // One weighted draw from the pool. Null only on an empty pool.

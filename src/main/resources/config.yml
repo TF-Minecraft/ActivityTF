@@ -521,6 +521,24 @@ rewards:
     #     - item: "m.material.steel"
     #       amount: 3
 
+# A reward for revealing every one of the day's tasks, paid the moment the
+# last one is revealed - at most once per player per day, and a reroll after
+# it does not earn it again. Only players in one of the groups below get it:
+# a group is matched by the group.<name> permission, which LuckPerms gives to
+# every member. When several match, the first listed wins, so list the
+# highest rank first. Each value is a fixed item in the same form as a
+# rewards.drops entry - '<item path> [amount 1-64]' - multiplied by
+# rewards.multiplier, dropped at the feet when it does not fit, and reported
+# at load when it does not parse. A player in no group is not marked as paid,
+# so joining a group later that day and opening /activity still pays it. An
+# item that cannot be resolved at payout hands nothing over and leaves the
+# reward unclaimed; opening /activity again retries it.
+daily-reward:
+  groups: {}
+  # groups:
+  #   ascended: m.material.steel 3
+  #   vip: DIAMOND
+
 gui:
   title: "&8Weekly Activity"
 

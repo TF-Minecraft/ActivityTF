@@ -621,6 +621,34 @@ class ActivityAdminCommandTest {
         assertTrue(out.contains("Weekly: 1/50 points"), out);
     }
 
+    // Today's daily-reward flag, and a stale day's read as its next login
+    // leaves it: not claimed
+    @Test
+    void checkShowsTodaysDailyRewardAndIgnoresAStaleDaysFlag() {
+        ActivityManager manager = manager();
+        UUID player = UUID.randomUUID();
+        manager.tasks(player);
+        PlayerData data = manager.getStore().peek(player);
+
+        Sender before = admin();
+        command(manager, player, "Steve").onCommand(before.bukkit, null, "activity", new String[] {"check", "Steve"});
+        assertTrue(before.all().contains("Daily reward: not claimed today"), before.all());
+
+        data.setDailyRewardClaimed(true);
+        Sender claimed = admin();
+        command(manager, player, "Steve").onCommand(claimed.bukkit, null, "activity", new String[] {"check", "Steve"});
+        assertTrue(claimed.all().contains("Daily reward: claimed today"), claimed.all());
+
+        data.roll(data.weekKey(), "1999-01-01");
+        data.setDailyRewardClaimed(true);
+        clean(manager.getStore());
+        Sender stale = admin();
+        command(manager, player, "Steve").onCommand(stale.bukkit, null, "activity", new String[] {"check", "Steve"});
+        assertTrue(stale.all().contains("Daily reward: not claimed today"), stale.all());
+        assertTrue(data.dailyRewardClaimed(), "check rolled the stale row");
+        assertFalse(dirty(manager.getStore()), "check marked the store dirty");
+    }
+
     // peek() runs none of the clamping rolled() does, so a bar.max lowered
     // under a stored total has to be clamped on the way out instead
     @Test

@@ -680,5 +680,77 @@ class ActivityConfigurationRewardsTest {
         assertTrue(ActivityConfiguration.poolNeededButEmpty(List.of(), Map.of(), List.of(10, 20)));
         assertFalse(ActivityConfiguration.poolNeededButEmpty(List.of(FIXED), Map.of(), List.of(10, 20)));
     }
-}
 
+    // ====================================
+    // daily-reward.groups
+    // ====================================
+
+    private static Map<String, RewardEntry> loadDailyRewards(ActivityConfiguration config, String yamlContent) {
+        try {
+            Method method = ActivityConfiguration.class.getDeclaredMethod("loadDailyRewards",
+                ConfigurationSection.class);
+            method.setAccessible(true);
+            @SuppressWarnings("unchecked")
+            Map<String, RewardEntry> result = (Map<String, RewardEntry>) method.invoke(config, yaml(yamlContent));
+            return result;
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private static Map<String, RewardEntry> loadDailyRewards(String yamlContent) {
+        return loadDailyRewards(new ActivityConfiguration(stubPlugin()), yamlContent);
+    }
+
+    // Config order is kept: it is what decides which group wins
+    @Test
+    void dailyRewardGroupsLoadInConfigOrderWithPathAmountAndName() {
+        Map<String, RewardEntry> groups = loadDailyRewards(
+            "daily-reward:\n  groups:\n    vip: DIAMOND\n    ascended: m.material.steel 3\n");
+
+        assertEquals(List.of("vip", "ascended"), List.copyOf(groups.keySet()));
+        assertEquals(new RewardEntry(1, "Diamond", List.of(), List.of(new RewardEntry.Item("DIAMOND", 1))),
+            groups.get("vip"));
+        assertEquals(new RewardEntry(1, "Steel", List.of(),
+            List.of(new RewardEntry.Item("m.material.steel", 3))), groups.get("ascended"));
+        assertTrue(logged.isEmpty());
+    }
+
+    @Test
+    void noDailyRewardSectionOrAnEmptyOnePaysNothingQuietly() {
+        assertTrue(loadDailyRewards("rewards:\n  multiplier: 1\n").isEmpty());
+        assertTrue(loadDailyRewards("daily-reward:\n  groups: {}\n").isEmpty());
+        assertTrue(logged.isEmpty());
+    }
+
+    @Test
+    void dailyRewardGroupsThatAreNotASectionAreIgnoredWithAWarning() {
+        assertTrue(loadDailyRewards("daily-reward:\n  groups: DIAMOND\n").isEmpty());
+        assertTrue(loggedContains("daily-reward.groups is not a section"));
+    }
+
+    @Test
+    void aBadDailyRewardIsDroppedWithAWarningAndTheRestKept() {
+        Map<String, RewardEntry> groups = loadDailyRewards("daily-reward:\n  groups:\n"
+            + "    a: DIAMOND 65\n    b: NOT_A_THING\n    c: x.foo\n    d: DIAMOND 2 3\n    e: DIAMOND 2\n");
+
+        assertEquals(List.of("e"), List.copyOf(groups.keySet()));
+        assertTrue(loggedContains("daily-reward.groups.a 'DIAMOND 65' is not"));
+        assertTrue(loggedContains("group a gets no daily reward"));
+        assertTrue(loggedContains("Unknown material 'NOT_A_THING' at daily-reward.groups.b"));
+        assertTrue(loggedContains("daily-reward.groups.c has no usable item path - group c gets no daily reward"));
+        assertTrue(loggedContains("daily-reward.groups.d 'DIAMOND 2 3' is not"));
+    }
+
+    // Kept like a drop's, and counted towards the one missing-plugin warning
+    @Test
+    void aDailyRewardOnAPluginPathIsKeptAndFlagged() {
+        ActivityConfiguration config = new ActivityConfiguration(stubPlugin());
+        Map<String, RewardEntry> groups = loadDailyRewards(config,
+            "daily-reward:\n  groups:\n    vip: m.material.steel\n    mvp: ia.tfmc:ruby_gem 2\n");
+
+        assertEquals(List.of("vip", "mvp"), List.copyOf(groups.keySet()));
+        assertTrue(flag(config, "pluginPathConfigured"));
+        assertTrue(flag(config, "itemsAdderPathConfigured"));
+    }
+}

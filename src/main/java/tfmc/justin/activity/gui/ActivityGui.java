@@ -395,6 +395,8 @@ public class ActivityGui implements Listener {
         if (reveal.revealedId() != null) {
             clickSound(player);
             player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1f, 1f);
+            // Pays only when this reveal was the last of today's draw
+            manager.claimDailyReward(player);
         } else if (!reveal.drawChanged()) {
             // ====================================
             // Nothing to reveal and nothing to repaint: the task was already
