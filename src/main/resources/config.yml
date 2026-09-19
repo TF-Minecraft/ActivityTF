@@ -468,6 +468,22 @@ rewards:
   # rewrites. A total above one stack is handed over as whole stacks of the
   # item's own maximum size.
   multiplier: 1
+  # What each milestone pays. N counts the bar.milestones that survive
+  # loading - sorted, deduped, out-of-range values dropped - so drop_1 is the
+  # lowest of those, drop_2 the next, and so on. Adding or removing a
+  # milestone renumbers every drop_N above it. 'pool' draws one
+  # entry from the pool below; anything else is a fixed item - the same four
+  # forms as a pool item, optionally followed by an amount of 1-64 (default
+  # 1), e.g. "m.material.steel 3". A fixed item is multiplied, split into
+  # stacks, dropped at the feet when it does not fit, and leaves its milestone
+  # claimable when it cannot be resolved, exactly like a pool item; chat shows
+  # what was handed over, multiplier included ("x3 Steel" at multiplier 1,
+  # "x6 Steel" at 2). A missing drop_N, or one that does not parse (it is
+  # named in the log), draws from the pool.
+  drops:
+    drop_1: pool
+    drop_2: pool
+    # drop_3: m.material.steel 3
   pool:
     - weight: 4
       display: "#50d990x3 #b8906eDiamond"
@@ -511,8 +527,10 @@ gui:
 bar:
   max: 50            # points to fill the weekly bar
   daily-max: 10      # most points one day can add - anything past it is lost and never reaches the weekly bar
-  milestones: [10, 20]  # point totals a reward can be claimed at, fixed per week - the bar keeps
-                        # filling past the last one but pays nothing more until the week resets.
+  milestones: [10, 20]  # point totals a reward can be claimed at. The bar keeps filling past the
+                        # last one but pays nothing more until the week resets. A change applies
+                        # at once on reload: a new milestone above a player's claimed total is
+                        # claimable this week, one at or below it is not paid to them this week.
                         # Sorted and deduped on load; values below 1 or above bar.max are dropped.
                         # Each is drawn as a marker in the weekly bar.
   length: 40         # segments - the weekly bar only; per-activity bars are fixed at 20

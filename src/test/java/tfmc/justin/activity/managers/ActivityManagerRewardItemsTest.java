@@ -624,4 +624,64 @@ class ActivityManagerRewardItemsTest {
     void aMalformedItemsAdderRewardPathResolvesToNothing() {
         assertNull(resolveReward("ia.saucepan", true, true));
     }
+
+    // ====================================
+    // rewards.drops: a milestone with a fixed drop pays that entry and never
+    // draws from the pool, and says in chat what it actually hands over. The
+    // fixed entry is built the way loadMilestoneDrops builds it: its display
+    // is the bare item name.
+    // ====================================
+    private static final RewardEntry DIAMONDS = new RewardEntry(1, "Diamond", List.of(),
+        List.of(new RewardEntry.Item("DIAMOND", 3)));
+    private static final RewardEntry POOLED = new RewardEntry(1, "pooled", List.of("say hi"), List.of());
+
+    private static final Function<List<RewardEntry>, RewardEntry> NO_DRAW = pool -> {
+        throw new AssertionError("a fixed drop drew from the pool");
+    };
+
+    @Test
+    void aFixedDropIsPaidWithoutDrawingFromThePool() {
+        RewardEntry paid = ActivityManager.rewardFor(10, Map.of(10, DIAMONDS), 1, List.of(POOLED), NO_DRAW);
+
+        assertEquals(DIAMONDS.items(), paid.items());
+        assertTrue(paid.commands().isEmpty());
+    }
+
+    @Test
+    void aPoolMilestoneStillDrawsFromThePool() {
+        List<List<RewardEntry>> drawnFrom = new ArrayList<>();
+        RewardEntry drawn = ActivityManager.rewardFor(20, Map.of(10, DIAMONDS), 1, List.of(POOLED), pool -> {
+            drawnFrom.add(pool);
+            return pool.get(0);
+        });
+
+        assertEquals(POOLED, drawn);
+        assertEquals(List.of(List.of(POOLED)), drawnFrom);
+    }
+
+    // 'DIAMOND 3' at rewards.multiplier 2 hands over six, so chat says six
+    @Test
+    void aFixedDropsChatLineCarriesTheMultipliedAmount() {
+        assertEquals("#50d990x3 #b8906eDiamond",
+            ActivityManager.rewardFor(10, Map.of(10, DIAMONDS), 1, List.of(), NO_DRAW).display());
+        assertEquals("#50d990x6 #b8906eDiamond",
+            ActivityManager.rewardFor(10, Map.of(10, DIAMONDS), 2, List.of(), NO_DRAW).display());
+    }
+
+    // Whether claim() needs a usable pool at all: only when a due milestone
+    // has no fixed drop
+    @Test
+    void everyDueMilestoneFixedNeedsNoPool() {
+        assertFalse(ActivityManager.needsPool(List.of(10, 20), Map.of(10, DIAMONDS, 20, DIAMONDS)));
+    }
+
+    @Test
+    void aMixOfFixedAndPoolMilestonesNeedsThePool() {
+        assertTrue(ActivityManager.needsPool(List.of(10, 20), Map.of(10, DIAMONDS)));
+    }
+
+    @Test
+    void noDropsAtAllNeedsThePool() {
+        assertTrue(ActivityManager.needsPool(List.of(10), Map.of()));
+    }
 }

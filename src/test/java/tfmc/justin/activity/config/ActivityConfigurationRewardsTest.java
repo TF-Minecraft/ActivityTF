@@ -16,6 +16,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
@@ -514,4 +515,170 @@ class ActivityConfigurationRewardsTest {
 
         assertEquals(List.of(10), loadMilestones(50, raw));
     }
+
+    // ====================================
+    // rewards.drops
+    // ====================================
+
+    private static ActivityConfiguration withMilestones(List<Integer> milestones) {
+        try {
+            ActivityConfiguration config = new ActivityConfiguration(stubPlugin());
+            Field field = ActivityConfiguration.class.getDeclaredField("milestones");
+            field.setAccessible(true);
+            field.set(config, milestones);
+            return config;
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private static Map<Integer, RewardEntry> loadDrops(List<Integer> milestones, String yamlContent) {
+        return loadDrops(withMilestones(milestones), yamlContent);
+    }
+
+    private static Map<Integer, RewardEntry> loadDrops(ActivityConfiguration config, String yamlContent) {
+        try {
+            Method method = ActivityConfiguration.class.getDeclaredMethod("loadMilestoneDrops",
+                ConfigurationSection.class);
+            method.setAccessible(true);
+            @SuppressWarnings("unchecked")
+            Map<Integer, RewardEntry> result = (Map<Integer, RewardEntry>) method.invoke(config, yaml(yamlContent));
+            return result;
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private static boolean flag(ActivityConfiguration config, String name) {
+        try {
+            Field field = ActivityConfiguration.class.getDeclaredField(name);
+            field.setAccessible(true);
+            return field.getBoolean(config);
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    // Keyed by the milestone's points, not by N: drop_2 of [10, 20, 30] is 20.
+    // The display is the bare name; claim() prefixes the paid amount.
+    @Test
+    void aFixedDropLoadsAgainstItsMilestoneWithPathAmountAndName() {
+        Map<Integer, RewardEntry> drops = loadDrops(List.of(10, 20, 30),
+            "rewards:\n  drops:\n    drop_1: pool\n    drop_2: m.material.steel 3\n    drop_3: DIAMOND\n");
+
+        assertEquals(Map.of(20, new RewardEntry(1, "Steel", List.of(),
+                List.of(new RewardEntry.Item("m.material.steel", 3))),
+            30, new RewardEntry(1, "Diamond", List.of(),
+                List.of(new RewardEntry.Item("DIAMOND", 1)))), drops);
+        assertTrue(logged.isEmpty());
+    }
+
+    @Test
+    void aMissingDropsSectionMeansEveryMilestoneDrawsFromThePool() {
+        assertTrue(loadDrops(List.of(10, 20), "rewards:\n  multiplier: 1\n").isEmpty());
+        assertTrue(logged.isEmpty());
+    }
+
+    @Test
+    void poolIsCaseInsensitive() {
+        assertTrue(loadDrops(List.of(10, 20), "rewards:\n  drops:\n    drop_1: POOL\n    drop_2: Pool\n")
+            .isEmpty());
+        assertTrue(logged.isEmpty());
+    }
+
+    @Test
+    void aKeyThatIsNotDropNIsIgnoredWithAWarning() {
+        Map<Integer, RewardEntry> drops = loadDrops(List.of(10, 20),
+            "rewards:\n  drops:\n    drop_0: DIAMOND\n    reward_1: DIAMOND\n    drop_x: DIAMOND\n");
+
+        assertTrue(drops.isEmpty());
+        assertTrue(loggedContains("rewards.drops.drop_0 is not a drop_<N> key"));
+        assertTrue(loggedContains("rewards.drops.reward_1 is not a drop_<N> key"));
+        assertTrue(loggedContains("rewards.drops.drop_x is not a drop_<N> key"));
+    }
+
+    @Test
+    void aDropPastTheLastMilestoneIsIgnoredWithAWarning() {
+        Map<Integer, RewardEntry> drops = loadDrops(List.of(10, 20),
+            "rewards:\n  drops:\n    drop_3: DIAMOND\n    drop_99999999999: DIAMOND\n");
+
+        assertTrue(drops.isEmpty());
+        assertTrue(loggedContains("rewards.drops.drop_3 is past the last of the 2 bar.milestones"));
+        assertTrue(loggedContains("rewards.drops.drop_99999999999 is past the last"));
+    }
+
+    @Test
+    void aMalformedAmountFallsBackToThePoolWithAWarning() {
+        Map<Integer, RewardEntry> drops = loadDrops(List.of(10, 20, 30, 40, 50),
+            "rewards:\n  drops:\n    drop_1: DIAMOND 0\n    drop_2: DIAMOND 65\n    drop_3: DIAMOND three\n"
+                + "    drop_4: DIAMOND 2.5\n    drop_5: DIAMOND 2 3\n");
+
+        assertTrue(drops.isEmpty());
+        assertTrue(loggedContains("rewards.drops.drop_1 'DIAMOND 0' is not"));
+        assertTrue(loggedContains("rewards.drops.drop_2 'DIAMOND 65' is not"));
+        assertTrue(loggedContains("rewards.drops.drop_3 'DIAMOND three' is not"));
+        assertTrue(loggedContains("rewards.drops.drop_4 'DIAMOND 2.5' is not"));
+        assertTrue(loggedContains("milestone 50 draws from the pool"));
+    }
+
+    // Unknown to Bukkit is a typo and falls back, and the log says so; a well
+    // formed m. or ia. path cannot be checked without its plugin, so it is
+    // kept for payout to decide
+    @Test
+    void anUnknownMaterialFallsBackButPluginPathsAreKeptUnchecked() {
+        Map<Integer, RewardEntry> drops = loadDrops(List.of(10, 20, 30),
+            "rewards:\n  drops:\n    drop_1: NOT_A_MATERIAL\n    drop_2: ia.tfmc:ruby_gem 2\n"
+                + "    drop_3: m.material.nothing_here\n");
+
+        assertEquals(List.of(20, 30), drops.keySet().stream().sorted().toList());
+        assertEquals("Ruby Gem", drops.get(20).display());
+        assertTrue(loggedContains("Unknown material 'NOT_A_MATERIAL' at rewards.drops.drop_1"));
+        assertTrue(loggedContains("rewards.drops.drop_1 has no usable item path - milestone 10 draws from the pool."));
+    }
+
+    // A drops-only m. or ia. path must count as "asked for", or load() says
+    // nothing when TLibs or ItemsAdder is missing
+    @Test
+    void aDropsOnlyPluginPathTriggersTheMissingPluginWarnings() {
+        ActivityConfiguration config = withMilestones(List.of(10, 20));
+        loadDrops(config, "rewards:\n  drops:\n    drop_1: m.material.steel\n    drop_2: ia.tfmc:ruby_gem\n");
+
+        assertTrue(flag(config, "pluginPathConfigured"));
+        assertTrue(flag(config, "itemsAdderPathConfigured"));
+        assertNotNull(ActivityConfiguration.itemPathWarning(flag(config, "pluginPathConfigured"), false, "TLibs"));
+        assertNotNull(ActivityConfiguration.itemsAdderWarning(flag(config, "itemsAdderPathConfigured"), false));
+    }
+
+    @Test
+    void theItemPathWarningIsOnlyGivenWhenItIsBothAskedForAndMissing() {
+        assertNull(ActivityConfiguration.itemPathWarning(false, false, "TLibs"));
+        assertNull(ActivityConfiguration.itemPathWarning(true, true, ""));
+        assertTrue(ActivityConfiguration.itemPathWarning(true, false, "TLibs, MMOItems")
+            .contains("but TLibs, MMOItems are not enabled"));
+    }
+
+    // ====================================
+    // The load-time "nothing can ever be claimed" warning
+    // ====================================
+
+    private static final RewardEntry FIXED = new RewardEntry(1, "Diamond", List.of(),
+        List.of(new RewardEntry.Item("DIAMOND", 1)));
+
+    @Test
+    void anEmptyPoolWithEveryMilestoneFixedIsNoProblem() {
+        assertFalse(ActivityConfiguration.poolNeededButEmpty(List.of(), Map.of(10, FIXED, 20, FIXED),
+            List.of(10, 20)));
+    }
+
+    @Test
+    void anEmptyPoolWithOnePoolMilestoneIsWarnedAbout() {
+        assertTrue(ActivityConfiguration.poolNeededButEmpty(List.of(), Map.of(10, FIXED), List.of(10, 20)));
+    }
+
+    @Test
+    void anEmptyPoolWithNoDropsIsWarnedAboutAsBefore() {
+        assertTrue(ActivityConfiguration.poolNeededButEmpty(List.of(), Map.of(), List.of(10, 20)));
+        assertFalse(ActivityConfiguration.poolNeededButEmpty(List.of(FIXED), Map.of(), List.of(10, 20)));
+    }
 }
+
