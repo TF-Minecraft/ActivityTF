@@ -17,18 +17,6 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
-// ====================================
-// Same technique as MarketSaleListenerTest: CasinoWinListener's constructor
-// takes a live-server-backed ActivityManager, so it is built here with a null
-// one. Every guard below (null player, non-positive/NaN profit, an unfinished
-// carry) returns before the manager is ever touched, so a NullPointerException
-// from the null manager is proof the listener tried to credit; its absence
-// proves it did not.
-//
-// Player is stubbed with a Proxy that only answers getUniqueId(), as in
-// MarketSaleListenerTest - anything else called on it is a bug in the
-// listener under test, not in this stub.
-// ====================================
 class CasinoWinListenerTest {
 
     private static Player stubPlayer(UUID uuid) {
@@ -59,21 +47,11 @@ class CasinoWinListenerTest {
         CasinoWinListener listener = new CasinoWinListener(null);
         Player player = stubPlayer(UUID.randomUUID());
 
-        // getUniqueId() would throw from the stub if any of these reached the
-        // carry, and recordAction() would NPE on the null manager if any of
-        // these earned a point - neither happens, so nothing is credited
         assertDoesNotThrow(() -> listener.onPlayerWonMoney(win(player, 0.0)));
         assertDoesNotThrow(() -> listener.onPlayerWonMoney(win(player, -3.5)));
         assertDoesNotThrow(() -> listener.onPlayerWonMoney(win(player, Double.NaN)));
     }
 
-    // ====================================
-    // The daily-task gate, on a real manager (see TestManagers): a revealed
-    // task banks its fractions and gets credited; a hidden one banks nothing
-    // at all, so revealing it later does not hand over what was skipped.
-    // ====================================
-    // 'every: 2' on purpose: a single denar counts but awards no point, which
-    // keeps the record path away from Bukkit.getPlayer(), unreachable headless
     private static ActivityManager manager() {
         return TestManagers.manager(new ActivityDef("casino_win", "casino_win", Material.EMERALD, null, 2, 1, 0));
     }
@@ -103,15 +81,12 @@ class CasinoWinListenerTest {
         listener.onPlayerWonMoney(win(player, 0.5));
         assertEquals(0, manager.tasks(uuid).count("casino_win"));
 
-        // Revealed only now: the two skipped halves must not still be waiting
         assertNotNull(manager.reveal(uuid, 0).revealedId());
         listener.onPlayerWonMoney(win(player, 0.5));
 
         assertEquals(0, manager.tasks(uuid).count("casino_win"));
     }
 
-    // The carry is per-player: a leftover 0.5 from a quitting player must not
-    // still be sitting there once they are gone
     @Test
     void quittingClearsTheCarrySoALaterHalfWinCreditsNothing() {
         ActivityManager manager = manager();

@@ -18,12 +18,6 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-// ====================================
-// The daily-task gate, on a real manager built without a server (see
-// TestManagers). Every activity here is 'every: 2', so a single recorded
-// action never awards a point - which keeps recordAction away from
-// Bukkit.getPlayer(), unreachable headless. The witness is the action count.
-// ====================================
 class ActivityManagerTasksTest {
 
     private static ActivityDef def(String id) {
@@ -149,7 +143,6 @@ class ActivityManagerTasksTest {
         assertNull(manager.reveal(uuid, -1).revealedId());
     }
 
-    // /activity add is the admin's testing aid and is not gated
     @Test
     void theAdminAddBypassesTheGate() {
         ActivityManager manager = TestManagers.manager(defs(20));
@@ -174,10 +167,6 @@ class ActivityManagerTasksTest {
         assertFalse(manager.isTracked(uuid, "nope"));
     }
 
-    // ====================================
-    // No draw is made off the record path: a listener event for a player who
-    // has not opened the GUI today must leave no row behind in players.yml.
-    // ====================================
     @Test
     void aListenerEventForAPlayerWithNoDrawCreatesNoRow() {
         ActivityManager manager = TestManagers.manager(defs(20));
@@ -198,7 +187,6 @@ class ActivityManagerTasksTest {
         assertNull(manager.getStore().peek(uuid), "isTracked created a players.yml row");
     }
 
-    // The GUI paths are the ones allowed to draw, and only they create the row
     @Test
     void openingTheGuiIsWhatDraws() {
         ActivityManager manager = TestManagers.manager(defs(20));
@@ -208,12 +196,6 @@ class ActivityManagerTasksTest {
         assertNotNull(manager.getStore().peek(uuid));
     }
 
-    // ====================================
-    // A reload that drops one of the drawn activities compacts the draw and
-    // tops it back up, so the slot the player clicked is no longer the one
-    // they saw. reveal() has to say so - the GUI repaints every task slot on
-    // it rather than just the clicked one.
-    // ====================================
     @Test
     void aDrawChangedMidClickIsReported() {
         ActivityManager manager = TestManagers.manager(defs(20));
@@ -227,19 +209,12 @@ class ActivityManagerTasksTest {
         List<String> tasks = manager.tasks(uuid).tasks();
         assertEquals(PlayerData.TASKS_PER_DAY, tasks.size());
         assertFalse(tasks.contains(dropped));
-        // The clicked id is gone, so nothing was revealed - the slot now holds
-        // a task the player never asked about
         assertNull(reveal.revealedId());
         for (String task : tasks) {
             assertFalse(manager.getStore().get(uuid).isRevealed(task), task + " was revealed by proxy");
         }
     }
 
-    // ====================================
-    // The id is what is revealed, not the index: a reload that dropped an
-    // earlier task compacts the draw, so the clicked id has moved down a slot
-    // by the time the reveal lands.
-    // ====================================
     @Test
     void aCompactedDrawStillRevealsTheClickedTask() {
         ActivityManager manager = TestManagers.manager(defs(20));
@@ -255,11 +230,6 @@ class ActivityManagerTasksTest {
         assertTrue(manager.getStore().get(uuid).isRevealed(clicked));
     }
 
-    // ====================================
-    // A 'daily-guaranteed' activity is in every player's draw, in a slot the
-    // shuffle picks - the config warning, not the draw, is what deals with
-    // more guaranteed activities than there are slots.
-    // ====================================
     @Test
     void aGuaranteedActivityIsInEveryDrawAtAVaryingSlot() {
         ActivityManager manager = TestManagers.manager(defs(20));
@@ -277,8 +247,6 @@ class ActivityManagerTasksTest {
         assertTrue(slots.size() > 1, "the guaranteed activity always landed in slot " + slots);
     }
 
-    // A reload that drops the guaranteed activity itself: it is simply not
-    // drawable any more, and the draw is still full
     @Test
     void anUnloadedGuaranteedActivityIsNotDrawn() {
         ActivityManager manager = TestManagers.manager(defs(20));
@@ -291,10 +259,6 @@ class ActivityManagerTasksTest {
         assertFalse(tasks.contains("a3"));
     }
 
-    // ====================================
-    // Marking an activity guaranteed after a player already has today's draw
-    // must not leave them without it for the rest of the day
-    // ====================================
     @Test
     void anExistingDrawGainsAGuaranteedActivityOnItsNextUse() {
         ActivityManager manager = TestManagers.manager(defs(20));

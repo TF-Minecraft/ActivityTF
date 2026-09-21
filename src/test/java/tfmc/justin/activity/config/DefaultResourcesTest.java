@@ -16,15 +16,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-// ====================================
-// The shipped default messages.yml/config.yml now mix inline #rrggbb hex
-// with legacy &-codes (see the diff that introduced fillEmptySlots and the
-// hex accents). YamlConfiguration.loadConfiguration works headless (pure
-// SnakeYAML under the hood, no live server needed) - these tests just load
-// the real resources exactly as the plugin ships them and check the hex
-// strings survived as values, not as swallowed YAML comments, and that every
-// placeholder callers substitute into is still present.
-// ====================================
 class DefaultResourcesTest {
 
     private static YamlConfiguration load(String resource) {
@@ -116,8 +107,6 @@ class DefaultResourcesTest {
         }
     }
 
-    // A material that does not resolve leaves the activity with no GUI icon,
-    // and YAML alone will not catch a typo in one
     @Test
     void everyActivityMaterialResolves() {
         YamlConfiguration config = load("config.yml");
@@ -134,9 +123,6 @@ class DefaultResourcesTest {
         }
     }
 
-    // The shipped milestones must parse as a list of ints: written inline with
-    // a trailing comment, a typo here reads as an empty list and silently
-    // falls back to the hardcoded defaults.
     @Test
     void theShippedMilestonesParseAsNumbers() {
         YamlConfiguration config = load("config.yml");
@@ -144,8 +130,6 @@ class DefaultResourcesTest {
         assertEquals(List.of(10, 20), config.getIntegerList("bar.milestones"));
     }
 
-    // Every shipped pool entry must be drawable: a weight above 0, something
-    // to say in chat and at least one item to hand over.
     @Test
     void everyRewardPoolEntryIsUsable() {
         YamlConfiguration config = load("config.yml");
@@ -164,16 +148,9 @@ class DefaultResourcesTest {
             assertFalse(display == null || String.valueOf(display).isBlank(),
                     where + ".display should not be blank");
 
-            // The shipped pool pays in items rather than commands on purpose:
-            // a console 'give' that fails is invisible here, so the player is
-            // marked paid having received nothing
             assertTrue(entry.get("items") instanceof List<?> items && !items.isEmpty(),
                     where + ".items should list at least one item");
 
-            // The payload itself, not just its shape: the four paths and their
-            // amounts are the whole shipped economy, and both are checkable
-            // headless (ItemPath.material is a name lookup). A 'DIAMONDS' typo
-            // would otherwise ship green and pay nothing.
             List<?> items = (List<?>) entry.get("items");
             for (int j = 0; j < items.size(); j++) {
                 String at = where + ".items[" + j + "]";
@@ -182,9 +159,6 @@ class DefaultResourcesTest {
 
                 Object path = item.get("item");
                 assertFalse(path == null || String.valueOf(path).isBlank(), at + ".item should not be blank");
-                // Every shipped entry pays a bare Material on purpose: an
-                // m.<type>.<id> would make the default config depend on
-                // MMOItems being installed
                 assertTrue(tfmc.justin.activity.utils.ItemPath.material(String.valueOf(path)) != null,
                         at + ".item is not a Material: " + path);
 
@@ -195,10 +169,6 @@ class DefaultResourcesTest {
         }
     }
 
-    // The shipped multiplier: the number of pool spins, and the amount
-    // multiplier for fixed drops and the daily reward. 1 is also the fallback,
-    // so this reads the key through the constant load() reads it through - a
-    // typo in either end fails here rather than reading as 1 in silence.
     @Test
     void shippedConfigDefaultsTheRewardMultiplierToOne() {
         YamlConfiguration config = load("config.yml");
@@ -208,11 +178,6 @@ class DefaultResourcesTest {
         assertEquals(1, config.getInt(ActivityConfiguration.REWARDS_MULTIPLIER_PATH));
     }
 
-    // Every "gui.<key>" literal ActivityGui.java passes to Messages.get(...)
-    // must resolve against the shipped messages.yml - read straight from the
-    // source file rather than hand-copied, so a new lookup added there without
-    // a matching messages.yml entry fails this test instead of NPEing at
-    // runtime in front of a player.
     @Test
     void everyGuiMessageKeyActivityGuiReadsExistsInMessagesYml() throws java.io.IOException {
         File source = new File("src/main/java/tfmc/justin/activity/gui/ActivityGui.java");
@@ -234,8 +199,6 @@ class DefaultResourcesTest {
         }
     }
 
-    // The daily draw picks from every loaded activity, so the shipped file
-    // has to offer at least the seven a player is handed each day
     @Test
     void shippedConfigHasEnoughActivitiesForADailyDraw() {
         YamlConfiguration config = load("config.yml");
@@ -262,7 +225,6 @@ class DefaultResourcesTest {
         assertFalse(value == null || value.isBlank(), "gui.daily-bar-name should not be blank");
     }
 
-    // The default budget the reroll button ships with: 1 a day, not off
     @Test
     void shippedConfigDefaultsRerollsPerDayToOne() {
         YamlConfiguration config = load("config.yml");
@@ -270,7 +232,6 @@ class DefaultResourcesTest {
         assertEquals(1, config.getInt(ActivityConfiguration.REROLLS_PER_DAY_PATH));
     }
 
-    // The default point gate: rerollable at 0 or 1 points earned today
     @Test
     void shippedConfigDefaultsRerollMaxPointsToOne() {
         YamlConfiguration config = load("config.yml");
@@ -295,8 +256,6 @@ class DefaultResourcesTest {
         }
     }
 
-    // The lore that shows the remaining budget needs both placeholders to be
-    // worth anything - a fixed string would lie once the budget changed
     @Test
     void theRerollLoreLeftKeepsItsPlaceholders() {
         YamlConfiguration messages = load("messages.yml");
@@ -306,9 +265,6 @@ class DefaultResourcesTest {
         assertTrue(value.contains("%max%"));
     }
 
-    // The shipped descriptions, read through the exact key the parser reads -
-    // a typo in either end would leave the examples invisible in silence. Both
-    // accepted shapes ship: cook_dish is a plain string, vote is a list.
     @Test
     void theShippedConfigDescribesVoteAndCookDish() {
         YamlConfiguration config = load("config.yml");
@@ -324,8 +280,6 @@ class DefaultResourcesTest {
         }
     }
 
-    // Every description that ships, whatever shape it is written in, has to be
-    // non-blank and use valid hex markers - the same bar display is held to
     @Test
     void everyShippedDescriptionIsNonBlankAndValidHex() {
         YamlConfiguration config = load("config.yml");

@@ -9,15 +9,6 @@ import tfmc.justin.activity.managers.ActivityManager;
 
 import java.util.UUID;
 
-// ====================================
-// AdvancedCrafting fires both events synchronously on the main thread, once
-// per completed craft - neither carries a count, so each is worth 1. Neither
-// is cancellable. Only constructed when AdvancedCrafting is enabled - see
-// ActivityPlugin.
-//
-// getPlayerUuid() rather than getPlayer(), like TFMCCore does: the UUID is
-// carried separately, and recordAction does not need a live Player.
-// ====================================
 public class AdvancedCraftListener implements Listener {
 
     private final ActivityManager manager;

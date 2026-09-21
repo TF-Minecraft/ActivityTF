@@ -14,13 +14,6 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-// ====================================
-// The optional 'description:' activity key, which takes either a single string
-// or a list of lines. load() needs a live Bukkit server, so loadActivities is
-// driven directly through reflection - the same trick, and the same hand-built
-// JavaPlugin, as ActivityConfigurationClickCommandsTest. The plugin's logger is
-// captured so the warning can be asserted on.
-// ====================================
 class ActivityConfigurationDescriptionTest {
 
     private final List<String> logged = new ArrayList<>();
@@ -76,8 +69,6 @@ class ActivityConfigurationDescriptionTest {
         assertEquals(List.of(), only(config).description());
     }
 
-    // Neither a string nor a list: named rather than silently dropped, the
-    // same bug the click-commands and reward-item parsers refuse to have
     @Test
     void aValueThatIsNeitherStringNorListWarnsAndYieldsEmpty() {
         ActivityConfiguration config = configFor("  vote:\n    points: 1\n    description:\n"

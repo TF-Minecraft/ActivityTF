@@ -29,13 +29,6 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-// ====================================
-// rewards.pool and bar.milestones parsing: private instance methods
-// (loadRewardPool, loadMilestones) reached the same way
-// ActivityConfigurationStationTest reaches loadActivities/loadStation -
-// load() itself needs a live Bukkit server, so a bypass-allocated JavaPlugin
-// with a real Logger stands in and the private parser is invoked directly.
-// ====================================
 class ActivityConfigurationRewardsTest {
 
     private static final class TestPlugin extends JavaPlugin {
@@ -58,9 +51,6 @@ class ActivityConfigurationRewardsTest {
         }
     }
 
-    // What the parser logged while this test ran: the warnings are half of
-    // what these keys do, and a warning that names the wrong index is worth no
-    // more than none
     private final List<String> logged = new ArrayList<>();
 
     private final Handler capture = new Handler() {
@@ -130,10 +120,6 @@ class ActivityConfigurationRewardsTest {
         }
     }
 
-    // ====================================
-    // rewards.pool
-    // ====================================
-
     @Test
     void aZeroWeightEntryIsSkipped() {
         List<RewardEntry> pool = loadRewardPool(
@@ -181,8 +167,6 @@ class ActivityConfigurationRewardsTest {
 
     @Test
     void aNonMapListItemIsSkipped() {
-        // getMapList() itself drops non-map entries before loadRewardPool ever
-        // sees them - only the map entry survives
         List<RewardEntry> pool = loadRewardPool(
             "rewards:\n  pool:\n    - just a string\n    - weight: 4\n      display: 'Real entry'\n"
                 + "      commands: ['say hi']\n");
@@ -205,11 +189,6 @@ class ActivityConfigurationRewardsTest {
         assertEquals(1, pool.size());
         assertEquals(1_000_000, pool.get(0).weight());
     }
-
-    // ====================================
-    // rewards.pool[N].items - an entry may hand items over instead of, or as
-    // well as, running commands
-    // ====================================
 
     @Test
     void anItemOnlyEntryLoadsWithItsPathAndAmount() {
@@ -261,13 +240,6 @@ class ActivityConfigurationRewardsTest {
             new RewardEntry.Item("DIAMOND", 1)), pool.get(0).items());
     }
 
-    // ====================================
-    // An unknown material, another plugin's path syntax and a malformed m.
-    // path can never resolve, so they are dropped at load rather than kept to
-    // fail at payout. A well formed m. path is kept: nothing here can tell a
-    // live MMOItems id from a deleted one, and TLibs may not even be enabled
-    // while this runs.
-    // ====================================
     @Test
     void unusableItemPathsAreDroppedAndTheRestOfTheEntrySurvives() {
         List<RewardEntry> pool = loadRewardPool("rewards:\n  pool:\n    - weight: 1\n      items:\n"
@@ -281,8 +253,6 @@ class ActivityConfigurationRewardsTest {
         assertEquals(1, pool.size());
         assertEquals(List.of(new RewardEntry.Item("m.material.steel", 1)), pool.get(0).items());
 
-        // Each warning must name the element it came from, or an admin cannot
-        // find the line to fix
         assertTrue(loggedContains("Unknown material 'NOT_A_MATERIAL' at rewards.pool[0].items[0]"));
         assertTrue(loggedContains("Unsupported item path 'nx.custom.block' at rewards.pool[0].items[1]"));
         assertTrue(loggedContains("Malformed item path 'm.material' at rewards.pool[0].items[2]"));
@@ -290,13 +260,6 @@ class ActivityConfigurationRewardsTest {
         assertTrue(loggedContains("rewards.pool[0].items[4] is not an 'item:'/'amount:' block"));
     }
 
-    // ====================================
-    // ia.<namespace:id> is a reward item like any other: kept at load in the
-    // form the admin wrote, normalized only when the payout asks ItemsAdder.
-    // Nothing here can tell a live ItemsAdder id from a deleted one, and
-    // ItemsAdder may not even be enabled while this runs - so both separators
-    // survive the parser.
-    // ====================================
     @Test
     void anItemsAdderPathIsKeptAsARewardItem() {
         List<RewardEntry> pool = loadRewardPool("rewards:\n  pool:\n    - weight: 1\n      items:\n"
@@ -311,8 +274,6 @@ class ActivityConfigurationRewardsTest {
         assertFalse(loggedContains("Malformed item path"));
     }
 
-    // A path with no id behind it can never resolve, so it is dropped at load
-    // rather than kept to hand over nothing at payout
     @Test
     void aMalformedItemsAdderPathIsDroppedAndNamed() {
         List<RewardEntry> pool = loadRewardPool("rewards:\n  pool:\n    - weight: 1\n      items:\n"
@@ -324,11 +285,6 @@ class ActivityConfigurationRewardsTest {
         assertTrue(loggedContains("expected ia.<namespace:id>"));
     }
 
-    // ====================================
-    // The one line the whole file gets when it asks for ItemsAdder items and
-    // ItemsAdder is not there. load() itself needs a live server, so the rule
-    // behind it is pinned directly.
-    // ====================================
     @Test
     void theItemsAdderWarningIsOnlyGivenWhenItIsBothAskedForAndMissing() {
         assertNull(ActivityConfiguration.itemsAdderWarning(false, false));
@@ -338,15 +294,9 @@ class ActivityConfigurationRewardsTest {
         String warning = ActivityConfiguration.itemsAdderWarning(true, false);
         assertNotNull(warning);
         assertTrue(warning.contains("ItemsAdder is not enabled"), warning);
-        // an admin must be told the payout consequence, not just the fact
         assertTrue(warning.contains("leaves its milestone unclaimed"), warning);
     }
 
-    // ====================================
-    // 'items:' written as anything but a list - 'items: DIAMOND', or the
-    // single-item map that is the natural typo - used to load clean and pay
-    // less than the admin wrote
-    // ====================================
     @Test
     void anItemsKeyThatIsNotAListIsNamedRatherThanSwallowed() {
         List<RewardEntry> pool = loadRewardPool("rewards:\n  pool:\n    - weight: 1\n"
@@ -372,12 +322,6 @@ class ActivityConfigurationRewardsTest {
         assertFalse(loggedContains("items is not a list"));
     }
 
-    // ====================================
-    // An amount is range-tested as a long before it is narrowed: intValue() on
-    // 4294967298 is 2, which would pass the test having asked for something
-    // else entirely. A fractional amount is a different mistake and falls back
-    // rather than rounding in silence.
-    // ====================================
     @Test
     void anAmountTooLargeForAnIntIsClampedRatherThanNarrowedIntoRange() {
         List<RewardEntry> pool = loadRewardPool("rewards:\n  pool:\n    - weight: 1\n      items:\n"
@@ -402,15 +346,6 @@ class ActivityConfigurationRewardsTest {
             + "        - item: 'NOT_A_MATERIAL'\n").isEmpty());
     }
 
-    // ====================================
-    // rewards.multiplier - the number of pool spins per milestone, and the
-    // amount multiplier for fixed drops and the daily reward. Clamped the way every other numeric key here is; 0 or negative
-    // reads as 1, never as "hand nothing over".
-    // ====================================
-
-    // Fed a whole config rather than a value, so the key path itself is under
-    // test: the shipped multiplier is 1 and so is the fallback, which means a
-    // typo in the path is invisible everywhere else.
     private int rewardMultiplier(String yamlContent) {
         try {
             ActivityConfiguration config = new ActivityConfiguration(stubPlugin());
@@ -447,8 +382,6 @@ class ActivityConfigurationRewardsTest {
         assertTrue(loggedContains("rewards.multiplier 1000 is outside 1-64 - using 64."));
     }
 
-    // The wiring, not the clamp: read out of a whole config at the path the
-    // shipped file writes, so a typo in either would be caught here
     @Test
     void theMultiplierIsReadFromItsConfiguredPath() {
         assertEquals(3, rewardMultiplier("rewards:\n  multiplier: 3\n  pool: []\n"));
@@ -461,25 +394,17 @@ class ActivityConfigurationRewardsTest {
         assertFalse(loggedContains("rewards.multiplier"));
     }
 
-    // getInt would have truncated this to 2 in silence, paying double what was
-    // written rather than what a broken key is meant to pay
     @Test
     void aFractionalMultiplierFallsBackToOneWithAWarning() {
         assertEquals(1, rewardMultiplier("rewards:\n  multiplier: 2.9\n"));
         assertTrue(loggedContains("rewards.multiplier '2.9' is not a whole number - using 1."));
     }
 
-    // getInt reported this as "rewards.multiplier 0 is outside 1-64", naming a
-    // value the admin never wrote
     @Test
     void aNonNumericMultiplierFallsBackToOneAndIsNamedAsWritten() {
         assertEquals(1, rewardMultiplier("rewards:\n  multiplier: 'three'\n"));
         assertTrue(loggedContains("rewards.multiplier is not a number ('three') - using 1."));
     }
-
-    // ====================================
-    // bar.milestones
-    // ====================================
 
     @Test
     void unsortedAndDuplicatedMilestonesAreSortedAndDeduped() {
@@ -501,8 +426,6 @@ class ActivityConfigurationRewardsTest {
         assertEquals(List.of(10), loadMilestones(15, List.of()));
     }
 
-    // A bar too small for either hardcoded default still gets one reward, at
-    // bar.max itself
     @Test
     void aBarSmallerThanBothDefaultsFallsBackToBarMaxItself() {
         assertEquals(List.of(5), loadMilestones(5, List.of()));
@@ -518,10 +441,6 @@ class ActivityConfigurationRewardsTest {
 
         assertEquals(List.of(10), loadMilestones(50, raw));
     }
-
-    // ====================================
-    // rewards.drops
-    // ====================================
 
     private static ActivityConfiguration withMilestones(List<Integer> milestones) {
         try {
@@ -562,8 +481,6 @@ class ActivityConfigurationRewardsTest {
         }
     }
 
-    // Keyed by the milestone's points, not by N: drop_2 of [10, 20, 30] is 20.
-    // The display is the bare name; claim() prefixes the paid amount.
     @Test
     void aFixedDropLoadsAgainstItsMilestoneWithPathAmountAndName() {
         Map<Integer, RewardEntry> drops = loadDrops(List.of(10, 20, 30),
@@ -624,9 +541,6 @@ class ActivityConfigurationRewardsTest {
         assertTrue(loggedContains("milestone 50 draws from the pool"));
     }
 
-    // Unknown to Bukkit is a typo and falls back, and the log says so; a well
-    // formed m. or ia. path cannot be checked without its plugin, so it is
-    // kept for payout to decide
     @Test
     void anUnknownMaterialFallsBackButPluginPathsAreKeptUnchecked() {
         Map<Integer, RewardEntry> drops = loadDrops(List.of(10, 20, 30),
@@ -639,8 +553,6 @@ class ActivityConfigurationRewardsTest {
         assertTrue(loggedContains("rewards.drops.drop_1 has no usable item path - milestone 10 draws from the pool."));
     }
 
-    // A drops-only m. or ia. path must count as "asked for", or load() says
-    // nothing when TLibs or ItemsAdder is missing
     @Test
     void aDropsOnlyPluginPathTriggersTheMissingPluginWarnings() {
         ActivityConfiguration config = withMilestones(List.of(10, 20));
@@ -659,10 +571,6 @@ class ActivityConfigurationRewardsTest {
         assertTrue(ActivityConfiguration.itemPathWarning(true, false, "TLibs, MMOItems")
             .contains("but TLibs, MMOItems are not enabled"));
     }
-
-    // ====================================
-    // The load-time "nothing can ever be claimed" warning
-    // ====================================
 
     private static final RewardEntry FIXED = new RewardEntry(1, "Diamond", List.of(),
         List.of(new RewardEntry.Item("DIAMOND", 1)));
@@ -684,10 +592,6 @@ class ActivityConfigurationRewardsTest {
         assertFalse(ActivityConfiguration.poolNeededButEmpty(List.of(FIXED), Map.of(), List.of(10, 20)));
     }
 
-    // ====================================
-    // daily-reward.groups
-    // ====================================
-
     private static Map<String, RewardEntry> loadDailyRewards(ActivityConfiguration config, String yamlContent) {
         try {
             Method method = ActivityConfiguration.class.getDeclaredMethod("loadDailyRewards",
@@ -705,7 +609,6 @@ class ActivityConfigurationRewardsTest {
         return loadDailyRewards(new ActivityConfiguration(stubPlugin()), yamlContent);
     }
 
-    // Config order is kept: it is what decides which group wins
     @Test
     void dailyRewardGroupsLoadInConfigOrderWithPathAmountAndName() {
         Map<String, RewardEntry> groups = loadDailyRewards(
@@ -745,8 +648,6 @@ class ActivityConfigurationRewardsTest {
         assertTrue(loggedContains("daily-reward.groups.d 'DIAMOND 2 3' is not"));
     }
 
-    // 'pool' mixes with the item forms, in config order; with a pool to draw
-    // from nothing is logged
     @Test
     void aPoolDailyRewardGroupLoadsBesideAnItemGroup() throws ReflectiveOperationException {
         ActivityConfiguration config = new ActivityConfiguration(stubPlugin());
@@ -779,7 +680,6 @@ class ActivityConfigurationRewardsTest {
         assertTrue(logged.isEmpty(), logged.toString());
     }
 
-    // Kept like a drop's, and counted towards the one missing-plugin warning
     @Test
     void aDailyRewardOnAPluginPathIsKeptAndFlagged() {
         ActivityConfiguration config = new ActivityConfiguration(stubPlugin());
@@ -790,11 +690,6 @@ class ActivityConfigurationRewardsTest {
         assertTrue(flag(config, "pluginPathConfigured"));
         assertTrue(flag(config, "itemsAdderPathConfigured"));
     }
-
-    // ====================================
-    // The block form: '<key>: {item: <path>, amount: <n>}' in addition to the
-    // one-line string form, for both rewards.drops and daily-reward.groups.
-    // ====================================
 
     @Test
     void aBlockDropLoadsWithItsPathAndAmount() {
@@ -849,10 +744,6 @@ class ActivityConfigurationRewardsTest {
         assertTrue(loggedContains("rewards.drops.drop_3.amount 'x' is not 1-64"));
     }
 
-    // A fractional or boolean amount never matches the digit check any more
-    // than a non-numeric word does, so it takes the same "is not 1-64" path
-    // as amount: 0 or amount: 65 - not a separate "not a whole number" path
-    // the way the one-line string form's sibling key (rewards.multiplier) has
     @Test
     void aBlockDropWithAFractionalAmountFallsBackToThePoolWithAWarning() {
         Map<Integer, RewardEntry> drops = loadDrops(List.of(10, 20),
@@ -873,8 +764,6 @@ class ActivityConfigurationRewardsTest {
         assertTrue(loggedContains("milestone 10 draws from the pool"));
     }
 
-    // An empty block has no 'item:' key at all, same as the block that only
-    // sets 'amount:' - block.getString("item") returns null either way
     @Test
     void anEmptyBlockDropFallsBackToThePoolWithAWarning() {
         Map<Integer, RewardEntry> drops = loadDrops(List.of(10, 20),

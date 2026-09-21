@@ -17,30 +17,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-// ====================================
-// The 'station:' activity key, loaded by the private loadActivities() /
-// loadStation() the same way 'craft:' and 'profession:' are, and read back
-// through the public stationActivity(stationId, recipeId).
-//
-// load() itself needs a live Bukkit server (reloadConfig(), Messages,
-// Bukkit.getPluginManager()), which is why every other test in this class
-// drives the private parsing methods directly instead. loadStation() is not
-// static like registerCraft()/professionActivity() though - it logs through
-// plugin.getLogger(), so a JavaPlugin is still needed. JavaPlugin's own
-// constructor throws unless its classloader is a live PluginClassLoader, so
-// one is built the same way DishCookedListenerTest builds its event: bypass
-// the constructor via ReflectionFactory, then hand it a real
-// java.util.logging.Logger so the warnings do not NPE.
-//
-// YamlConfiguration.loadConfiguration(Reader) is pure SnakeYAML and needs no
-// server either - see DefaultResourcesTest.
-// ====================================
 class ActivityConfigurationStationTest {
 
-    // JavaPlugin itself is abstract, and ReflectionFactory's bypass allocator
-    // still rejects an abstract class outright (InstantiationError) even
-    // without running a constructor - so a trivial concrete subclass, itself
-    // never constructed normally either, is what actually gets allocated.
     private static final class TestPlugin extends JavaPlugin {
     }
 
@@ -76,9 +54,6 @@ class ActivityConfigurationStationTest {
         }
     }
 
-    // Builds a config from an 'activities:' YAML block. Every entry needs
-    // 'points' to survive loadActivities()'s earlier checks and actually
-    // reach loadStation().
     private static ActivityConfiguration configFor(String activitiesYaml) {
         ActivityConfiguration config = new ActivityConfiguration(stubPlugin());
         loadActivities(config, section("activities:\n" + activitiesYaml, "activities"));
@@ -131,8 +106,6 @@ class ActivityConfigurationStationTest {
         assertEquals(Optional.empty(), config.stationActivity("", "anything"));
     }
 
-    // Documented behaviour: two activities claiming one station key, last one
-    // loaded wins - same rule as a duplicate profession
     @Test
     void duplicateStationClaimKeepsTheLastActivity() {
         ActivityConfiguration config = configFor(
@@ -141,11 +114,6 @@ class ActivityConfigurationStationTest {
         assertEquals(Optional.of("second"), config.stationActivity("forge", "anything"));
     }
 
-    // station: alongside craft: (or profession:) is a conflict: only the
-    // earlier-declared feed survives, and station is ignored entirely.
-    // craft: uses an m.<type>.<id> item path rather than a bare Material name
-    // so registerCraft never has to ask a live server's item registry whether
-    // the material is craftable - see registerCraft's own ItemPath branch.
     @Test
     void stationTogetherWithCraftIsIgnored() {
         ActivityConfiguration config = configFor(
@@ -162,9 +130,6 @@ class ActivityConfigurationStationTest {
         assertEquals(Optional.empty(), config.stationActivity("forge", "anything"));
     }
 
-    // Malformed values (leading slash, trailing slash, blank) must not throw
-    // and must register nothing - so no station/recipe pair can ever match
-    // the activity they were meant for
     @Test
     void malformedValuesRegisterNothingAndDoNotThrow() {
         ActivityConfiguration config = assertDoesNotThrowConfig(
@@ -176,9 +141,6 @@ class ActivityConfigurationStationTest {
         assertEquals(Optional.empty(), config.stationActivity("ingot-station", ""));
     }
 
-    // Multiple slashes in a station: value are rejected as malformed and
-    // register nothing - so no split can ever match the activity they were
-    // meant for.
     @Test
     void multipleSlashesRegisterNothingAndDoNotThrow() {
         ActivityConfiguration config = assertDoesNotThrowConfig(
@@ -194,8 +156,6 @@ class ActivityConfigurationStationTest {
         return org.junit.jupiter.api.Assertions.assertDoesNotThrow(() -> configFor(activitiesYaml));
     }
 
-    // A reload must not leave a station claimed by a config that no longer
-    // asks for it
     @Test
     void reloadReplacesTheStationMapEntirely() {
         ActivityConfiguration config = configFor(entry("smelt", "forge"));

@@ -32,24 +32,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-// ====================================
-// PlayerUseCraftingStationEvent, CraftingStation and Recipe all need a live
-// MMOItems/PlayerData setup to build through their real constructors (Recipe
-// is even abstract). The listener under test only ever calls
-// getInteraction()/getStation()/getRecipe()/getPlayer() and, through those,
-// CraftingStation#getId()/Recipe#getId() - so every one of these is built by
-// bypassing its constructor via ReflectionFactory, exactly like
-// DishCookedListenerTest builds its event, and only the handful of fields the
-// listener actually reads are set by reflection.
-//
-// ActivityManager is also a Bukkit-backed private-constructor singleton, so
-// it is built the same way, with its 'config' field pointed at a real
-// ActivityConfiguration (built the way ActivityConfigurationStationTest
-// builds one) and its 'store' field left null. recordAction() reads
-// config.activity(id) first and only reaches the null store on a real match,
-// so a NullPointerException out of store.get(uuid) is proof the listener
-// found a match and tried to record it; its absence proves it did not.
-// ====================================
 class MmoItemsStationListenerTest {
 
     private static Player stubPlayer(UUID uuid) {
@@ -93,11 +75,6 @@ class MmoItemsStationListenerTest {
         return station;
     }
 
-    // Recipe is abstract - ReflectionFactory's bypass allocator still runs
-    // the JVM's own object-allocation check, which rejects an abstract class
-    // (InstantiationError) even without calling any constructor. A trivial
-    // concrete subclass, itself never constructed normally either, sidesteps
-    // that; its three abstract methods are never called by the listener.
     private static final class TestRecipe extends Recipe {
         private TestRecipe() {
             super(null);
@@ -128,10 +105,6 @@ class MmoItemsStationListenerTest {
         return recipe;
     }
 
-    // The listener never reads the result at all any more, but events that
-    // carry one are still worth exercising; an empty bypassed shell - built
-    // the same way, sidestepping ItemStack's Material-registry-touching
-    // constructor - is enough to make it non-null.
     private static ItemStack anyResult() {
         return bypassNew(ItemStack.class);
     }
@@ -152,9 +125,6 @@ class MmoItemsStationListenerTest {
         return event;
     }
 
-    // A real ActivityConfiguration with its 'stationActivities' and
-    // 'activities' maps set directly, skipping load() (needs a live plugin)
-    // entirely - the listener only ever reaches these two lookups.
     private static ActivityConfiguration configWithStation(String stationKey, String activityId) {
         ActivityConfiguration config = bypassNew(ActivityConfiguration.class);
 
@@ -172,8 +142,6 @@ class MmoItemsStationListenerTest {
     private static ActivityManager managerWithConfig(ActivityConfiguration config) {
         ActivityManager manager = bypassNew(ActivityManager.class);
         setField(manager, ActivityManager.class, "config", config);
-        // 'store' is left null on purpose: recordAction() only reaches it
-        // after a real activity match, so touching it is the witness.
         return manager;
     }
 
@@ -189,8 +157,6 @@ class MmoItemsStationListenerTest {
         assertThrows(NullPointerException.class, () -> listener.onUseCraftingStation(craft));
     }
 
-    // Regression: 'output-item: false' recipes hand over no ItemStack, so both
-    // completed-craft paths fire with result == null. They must still count.
     @ParameterizedTest
     @EnumSource(value = StationAction.class, names = {"INSTANT_RECIPE", "CRAFTING_QUEUE"})
     void aCompletedCraftWithoutAnOutputItemStillRecordsOneAction(StationAction action) {
@@ -204,8 +170,6 @@ class MmoItemsStationListenerTest {
         assertThrows(NullPointerException.class, () -> listener.onUseCraftingStation(craft));
     }
 
-    // Queueing, cancelling and upgrading are not completed crafts, with or
-    // without an output item.
     @ParameterizedTest
     @EnumSource(value = StationAction.class, names = {"INTERACT_WITH_RECIPE", "CANCEL_QUEUE", "UPGRADE_RECIPE"})
     void nonCraftInteractionsRecordNothing(StationAction action) {
@@ -266,11 +230,6 @@ class MmoItemsStationListenerTest {
         assertDoesNotThrow(() -> listener.onUseCraftingStation(craft));
     }
 
-    // Sanity check that the NPE-as-witness approach above is not vacuous:
-    // prove a genuine match really does reach the manager by also checking it
-    // via the un-guarded static wiring below - MONITOR + ignoreCancelled, and
-    // no manager call happens before interaction/station/recipe/player all
-    // check out, which the six tests above already exercise from both sides.
     @Test
     void handlerIsMonitorPriorityAndIgnoresCancelled() throws NoSuchMethodException {
         Method method = MmoItemsStationListener.class.getMethod("onUseCraftingStation", PlayerUseCraftingStationEvent.class);

@@ -18,13 +18,6 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-// ====================================
-// The logic around the two TLibs calls, with the calls themselves handed in -
-// nothing here names a TLibs class, and nothing here builds an ItemStack,
-// which blows up headless on the Bukkit registry. The instance is therefore
-// parameterised on Material, a plain enum: that also lets the real unresolved
-// rule (null / air / TLibs' DIRT sentinel) be the one under test.
-// ====================================
 class TLibsItemsTest {
 
     private final List<String> logged = new ArrayList<>();
@@ -59,8 +52,6 @@ class TLibsItemsTest {
         return paths;
     }
 
-    // Config order decides: the first path the item matches is the activity
-    // credited, even when a later one would match too
     @Test
     void firstMatchingPathWins() {
         TLibsItems<Material> tlibs = items(path -> null, (item, path) -> true);
@@ -77,8 +68,6 @@ class TLibsItemsTest {
         assertNull(tlibs.firstMatch(Material.STONE, paths()));
     }
 
-    // A deleted MMOItems id throws out of the checker. That must cost its own
-    // path only - every path after it still gets its chance
     @Test
     void aThrowingPathIsSkippedAndTheNextOneStillMatches() {
         TLibsItems<Material> tlibs = items(path -> null, (item, path) -> {
@@ -92,7 +81,6 @@ class TLibsItemsTest {
             paths("m.material.broken", "broken", "m.material.good", "good")));
     }
 
-    // Every craft of that item would otherwise flood the console
     @Test
     void aThrowingPathIsLoggedOnceAcrossCalls() {
         TLibsItems<Material> tlibs = items(path -> null, (item, path) -> {
@@ -106,8 +94,6 @@ class TLibsItemsTest {
         assertTrue(logged.get(0).contains("m.material.broken"), logged.get(0));
     }
 
-    // null, air and the DIRT sentinel are all TLibs saying "I could not build
-    // that" - none of them may reach the GUI as an icon
     @Test
     void anUnresolvedPathYieldsNoItem() {
         assertNull(items(path -> null, (item, path) -> false).resolve("m.material.x"));
@@ -115,7 +101,6 @@ class TLibsItemsTest {
         assertNull(items(path -> Material.DIRT, (item, path) -> false).resolve("m.material.x"));
     }
 
-    // The GUI retries the path on every open, so the warning must not repeat
     @Test
     void anUnresolvedPathIsLoggedOnceAcrossCalls() {
         TLibsItems<Material> tlibs = items(path -> Material.DIRT, (item, path) -> false);
@@ -140,8 +125,6 @@ class TLibsItemsTest {
         assertEquals(1, logged.size(), logged.toString());
     }
 
-    // A real item comes back untouched - the GUI then puts the activity's own
-    // name and lore on it
     @Test
     void aResolvedPathIsReturnedAsIs() {
         TLibsItems<Material> tlibs = items(path -> Material.DIAMOND_SWORD, (item, path) -> false);
@@ -150,8 +133,6 @@ class TLibsItemsTest {
         assertTrue(logged.isEmpty(), logged.toString());
     }
 
-    // Once resolve() has seen a path fail to resolve, the creator (and
-    // TLibs' own per-call logging) must not be invoked again for it
     @Test
     void anUnresolvedPathStopsCallingTheCreator() {
         int[] calls = {0};
@@ -167,7 +148,6 @@ class TLibsItemsTest {
         assertEquals(1, calls[0]);
     }
 
-    // Same short-circuit for a creator that throws
     @Test
     void aThrowingCreatorStopsBeingCalledAgain() {
         int[] calls = {0};
@@ -183,8 +163,6 @@ class TLibsItemsTest {
         assertEquals(1, calls[0]);
     }
 
-    // A path that resolves fine is never cached - the GUI wants a fresh
-    // stack on every call
     @Test
     void aResolvablePathIsInvokedEveryTime() {
         int[] calls = {0};

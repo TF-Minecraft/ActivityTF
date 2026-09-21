@@ -28,32 +28,10 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-// ====================================
-// The item half of a reward payout: ActivityManager.giveItems, which takes the
-// path resolver and the logger rather than reaching for TLibs and the plugin,
-// so the handover can be driven headless. The player, his inventory and his
-// world are Proxy stubs (the technique the listener tests use) that record
-// what was added and what was dropped.
-//
-// Not reachable headless, and so not covered here: the real resolver
-// (ActivityManager#resolveRewardItem) - both its TLibs branch, which needs
-// TLibs, MMOItems and MythicLib running, and its Material branch, where
-// new ItemStack(Material) needs the live registry of a running server, as does
-// the Material#isItem() behind ActivityManager.isItem - so the guard that
-// refuses a block-only name such as CARROTS only ever answers for real in
-// production, and what is pinned here is its headless fallback; claim() itself, which
-// needs a live store, a live Messages and Bukkit.dispatchCommand; and the real
-// PlayerInventory#addItem stacking rules, which are server code. What the stubs
-// stand in for is exactly those calls: addItem, getWorld, dropItemNaturally and
-// updateInventory. Everything between them - resolution, the multiplier, the
-// stack split, the leftover drop, the success rule - is the real code.
-// ====================================
 class ActivityManagerRewardItemsTest {
 
     private final List<LogRecord> logged = new ArrayList<>();
 
-    // The memo that keeps an unresolvable path from warning once per click is
-    // static, so each test starts from an empty one
     @BeforeEach
     void clearReportedPaths() {
         ActivityManager.reportedItemPaths.clear();
@@ -81,7 +59,6 @@ class ActivityManagerRewardItemsTest {
         return logger;
     }
 
-    // What one stub player was handed and what fell on the floor
     private static final class Handover {
         final List<ItemStack> added = new ArrayList<>();
         final List<ItemStack> dropped = new ArrayList<>();
@@ -155,13 +132,6 @@ class ActivityManagerRewardItemsTest {
         return handover;
     }
 
-    // ====================================
-    // A stack that can exist headless: the real ItemStack constructors go
-    // through the Bukkit registry, which needs a running server, but the
-    // protected no-arg one only nulls a field. Type, amount and the item's own
-    // maximum stack size are held here and clone() is a fresh copy, which is
-    // all giveItems touches.
-    // ====================================
     private static final class TestStack extends ItemStack {
         private final Material type;
         private final int maxStackSize;
@@ -203,16 +173,11 @@ class ActivityManagerRewardItemsTest {
         }
     }
 
-    // The real resolver's bare-material branch, without the TLibs one:
-    // matchMaterial is a name lookup and runs headless, building the stack
-    // does not
     private static final Function<String, ItemStack> MATERIALS = path -> {
         Material material = Material.matchMaterial(path);
         return material == null ? null : new TestStack(material, 1);
     };
 
-    // The entry giveItems is handed: display matters only to the partial-payout
-    // warning, so every test that does not check it uses the same one
     private static RewardEntry entry(RewardEntry.Item... items) {
         return new RewardEntry(1, "Reward", List.of(), List.of(items));
     }
@@ -244,9 +209,6 @@ class ActivityManagerRewardItemsTest {
         assertTrue(handover.dropped.isEmpty());
     }
 
-    // 'amount:' says how many to hand over, so it replaces whatever the
-    // resolved stack was built with rather than multiplying it - and it is set
-    // on a clone, so the resolver's own stack is untouched
     @Test
     void theAmountOverridesTheResolvedStackAndTheResolvedStackIsNotMutated() {
         Handover handover = player();
@@ -257,11 +219,6 @@ class ActivityManagerRewardItemsTest {
         assertEquals(2, handover.added.get(0).getAmount());
         assertEquals(8, fromPath.getAmount());
     }
-
-    // ====================================
-    // rewards.multiplier, applied at payout rather than at load so a reload
-    // changes what the next claim pays
-    // ====================================
 
     @Test
     void theMultiplierMultipliesTheConfiguredAmount() {
@@ -282,11 +239,6 @@ class ActivityManagerRewardItemsTest {
         assertEquals(3, handover.added.get(0).getAmount());
     }
 
-    // ====================================
-    // A total above one stack goes over as whole stacks of the resolved item's
-    // own maximum, never as one oversized slot
-    // ====================================
-
     @Test
     void anExactMultipleOfTheStackSizeIsSplitIntoWholeStacks() {
         Handover handover = player();
@@ -305,9 +257,6 @@ class ActivityManagerRewardItemsTest {
         assertEquals(List.of(64, 36), handover.added.stream().map(ItemStack::getAmount).toList());
     }
 
-    // The finding this split exists for: 64 copies of an item whose stack size
-    // is 1 in a single slot is a dupe primitive, so the item's own limit is
-    // what the split uses - not the vanilla 64
     @Test
     void anUnstackableItemIsHandedOverOneAtATime() {
         Handover handover = player();
@@ -318,7 +267,6 @@ class ActivityManagerRewardItemsTest {
         assertEquals(List.of(1, 1, 1), handover.added.stream().map(ItemStack::getAmount).toList());
     }
 
-    // Every stack of the split gets the same overflow treatment
     @Test
     void everyStackOfASplitDropsItsOwnOverflow() {
         Handover handover = player();
@@ -330,10 +278,6 @@ class ActivityManagerRewardItemsTest {
         assertEquals(3, handover.dropped.size());
     }
 
-    // TLibs down, or the MMOItems id deleted since load: nothing was handed
-    // over, so claim() must see a failure and roll the milestone back - and it
-    // must get there by the "could not be resolved" route, not by something
-    // throwing on the way
     @Test
     void aPathThatDoesNotResolveAtPayoutHandsNothingOver() {
         Handover handover = player();
@@ -346,9 +290,6 @@ class ActivityManagerRewardItemsTest {
         assertFalse(loggedAtLeastOne(Level.SEVERE, "threw for"));
     }
 
-    // Same rule for an ItemsAdder path: ItemsAdder down, or the id removed
-    // from the pack since load, must leave the milestone unclaimed rather than
-    // burn it for nothing
     @Test
     void anItemsAdderPathThatDoesNotResolveAtPayoutHandsNothingOver() {
         Handover handover = player();
@@ -362,8 +303,6 @@ class ActivityManagerRewardItemsTest {
         assertFalse(loggedAtLeastOne(Level.SEVERE, "threw for"));
     }
 
-    // A claim can be repeated at click rate, so a path that cannot resolve is
-    // reported once rather than once per click
     @Test
     void anUnresolvablePathIsReportedOnlyOnce() {
         Handover handover = player();
@@ -375,8 +314,6 @@ class ActivityManagerRewardItemsTest {
             .count());
     }
 
-    // The amount and the milestone are what an operator needs to re-issue the
-    // reward by hand
     @Test
     void theUnresolvedWarningNamesTheTotalAndTheMilestone() {
         Handover handover = player();
@@ -396,9 +333,6 @@ class ActivityManagerRewardItemsTest {
         assertTrue(handover.added.isEmpty());
     }
 
-    // A resolver that throws must not unwind out of the payout: claim() has
-    // already burned and saved the milestones by then. Nothing reached the
-    // inventory, so the milestone is still refused.
     @Test
     void aThrowingResolverIsSwallowedAndCountsAsNothingHandedOver() {
         Handover handover = player();
@@ -411,12 +345,6 @@ class ActivityManagerRewardItemsTest {
         assertTrue(loggedAtLeastOne(Level.SEVERE, "threw for"));
     }
 
-    // ====================================
-    // addItem is the point of no return: it can throw having already filled
-    // some slots, so the entry counts as paid the moment the inventory is
-    // touched. Counting it unpaid would hand the milestone back and let the
-    // next click pay those same items a second time.
-    // ====================================
     @Test
     void aThrowingAddItemStillCountsAsPaidBecauseTheInventoryWasTouched() {
         Handover handover = player();
@@ -426,9 +354,6 @@ class ActivityManagerRewardItemsTest {
         assertTrue(loggedAtLeastOne(Level.SEVERE, "threw for"));
     }
 
-    // One bad path among good ones costs only itself: the rest is still paid,
-    // and the entry counts as paid, so re-drawing it cannot duplicate them.
-    // An operator gets one line naming the entry, since the milestone is gone.
     @Test
     void oneUnresolvablePathAmongGoodOnesStillCountsAsPaidForTheRest() {
         Handover handover = player();
@@ -454,11 +379,6 @@ class ActivityManagerRewardItemsTest {
         assertEquals(List.of(overflow), handover.dropped);
     }
 
-    // ====================================
-    // The drop happens after the entry is already counted as paid, on purpose:
-    // a drop that throws must not un-pay a milestone whose items are already
-    // in the inventory.
-    // ====================================
     @Test
     void aThrowingDropStillLeavesTheEntryPaid() {
         Handover handover = player();
@@ -468,8 +388,6 @@ class ActivityManagerRewardItemsTest {
         assertTrue(give(handover, MATERIALS, new RewardEntry.Item("DIAMOND", 3)));
     }
 
-    // The inventory is mutated inside a cancelled InventoryClickEvent, so the
-    // client needs telling or it shows ghost stacks until the window reopens
     @Test
     void theClientIsResyncedOnceAfterAHandover() {
         Handover handover = player();
@@ -479,18 +397,12 @@ class ActivityManagerRewardItemsTest {
         assertEquals(1, handover.updates);
     }
 
-    // Material#isItem() reads a registry that only exists on a running server.
-    // Without one the resolved stack is taken at face value: refusing every
-    // stack instead would mean handing nothing over at all.
     @Test
     void theBlockOnlyGuardPassesAnythingThroughWithoutARegistry() {
         assertTrue(ActivityManager.isItem(new TestStack(Material.DIAMOND, 1)));
         assertTrue(ActivityManager.isItem(new TestStack(Material.CARROTS, 1)));
     }
 
-    // The resync runs after the milestone is already burned and saved, so it
-    // must not unwind past claim()'s rollback: an escape there would leave disk
-    // claiming milestones the player was never paid for.
     @Test
     void aThrowingResyncIsSwallowedAndLeavesTheEntryPaid() {
         Handover handover = player();
@@ -502,9 +414,6 @@ class ActivityManagerRewardItemsTest {
         assertTrue(loggedAtLeastOne(Level.WARNING, "Could not resync the inventory"));
     }
 
-    // The entry counts as paid the moment the inventory is touched, which is
-    // before addItem returns - so "only part of it reached him" must not be
-    // claimed when the first insert threw and nothing reached him at all
     @Test
     void aThrowingFirstInsertIsNotReportedAsAPartialHandover() {
         Handover handover = player();
@@ -527,12 +436,6 @@ class ActivityManagerRewardItemsTest {
         assertEquals(0, handover.updates);
     }
 
-    // ====================================
-    // The combine that decides whether a drawn entry counts as paid. This is
-    // the whole duplicate-prevention rule for a mixed entry: an entry whose
-    // items went out but whose commands failed must stay paid, or the next
-    // click draws it again and hands those items over twice.
-    // ====================================
     @Test
     void anEntryCountsAsPaidIfEitherHalfSucceeded() {
         assertTrue(ActivityManager.dispatchRewards(() -> true, () -> false));
@@ -541,8 +444,6 @@ class ActivityManagerRewardItemsTest {
         assertFalse(ActivityManager.dispatchRewards(() -> false, () -> false));
     }
 
-    // Both halves always run: the commands are not skipped just because the
-    // items already succeeded
     @Test
     void bothHalvesOfAnEntryAlwaysRun() {
         boolean[] ran = new boolean[2];
@@ -559,10 +460,6 @@ class ActivityManagerRewardItemsTest {
         assertTrue(ran[1]);
     }
 
-    // ====================================
-    // runnableEntries with items in the pool: an item never has a name pasted
-    // into it, so it pays a Bedrock/unsafe name that no %player% command can.
-    // ====================================
     @Test
     void anItemEntryIsRunnableForANameNoCommandCanBePaidFor() {
         RewardEntry playerOnly = new RewardEntry(1, "player-only",
@@ -589,13 +486,6 @@ class ActivityManagerRewardItemsTest {
         assertEquals(items, RewardEntry.pick(pool, 3));
     }
 
-    // ====================================
-    // The two gates are independent by design: ItemsAdder is not part of the
-    // TLibs/MMOItems/MythicLib trio itemPathsUsable() stands for, so each path
-    // form must resolve on its own backing plugin alone. All four combinations
-    // are pinned because the regression this guards against is an '&&'
-    // between them, which only shows on a server missing one of the two.
-    // ====================================
     private static final Function<String, ItemStack> TLIBS_ITEMS = path -> new TestStack(Material.IRON_INGOT, 1);
 
     private static final Function<String, ItemStack> IA_ITEMS = id -> new TestStack(Material.DIAMOND, 1);
@@ -620,18 +510,11 @@ class ActivityManagerRewardItemsTest {
         assertNull(resolveReward("m.material.steel", false, false));
     }
 
-    // A malformed ia. path is never handed to the hook, gate open or not
     @Test
     void aMalformedItemsAdderRewardPathResolvesToNothing() {
         assertNull(resolveReward("ia.saucepan", true, true));
     }
 
-    // ====================================
-    // rewards.drops: a milestone with a fixed drop pays that entry and never
-    // draws from the pool, and says in chat what it actually hands over. The
-    // fixed entry is built the way loadMilestoneDrops builds it: its display
-    // is the bare item name.
-    // ====================================
     private static final RewardEntry DIAMONDS = new RewardEntry(1, "Diamond", List.of(),
         List.of(new RewardEntry.Item("DIAMOND", 3)));
     private static final RewardEntry POOLED = new RewardEntry(1, "pooled", List.of("say hi"), List.of());
@@ -640,8 +523,6 @@ class ActivityManagerRewardItemsTest {
         throw new AssertionError("a fixed drop drew from the pool");
     };
 
-    // The pool lookup rewardFor() and payMilestones() take: one pool under
-    // every name, which is what every case here but the named-pool ones needs
     private static Function<String, List<RewardEntry>> pools(RewardEntry... entries) {
         List<RewardEntry> pool = List.of(entries);
         return name -> pool;
@@ -669,7 +550,6 @@ class ActivityManagerRewardItemsTest {
         assertEquals(List.of(List.of(POOLED)), drawnFrom);
     }
 
-    // 'DIAMOND 3' at rewards.multiplier 2 hands over six, so chat says six
     @Test
     void aFixedDropsChatLineCarriesTheMultipliedAmount() {
         assertEquals("#50d990x3 #b8906eDiamond",
@@ -678,8 +558,6 @@ class ActivityManagerRewardItemsTest {
             ActivityManager.rewardFor(10, Map.of(10, DIAMONDS), 2, pools(), NO_DRAW).get(0).display());
     }
 
-    // A fixed drop has nothing to spin: one payout, its amount left as
-    // written for giveItems to multiply (see theMultiplierMultipliesTheConfiguredAmount)
     @Test
     void aFixedDropIsOnePayoutAtAnyMultiplier() {
         List<RewardEntry> spins = ActivityManager.rewardFor(10, Map.of(10, DIAMONDS), 3, pools(POOLED), NO_DRAW);
@@ -689,10 +567,6 @@ class ActivityManagerRewardItemsTest {
         assertEquals("#50d990x9 #b8906eDiamond", spins.get(0).display());
     }
 
-    // ====================================
-    // rewards.multiplier on a pool milestone is the number of spins: that
-    // many independent draws, each paid at face value
-    // ====================================
     private static final RewardEntry STEEL_PICK = new RewardEntry(1, "Steel Pickaxe", List.of("say pick"),
         List.of(new RewardEntry.Item("m.tool.steel_pickaxe", 1)));
 
@@ -723,8 +597,6 @@ class ActivityManagerRewardItemsTest {
         assertEquals(1, draws[0]);
     }
 
-    // With replacement: one entry can win every spin, and each spin is the
-    // entry as configured, not a multiplied copy
     @Test
     void spinsCanRepeatAnEntryAtItsOwnAmount() {
         List<RewardEntry> spins = ActivityManager.rewardFor(20, Map.of(), 2, pools(DIAMONDS, POOLED),
@@ -735,8 +607,6 @@ class ActivityManagerRewardItemsTest {
         assertEquals("Diamond", spins.get(1).display());
     }
 
-    // Whether claim() needs a usable pool at all: only when a due milestone
-    // has no fixed drop
     @Test
     void everyDueMilestoneFixedNeedsNoPool() {
         assertFalse(ActivityManager.needsPool(List.of(10, 20), Map.of(10, DIAMONDS, 20, DIAMONDS)));
@@ -752,11 +622,6 @@ class ActivityManagerRewardItemsTest {
         assertTrue(ActivityManager.needsPool(List.of(10), Map.of()));
     }
 
-    // ====================================
-    // claim()'s payout loop: what each spin is paid at, and what one failed
-    // spin costs. The pay function records every call and answers from a
-    // script, so a failure can be put on any spin.
-    // ====================================
     private record PaidSpin(int milestone, RewardEntry entry, int multiplier) {}
 
     private static final Function<List<RewardEntry>, RewardEntry> FIRST = p -> p.get(0);
@@ -807,7 +672,6 @@ class ActivityManagerRewardItemsTest {
                 + "'milestone 20' lines above for what failed."));
     }
 
-    // Not memoised: every partial milestone is logged
     @Test
     void everyPartialMilestoneIsLogged() {
         payMilestones(List.of(20), Map.of(), 2, new ArrayList<>(), false, true);
@@ -823,14 +687,10 @@ class ActivityManagerRewardItemsTest {
         ActivityManager.Payout payout = payMilestones(List.of(20, 30), Map.of(), 2, calls, false, false);
 
         assertEquals(new ActivityManager.Payout(0, true), payout);
-        // Milestone 30 is never spun: it stays claimable with 20
         assertEquals(2, calls.size());
         assertFalse(loggedAtLeastOne(Level.SEVERE, "spins for"));
     }
 
-    // A milestone that only partly pays stops the loop before the next
-    // milestone is even attempted, and rollbackClaimedPoints keeps the
-    // partial one claimed while rolling the untouched one back.
     @Test
     void aPartialMilestoneStopsBeforeTheNextOneAndStaysClaimed() {
         List<PaidSpin> calls = new ArrayList<>();
@@ -845,8 +705,6 @@ class ActivityManagerRewardItemsTest {
         assertEquals(20, ActivityManager.rollbackClaimedPoints(10, payout.paid(), List.of(20, 30)));
     }
 
-    // The log names what was being paid, so a daily reward does not read as
-    // a milestone
     @Test
     void theLogNamesTheDailyRewardRatherThanAMilestone() {
         Handover handover = player();

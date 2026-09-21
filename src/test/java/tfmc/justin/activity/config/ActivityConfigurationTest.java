@@ -17,18 +17,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-// ====================================
-// The two optional activity keys that load() parses out of config.yml.
-//
-// craft: Material#isAir and #isItem both go through the item registry, which
-// does not exist headless, so the live server's answer is handed in as a
-// predicate - exactly as ActivityConfiguration hands in its own. AIR and
-// BEDROCK stand for the two things a live server rejects.
-//
-// profession: the id normalization and the lookup that uses it. load() itself
-// needs a running server, so the map is built here the same way loadActivities
-// builds it - through normalizeProfessionId.
-// ====================================
 class ActivityConfigurationTest {
 
     private static final Predicate<Material> CRAFTABLE =
@@ -80,12 +68,6 @@ class ActivityConfigurationTest {
         assertTrue(crafts.isEmpty() && paths.isEmpty());
     }
 
-    // ====================================
-    // A craft key is the one place an ia. path is not accepted: matching a
-    // crafted ItemStack back to an ItemsAdder id is the opposite lookup and is
-    // not implemented. It must say so - registering nothing quietly would give
-    // an activity that can never be fed and no hint why.
-    // ====================================
     @Test
     void anItemsAdderCraftKeyIsRefusedInItsOwnWords() {
         Map<Material, String> crafts = new HashMap<>();
@@ -96,7 +78,6 @@ class ActivityConfigurationTest {
             assertTrue(problem != null && problem.contains("ItemsAdder item path"), problem);
             assertTrue(problem.contains(path), problem);
             assertTrue(problem.contains("activities.cook_dish.craft"), problem);
-            // not the generic "unsupported path" line: ia. does work elsewhere
             assertFalse(problem.contains("Unsupported item path"), problem);
             assertTrue(problem.contains("nothing will ever feed that activity"), problem);
         }
@@ -142,7 +123,6 @@ class ActivityConfigurationTest {
         assertTrue(crafts.isEmpty());
     }
 
-    // A typo must not start feeding some other activity, and must say so
     @Test
     void anUnknownNameIsRejectedAndNamed() {
         Map<Material, String> crafts = new HashMap<>();
@@ -154,9 +134,6 @@ class ActivityConfigurationTest {
         assertTrue(crafts.isEmpty());
     }
 
-    // AIR is what the special recipes (firework rockets, banner copies, map
-    // extending) report as their result, so accepting it would hand one
-    // activity every one of them
     @Test
     void airIsRejected() {
         Map<Material, String> crafts = new HashMap<>();
@@ -178,8 +155,6 @@ class ActivityConfigurationTest {
         assertTrue(crafts.isEmpty());
     }
 
-    // One material feeds one activity: the second claim is unreachable, so it
-    // loses and gets said out loud
     @Test
     void aDuplicateMaterialKeepsTheFirstActivity() {
         Map<Material, String> crafts = new HashMap<>();
@@ -192,8 +167,6 @@ class ActivityConfigurationTest {
         assertTrue(problem.contains("only 'craft_anvil' will be credited"), problem);
     }
 
-    // The raw config string reaches a log line, so a name carrying a newline
-    // or an escape must not be able to forge one
     @Test
     void theRawNameIsSanitisedBeforeItReachesTheLog() {
         Map<Material, String> crafts = new HashMap<>();
@@ -206,7 +179,6 @@ class ActivityConfigurationTest {
 
     @Test
     void normalizationMatchesMmoCore() {
-        // MMOCore: id = rawId.toLowerCase().replace("_", "-").replace(" ", "-")
         assertEquals("mining-expert", ActivityConfiguration.normalizeProfessionId("mining_expert"));
         assertEquals("mining-expert", ActivityConfiguration.normalizeProfessionId("Mining Expert"));
         assertEquals("mining-expert", ActivityConfiguration.normalizeProfessionId("MINING-EXPERT"));
@@ -219,8 +191,6 @@ class ActivityConfigurationTest {
         assertEquals(once, ActivityConfiguration.normalizeProfessionId(once));
     }
 
-    // The whole point of MEDIUM 1: a config file written the way config.yml
-    // tells admins to write it must still find MMOCore's dashed id
     @Test
     void underscoredConfigIdMatchesDashedMmoCoreId() {
         Map<String, String> professions = professions("mining_expert");
@@ -245,7 +215,6 @@ class ActivityConfigurationTest {
         assertNull(ActivityConfiguration.professionActivity(Map.of(), "crafter"));
     }
 
-    // Documented behaviour: two activities on one profession, last one wins
     @Test
     void duplicateProfessionKeepsTheLastActivity() {
         Map<String, String> professions = new LinkedHashMap<>();
@@ -257,11 +226,6 @@ class ActivityConfigurationTest {
         assertEquals("second", ActivityConfiguration.professionActivity(professions, "crafter"));
     }
 
-    // ====================================
-    // The bar-unreachable ceiling. A player only ever earns from the seven
-    // tasks drawn for them, so the day is bounded by the seven lowest
-    // daily-caps rather than by every activity's cap added up.
-    // ====================================
     private static List<Integer> caps(int count, int cap) {
         List<Integer> caps = new ArrayList<>();
         for (int i = 0; i < count; i++) {
@@ -272,8 +236,6 @@ class ActivityConfigurationTest {
 
     @Test
     void theDailyCeilingIsTheSevenLowestCapsNotAllOfThem() {
-        // 40 activities at daily-cap 1 with bar.daily-max 10: only seven can
-        // be drawn, so seven is the day's ceiling - not 10, and not 40
         assertEquals(7, ActivityConfiguration.dailyCeiling(caps(40, 1), 40, 10));
     }
 
@@ -288,25 +250,16 @@ class ActivityConfigurationTest {
         assertEquals(10, ActivityConfiguration.dailyCeiling(caps(40, 5), 40, 10));
     }
 
-    // An uncapped activity is in every draw once there are too few capped
-    // ones to fill one, and then only bar.daily-max bounds the day
     @Test
     void tooFewCappedActivitiesFallsBackToDailyMax() {
         assertEquals(10, ActivityConfiguration.dailyCeiling(caps(6, 1), 40, 10));
     }
 
-    // Fewer loaded activities than a draw holds: the draw is all of them, so
-    // their caps still bound the day
     @Test
     void fewerActivitiesThanADrawAreStillBoundedByTheirCaps() {
         assertEquals(3, ActivityConfiguration.dailyCeiling(caps(3, 1), 3, 10));
     }
 
-    // ====================================
-    // What the warning says about the ceiling it found. Both bounds have to
-    // be named when the caps land exactly on bar.daily-max: lifting either
-    // one alone changes nothing.
-    // ====================================
     @Test
     void capsBelowDailyMaxAreNamedAsTheBound() {
         String warning = ActivityConfiguration.unreachableWarning(caps(40, 1), 40, 10, 100);
@@ -325,8 +278,6 @@ class ActivityConfigurationTest {
         assertTrue(warning.contains("bound by per-activity daily-caps and bar.daily-max)"), warning);
     }
 
-    // The draw is every loaded activity when fewer than seven are loaded, and
-    // the warning must not claim seven of them
     @Test
     void theWarningCountsTheDrawItNotSeven() {
         assertTrue(ActivityConfiguration.unreachableWarning(caps(3, 1), 3, 10, 100)
@@ -340,11 +291,6 @@ class ActivityConfigurationTest {
         assertNull(ActivityConfiguration.unreachableWarning(caps(40, 5), 40, 10, 10));
     }
 
-    // ====================================
-    // The two reroll knobs. load() never runs headless and both getInt
-    // fallbacks equal the shipped values, so only a non-default value proves
-    // the path string is the one an admin edits.
-    // ====================================
     private static YamlConfiguration yaml(String path, Object value) {
         YamlConfiguration config = new YamlConfiguration();
         config.set(path, value);

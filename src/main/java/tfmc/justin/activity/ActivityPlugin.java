@@ -27,8 +27,6 @@ import tfmc.justin.activity.managers.ActivityManager;
 
 public class ActivityPlugin extends JavaPlugin {
 
-    // Held only so onDisable can take it back out of PlaceholderAPI - an
-    // expansion left registered keeps this classloader alive across a reload
     private PlaceholderHook placeholderHook;
 
     @Override
@@ -45,7 +43,6 @@ public class ActivityPlugin extends JavaPlugin {
         getCommand("activity").setTabCompleter(command);
 
         getServer().getPluginManager().registerEvents(new JoinListener(manager), this);
-        // Vanilla crafting - no soft-depend to check, unlike registerHooks below
         getServer().getPluginManager().registerEvents(new CraftListener(manager), this);
         getServer().getPluginManager().registerEvents(gui, this);
 
@@ -56,11 +53,6 @@ public class ActivityPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
-        // ====================================
-        // Save first: the final write must land no matter what happens next.
-        // Unregistering from PAPI runs after, wrapped so a teardown throw from
-        // another plugin's classloader can never follow-skip or interrupt it.
-        // ====================================
         if (ActivityManager.getInstance() != null) {
             ActivityManager.getInstance().shutdown();
         }
@@ -76,12 +68,6 @@ public class ActivityPlugin extends JavaPlugin {
         getLogger().info("activity has been disabled!");
     }
 
-    // ====================================
-    // Source plugins are compiled against but optional at runtime. Each
-    // listener is only constructed inside its own isPluginEnabled check, so
-    // the class - and the missing event type it references - is never loaded
-    // on a server that does not have the plugin installed.
-    // ====================================
     private void registerHooks() {
         if (Bukkit.getPluginManager().isPluginEnabled("VotingPlugin")) {
             getServer().getPluginManager().registerEvents(new VoteListener(this, ActivityManager.getInstance()), this);

@@ -11,17 +11,6 @@ import tfmc.justin.activity.managers.ActivityManager;
 
 import java.util.UUID;
 
-// ====================================
-// Feeds MMOCore profession XP into whichever activity declares
-// 'profession: <id>' in config.yml. Only constructed when MMOCore is enabled
-// - see ActivityPlugin.
-//
-// MONITOR + ignoreCancelled: the XP only counts once every other plugin has
-// had its say and the gain is actually going through.
-//
-// Fractional XP is carried between gains so a boosted 5.5 xp gain is not
-// repeatedly rounded down to 5 - see FractionCarry.
-// ====================================
 public class ProfessionXpListener implements Listener {
 
     private final ActivityManager manager;
@@ -33,8 +22,6 @@ public class ProfessionXpListener implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onExperienceGain(PlayerExperienceGainEvent event) {
-        // Without a profession this is main-class/character XP, which no
-        // activity tracks
         if (!event.hasProfession()) {
             return;
         }
@@ -55,9 +42,6 @@ public class ProfessionXpListener implements Listener {
         }
 
         UUID uuid = player.getUniqueId();
-        // A hidden or undrawn task must not bank a fraction either - and
-        // whatever it banked while it was revealed is dropped here, so it
-        // cannot pay out on a later day the task comes back
         if (!manager.isTracked(uuid, activityId)) {
             carry.forget(uuid, activityId);
             return;

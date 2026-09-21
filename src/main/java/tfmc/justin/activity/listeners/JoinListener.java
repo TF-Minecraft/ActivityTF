@@ -5,10 +5,6 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
 import tfmc.justin.activity.managers.ActivityManager;
 
-// ====================================
-// Join is the rollover trigger for returning players, and a nudge that a
-// reward is waiting to be claimed
-// ====================================
 public class JoinListener implements Listener {
 
     private final ActivityManager manager;

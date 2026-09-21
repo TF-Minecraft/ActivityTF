@@ -34,35 +34,11 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-// ====================================
-// The admin half of /activity driven end to end without a server: the sender
-// and the target are Proxy stubs (the technique the listener tests use), and
-// the one thing onCommand does that needs a live server - resolving a name to
-// an OfflinePlayer - is overridden here. Everything else, including the
-// permission split, the messages and the audit lines, is the real code.
-//
-// Not reachable headless, and so not covered: Bukkit.getPlayerExact and
-// Bukkit.getOfflinePlayerIfCached inside resolve(), and the online-player list
-// the completer offers as a player argument - both are overridden below.
-//
-// 'reload' is the fourth mutating subcommand and its audit line is not covered
-// here either: onCommand runs manager.reload() before it audits, that calls
-// ActivityConfiguration.load(), and its first statement is
-// JavaPlugin.reloadConfig() - which, on a plugin with no data folder, throws
-// IllegalArgumentException: File cannot be null out of
-// YamlConfiguration.loadConfiguration, long before the audit line is reached.
-// ActivityManager's constructor is private, so it cannot be subclassed to stub
-// the reload out either. Its refusal path (result=denied) IS covered below.
-// ====================================
 class ActivityAdminCommandTest {
 
     private static final String ADMIN = "activity.admin";
     private static final String CHECK = "activity.check";
 
-    // ====================================
-    // A sender that answers only what the command asks it: its permissions,
-    // its name, and where its replies went.
-    // ====================================
     private static final class Sender {
         private final List<String> sent = new ArrayList<>();
         private final CommandSender bukkit;
@@ -85,15 +61,12 @@ class ActivityAdminCommandTest {
                 ActivityAdminCommandTest.class.getClassLoader(), new Class<?>[] {CommandSender.class}, handler);
         }
 
-        // Colour codes sit between the words a message is checked for, so
-        // they come off before anything is asserted about the text
         private String all() {
             return String.join("\n", sent).replaceAll("\u00a7.", "");
         }
     }
 
     private static Sender admin() {
-        // What plugin.yml's child grant gives an operator
         return new Sender("Justin", Set.of(ADMIN, CHECK));
     }
 
@@ -115,12 +88,8 @@ class ActivityAdminCommandTest {
             ActivityAdminCommandTest.class.getClassLoader(), new Class<?>[] {OfflinePlayer.class}, handler);
     }
 
-    // A name the server has never seen. resolve() answers null for it, the
-    // way the real one does for an uncached name - without it every
-    // 'if (target == null) return;' guard in the handlers was dead under test.
     private static final String UNKNOWN = "Ghost";
 
-    // The command with the two server-bound seams stubbed out
     private static ActivityCommand command(ActivityManager manager, UUID target, String targetName) {
         return new ActivityCommand(manager, null) {
             @Override
@@ -141,8 +110,6 @@ class ActivityAdminCommandTest {
     }
 
     private static ActivityManager manager() {
-        // every: 2 with one action added, so no point is ever awarded and the
-        // record path stays away from Bukkit.getPlayer
         ActivityManager manager = TestManagers.manager(
             new ActivityDef("vote", "Vote", Material.PAPER, null, 2, 1, 0),
             new ActivityDef("quest", "Quest", Material.PAPER, null, 2, 1, 0));
@@ -171,7 +138,6 @@ class ActivityAdminCommandTest {
         }
     }
 
-    // Everything the plugin logged at INFO carrying the audit marker
     private static List<String> audit(Runnable action) {
         List<String> lines = new ArrayList<>();
         Handler handler = new Handler() {
@@ -200,13 +166,6 @@ class ActivityAdminCommandTest {
         return lines;
     }
 
-    // ====================================
-    // The reply and the audit line a forced add that fills the bar leaves
-    // behind. --force bypasses the activity's daily cap and today's budget,
-    // but not bar.max - and when the bar cuts the award short the admin is
-    // told how much actually landed rather than being told it all went in.
-    // Points really are awarded here, so the Bukkit stub goes in first.
-    // ====================================
     @Test
     void aForcedAddThatFillsTheWeeklyBarSaysHowMuchLanded() {
         TestManagers.bukkit();
@@ -228,8 +187,6 @@ class ActivityAdminCommandTest {
             + " activity=\"vote\" count=50 force=true points=10 result=CLAMPED_WEEKLY", lines.get(0));
     }
 
-    // The same add with the bar wide open: every point lands and the reply
-    // says how many
     @Test
     void aForcedAddReportsThePointsItAwarded() {
         TestManagers.bukkit();
@@ -247,11 +204,6 @@ class ActivityAdminCommandTest {
         assertEquals(50, manager.getStore().get(player).points());
     }
 
-    // ====================================
-    // An add part-way to its next award gets the plain line, with no points
-    // figure: "0 points." on the most common staff action reads like a
-    // failure when the count did go in.
-    // ====================================
     @Test
     void anAddThatAwardsNoPointsYetOmitsThePointsFigure() {
         TestManagers.bukkit();
@@ -268,12 +220,6 @@ class ActivityAdminCommandTest {
         assertEquals(1, manager.getStore().get(player).count("instrument"));
     }
 
-    // ====================================
-    // addpoints
-    // ====================================
-
-    // A manager whose bar is wide open and whose daily budget is smaller than
-    // the award, so a test that passes also proves bar.daily-max did not cut it
     private static ActivityManager pointsManager(int barMax) {
         TestManagers.bukkit();
         ActivityManager manager = TestManagers.manager(
@@ -295,8 +241,6 @@ class ActivityAdminCommandTest {
         assertEquals("Added 13 points to Steve.", sender.all());
         PlayerData data = manager.getStore().peek(player);
         assertEquals(13, data.points());
-        // No activity behind it: no count anywhere, and - like add --force -
-        // nothing charged against today's budget
         assertEquals(Map.of(), data.daily());
         assertEquals(0, data.dailyPoints());
         assertTrue(dirty(manager.getStore()), "the award was not marked for saving");
@@ -304,8 +248,6 @@ class ActivityAdminCommandTest {
             + " requested=13 points=13 result=RECORDED"), lines);
     }
 
-    // Today's budget already spent: a gated award would get nothing, this
-    // one still gets every point
     @Test
     void addpointsIsNotLimitedByTheDailyMax() {
         ActivityManager manager = pointsManager(100);
@@ -337,7 +279,6 @@ class ActivityAdminCommandTest {
         assertEquals(List.of("ACTIVITY-AUDIT sender=\"Justin\" action=addpoints target=\"Steve\" uuid=" + player
             + " requested=13 points=10 result=WEEKLY_CLAMPED"), lines);
 
-        // and a bar already full says none of it landed
         Sender again = admin();
         command(manager, player, "Steve").onCommand(
             again.bukkit, null, "activity", new String[] {"addpoints", "Steve", "13"});
@@ -362,8 +303,6 @@ class ActivityAdminCommandTest {
         }
     }
 
-    // What was typed is echoed back without its formatting codes: a value
-    // must not be able to recolour or restyle the reply
     @Test
     void anInvalidAddpointsValueIsEchoedWithoutFormatting() {
         ActivityManager manager = pointsManager(100);
@@ -393,12 +332,6 @@ class ActivityAdminCommandTest {
         }
     }
 
-    // ====================================
-    // A milestone crossed by addpoints is announced exactly the way one
-    // crossed by add --force is: the points line, then Reward Ready, and the
-    // milestone is claimable afterwards. The only difference is what the
-    // points line names as their source.
-    // ====================================
     @Test
     void addpointsCrossesAMilestoneTheSameWayAForcedAddDoes() {
         List<String> byAdd = milestoneCrossedBy(100, 0, admin(),
@@ -409,11 +342,6 @@ class ActivityAdminCommandTest {
         assertEquals(List.of("+12 Bonus (12/100)", "REWARD READY! Open /activity to claim."), byPoints);
     }
 
-    // ====================================
-    // The last milestone is the weekly max itself, so an award that is
-    // clamped is also the one that reaches it: the clamp must not swallow
-    // the Reward Ready. 15 points with 10 already claimed, bar.max 20.
-    // ====================================
     @Test
     void aClampedAddpointsStillReachesTheMilestoneAtTheWeeklyMax() {
         Sender sender = admin();
@@ -423,11 +351,6 @@ class ActivityAdminCommandTest {
         assertEquals(List.of("+5 Bonus (20/20)", "REWARD READY! Open /activity to claim."), got);
     }
 
-    // ====================================
-    // Like add --force, addpoints charges nothing against today's budget, so
-    // a reroll - which refunds today's earned points only - leaves it on the
-    // bar.
-    // ====================================
     @Test
     void aRerollDoesNotTakeAddpointsBack() {
         ActivityManager manager = pointsManager(100);
@@ -442,8 +365,6 @@ class ActivityAdminCommandTest {
         assertEquals(0, data.dailyPoints());
     }
 
-    // The manager refuses a non-positive award itself, not just the command:
-    // it is public, and a row created for nothing would be pinned in the file
     @Test
     void recordPointsRefusesANonPositiveAwardWithoutCreatingARow() {
         ActivityManager manager = pointsManager(100);
@@ -456,9 +377,6 @@ class ActivityAdminCommandTest {
         assertFalse(dirty(manager.getStore()));
     }
 
-    // What the online target was sent when these args pushed him past the
-    // next unclaimed milestone. He starts on startPoints, with every
-    // milestone below them already claimed.
     private static List<String> milestoneCrossedBy(int barMax, int startPoints, Sender sender, String[] args) {
         ActivityManager manager = pointsManager(barMax);
         UUID uuid = UUID.randomUUID();
@@ -488,16 +406,8 @@ class ActivityAdminCommandTest {
         return got;
     }
 
-    // ====================================
-    // check
-    // ====================================
-
     @Test
     void checkPrintsEveryFieldOfThePlayersDay() {
-        // daily-cap 1 makes worth(3) = 1, distinct from rawWorth(3) = 3, so
-        // the "before any cap" text below is checked against the uncapped
-        // figure the message promises rather than the capped one - which
-        // 'check' must read off config's own def, not merely echo the count
         ActivityManager manager = TestManagers.manager(
             new ActivityDef("vote", "Vote", Material.PAPER, null, 1, 1, 1),
             new ActivityDef("quest", "Quest", Material.PAPER, null, 2, 1, 0));
@@ -506,8 +416,6 @@ class ActivityAdminCommandTest {
         UUID player = UUID.randomUUID();
         manager.reveal(player, manager.tasks(player).tasks().indexOf("vote"));
         PlayerData data = manager.getStore().peek(player);
-        // Straight through the POJO: crediting a point through the manager
-        // would announce it, and that needs a running server
         data.record(3, new ActivityDef("vote", "Vote", Material.PAPER, null, 1, 1, 1), 50, 10, List.of(10, 20));
 
         Sender sender = admin();
@@ -515,33 +423,21 @@ class ActivityAdminCommandTest {
         String out = sender.all();
 
         assertTrue(out.contains("Steve"), out);
-        // weekly points / bar max / claimed
         assertTrue(out.contains(data.points() + "/50"), out);
         assertTrue(out.contains("0 already claimed"), out);
-        // daily points / daily max
         assertTrue(out.contains(data.dailyPoints() + "/10"), out);
-        // rerolls used / allowance - with the label, since "0/1" on its own is
-        // a prefix of the daily line's "0/10" and passes with the line deleted
         assertTrue(out.contains("Rerolls used today: 0/1"), out);
         assertTrue(out.contains(data.weekKey()), out);
         assertTrue(out.contains(data.dayKey()), out);
-        // the one revealed task, with its count and what it is worth today
         assertTrue(out.contains("Vote"), out);
         assertTrue(out.contains("revealed"), out);
         assertTrue(out.contains("count 3"), out);
         assertTrue(out.contains("that count is worth 3 points before any cap"), out);
-        // and every slot of the draw is listed
         assertEquals(data.tasks().size(),
             sender.sent.stream().filter(line -> line.contains("revealed") || line.contains("hidden")).count());
         assertTrue(out.contains("hidden"), out);
     }
 
-    // ====================================
-    // Config display names carry colour/format codes (hex, '&', or both
-    // stacked, as here) so the GUI can paint them - but check() prints to
-    // console/chat with no item lore to carry that colour, so it must strip
-    // every code the config accepts before printing the name.
-    // ====================================
     @Test
     void checkStripsColourCodesFromTheTaskName() {
         ActivityManager manager = TestManagers.manager(
@@ -586,13 +482,6 @@ class ActivityAdminCommandTest {
         assertFalse(dirty(manager.getStore()), "check marked the store dirty");
     }
 
-    // ====================================
-    // A row whose stored day is not today - what every offline player's row
-    // becomes, since nothing rolls them. check() must neither roll it nor
-    // print its numbers as "today": swap peek() for get() in handleCheck and
-    // this fails, because the row rolls forward and the draw, the counts and
-    // the reroll all go with it.
-    // ====================================
     @Test
     void checkOnAStaleRowRollsNothingAndReportsThePostRolloverDay() {
         ActivityManager manager = manager();
@@ -600,7 +489,6 @@ class ActivityAdminCommandTest {
         manager.tasks(player);
         PlayerData data = manager.getStore().peek(player);
         String week = data.weekKey();
-        // Back-date the day the way a rollover would have moved it on
         data.roll(week, "1999-01-01");
         data.reroll(List.of("vote"), 50);
         data.record(3, new ActivityDef("vote", "Vote", Material.PAPER, null, 2, 1, 0), 50, 10, List.of(10, 20));
@@ -610,7 +498,6 @@ class ActivityAdminCommandTest {
         Sender sender = admin();
         command(manager, player, "Steve").onCommand(sender.bukkit, null, "activity", new String[] {"check", "Steve"});
 
-        // nothing was rolled, replaced or marked for saving
         assertSame(data, manager.getStore().peek(player));
         assertEquals("1999-01-01", data.dayKey());
         assertEquals(List.of("vote"), data.tasks());
@@ -618,19 +505,15 @@ class ActivityAdminCommandTest {
         assertEquals(3, data.count("vote"));
         assertFalse(dirty(manager.getStore()), "check marked the store dirty");
 
-        // and the day is reported as their next login will leave it
         String out = sender.all();
         assertTrue(out.contains("Stale: stored week " + week + ", day 1999-01-01"), out);
         assertTrue(out.contains("Today: 0/10 points"), out);
         assertFalse(out.contains("Today: 1/10 points"), out);
         assertTrue(out.contains("Rerolls used today: 0/1"), out);
         assertTrue(out.contains("No tasks drawn yet today"), out);
-        // the week is still the current one, so the weekly bar survives it
         assertTrue(out.contains("Weekly: 1/50 points"), out);
     }
 
-    // Today's daily-reward flag, and a stale day's read as its next login
-    // leaves it: not claimed
     @Test
     void checkShowsTodaysDailyRewardAndIgnoresAStaleDaysFlag() {
         ActivityManager manager = manager();
@@ -657,8 +540,6 @@ class ActivityAdminCommandTest {
         assertFalse(dirty(manager.getStore()), "check marked the store dirty");
     }
 
-    // peek() runs none of the clamping rolled() does, so a bar.max lowered
-    // under a stored total has to be clamped on the way out instead
     @Test
     void checkClampsPointsAndClaimedToALoweredBar() {
         ActivityManager manager = manager();
@@ -677,9 +558,6 @@ class ActivityAdminCommandTest {
         assertEquals(40, data.claimedPoints(), "check clamped the stored value");
     }
 
-    // Same as above but for the daily figure: peek() clamps neither, so a
-    // daily.max lowered under a stored total prints stale numbers on "Today"
-    // until the row is next touched
     @Test
     void checkClampsDailyPointsToALoweredDailyMax() {
         ActivityManager manager = manager();
@@ -719,10 +597,6 @@ class ActivityAdminCommandTest {
 
         assertTrue(sender.all().contains("Usage:"), sender.all());
     }
-
-    // ====================================
-    // the permission split
-    // ====================================
 
     @Test
     void onlyCheckAnswersToTheCheckPermission() {
@@ -777,21 +651,14 @@ class ActivityAdminCommandTest {
                 .onCommand(sender.bukkit, null, "activity", args));
 
             assertTrue(sender.all().contains("No permission"), args[0] + ": " + sender.all());
-            // A refused mutating attempt leaves a line of its own: probing for
-            // what one may run must not be silent
             assertEquals(List.of("ACTIVITY-AUDIT sender=\"Mod\" action=" + args[0] + " result=denied"),
                 lines, args[0] + ": the refusal was not audited");
-            // nothing was touched
             assertEquals(1, manager.getStore().peek(player).rerolls(), args[0]);
             assertEquals(0, manager.getStore().peek(player).count("vote"), args[0]);
             assertEquals(0, manager.getStore().peek(player).points(), args[0]);
             assertFalse(dirty(manager.getStore()), args[0]);
         }
     }
-
-    // ====================================
-    // givereroll
-    // ====================================
 
     @Test
     void rerollGivesOneBackAndChangesNothingElse() {
@@ -811,7 +678,6 @@ class ActivityAdminCommandTest {
         assertEquals(0, data.rerolls());
         assertTrue(sender.all().contains("from 1 to 0"), sender.all());
         assertTrue(dirty(manager.getStore()), "the give-back was not marked for saving");
-        // the draw, the points and the reveals are untouched
         assertEquals(tasks, data.tasks());
         assertEquals(points, data.points());
         assertEquals(0, data.dailyPoints());
@@ -847,11 +713,6 @@ class ActivityAdminCommandTest {
         assertNull(manager.getStore().peek(player), "reroll created a row");
     }
 
-    // ====================================
-    // A stale day is a day the player has not started: no reroll of it has
-    // been used, and the give-back must say so without rolling the row over
-    // as a side effect - which is what 'check' reports for the same row.
-    // ====================================
     @Test
     void givererollOnAStaleRowRefusesAndRollsNothing() {
         ActivityManager manager = manager();
@@ -869,7 +730,6 @@ class ActivityAdminCommandTest {
         assertTrue(sender.all().contains("no rerolls today"), sender.all());
         assertEquals(List.of("ACTIVITY-AUDIT sender=\"Justin\" action=givereroll target=\"Steve\" uuid="
             + player + " rerolls=0->0 result=noop"), lines);
-        // the stale day is exactly as it was: no rollover happened
         assertEquals("1999-01-01", data.dayKey());
         assertEquals(1, data.rerolls());
         assertEquals(List.of("vote"), data.tasks());
@@ -886,15 +746,6 @@ class ActivityAdminCommandTest {
         assertTrue(sender.all().contains("Usage:"), sender.all());
     }
 
-    // ====================================
-    // the unknown player
-    // ====================================
-
-    // ====================================
-    // resolve() answering null is the guard every handler opens with. Each
-    // one has to stop there, touch nothing, and - for the mutating ones -
-    // leave a line saying a name that does not exist was asked about.
-    // ====================================
     @Test
     void anUnknownPlayerStopsEveryHandlerAndIsAuditedUnlessItIsCheck() {
         for (String[] args : List.of(
@@ -920,17 +771,12 @@ class ActivityAdminCommandTest {
                     : List.of("ACTIVITY-AUDIT sender=\"Justin\" action=" + args[0]
                         + " typed=\"" + UNKNOWN + "\" result=unknown-player"),
                 lines, args[0]);
-            // and no handler got past the guard
             assertEquals(1, manager.getStore().peek(player).rerolls(), args[0]);
             assertEquals(0, manager.getStore().peek(player).count("vote"), args[0]);
             assertEquals(List.of("vote"), manager.getStore().peek(player).tasks(), args[0]);
             assertFalse(dirty(manager.getStore()), args[0]);
         }
     }
-
-    // ====================================
-    // audit logging
-    // ====================================
 
     @Test
     void everyMutatingSubcommandLogsExactlyOneAuditLine() {
@@ -952,8 +798,6 @@ class ActivityAdminCommandTest {
         assertEquals("ACTIVITY-AUDIT sender=\"Justin\" action=add target=\"Steve\" uuid=" + player
             + " activity=\"vote\" count=1 force=true points=0 result=ADDED", add.get(0));
 
-        // the give-back that found nothing to give back is logged too, and
-        // says so - a mutating command that changed nothing is still a line
         List<String> noop = audit(() ->
             command.onCommand(sender.bukkit, null, "activity", new String[] {"givereroll", "Steve"}));
         assertEquals(1, noop.size(), String.valueOf(noop));
@@ -968,12 +812,6 @@ class ActivityAdminCommandTest {
             + " rerolls=1->0 result=done", reroll.get(0));
     }
 
-    // ====================================
-    // The shape a Geyser name, or a command block a player renamed, can
-    // reach the log with: a control character, spaces, and something that
-    // reads as another key=value pair. The escape is replaced and the whole
-    // value is quoted, so neither can pass for part of the line.
-    // ====================================
     @Test
     void aHostileNameIsSanitisedAndQuotedInTheAuditLine() {
         ActivityManager manager = manager();
@@ -988,13 +826,6 @@ class ActivityAdminCommandTest {
             + "target=\"Steve result=done\" uuid=" + player + " result=done", lines.get(0));
     }
 
-    // ====================================
-    // A name carrying a bare '"' would close the field early and let
-    // whatever follows it be read as fresh key=value pairs; a bare '\'
-    // just before the closing quote would escape it instead of ending the
-    // string. quoted() must escape both. Deleting either .replace(...) call
-    // in quoted() must fail this test.
-    // ====================================
     @Test
     void aQuoteAndABackslashInANameAreEscapedInTheAuditLine() {
         ActivityManager manager = manager();
@@ -1021,19 +852,12 @@ class ActivityAdminCommandTest {
         assertEquals(List.of(), audit(() -> command(manager, UUID.randomUUID(), "Nobody")
             .onCommand(sender.bukkit, null, "activity", new String[] {"check", "Nobody"})));
 
-        // including when it is the one being refused
         Sender nobody = new Sender("Player", Set.of());
         assertEquals(List.of(), audit(() -> command(manager, player, "Steve")
             .onCommand(nobody.bukkit, null, "activity", new String[] {"check", "Steve"})));
         assertTrue(nobody.all().contains("No permission"), nobody.all());
     }
 
-    // ====================================
-    // An unrecognised subcommand used to be mapped to activity.admin and
-    // refused, which hid the usage line from the check-only sender who had
-    // just mistyped one. It is a usage error for anyone who may run anything,
-    // and still nothing at all for a sender who may not.
-    // ====================================
     @Test
     void anUnknownSubcommandIsAUsageErrorForAnyoneAllowedIn() {
         ActivityManager manager = manager();
@@ -1052,8 +876,6 @@ class ActivityAdminCommandTest {
         assertEquals(List.of(), lines, "an unknown subcommand was audited");
     }
 
-    // A console sender has no Player behind it, and its name still has to
-    // reach the log line
     @Test
     void theConsoleIsNamedInTheAuditLine() {
         ActivityManager manager = manager();
@@ -1067,10 +889,6 @@ class ActivityAdminCommandTest {
         assertTrue(lines.get(0).startsWith("ACTIVITY-AUDIT sender=\"CONSOLE\" action=reset"), lines.get(0));
     }
 
-    // ====================================
-    // tab completion
-    // ====================================
-
     @Test
     void aCheckOnlySenderIsOfferedCheckAndNothingElse() {
         ActivityManager manager = manager();
@@ -1080,12 +898,10 @@ class ActivityAdminCommandTest {
             command.onTabComplete(checkOnly().bukkit, null, "activity", new String[] {""}));
         assertEquals(List.of(),
             command.onTabComplete(checkOnly().bukkit, null, "activity", new String[] {"re"}));
-        // ...and cannot complete a mutating subcommand's arguments either
         assertEquals(List.of(),
             command.onTabComplete(checkOnly().bukkit, null, "activity", new String[] {"reset", ""}));
         assertEquals(List.of(),
             command.onTabComplete(checkOnly().bukkit, null, "activity", new String[] {"add", "Steve", ""}));
-        // but does get a player for 'check'
         assertEquals(List.of("Steve"),
             command.onTabComplete(checkOnly().bukkit, null, "activity", new String[] {"check", "Ste"}));
     }
@@ -1114,10 +930,6 @@ class ActivityAdminCommandTest {
             .onTabComplete(nobody.bukkit, null, "activity", new String[] {""}));
     }
 
-    // ====================================
-    // the shipped text
-    // ====================================
-
     @Test
     void everyNewAdminMessageIsShipped() {
         YamlConfiguration messages = YamlConfiguration
@@ -1140,8 +952,6 @@ class ActivityAdminCommandTest {
             .getString("commands.activity.usage", "");
         assertTrue(pluginUsage.contains("check"), pluginUsage);
         assertTrue(pluginUsage.contains("givereroll"), pluginUsage);
-        // Its own key, so a live messages.yml that predates it still gets the
-        // line - and not also in admin.usage, or a fresh install shows it twice
         String addpointsUsage = messages.getString("admin.usage-addpoints", "");
         assertTrue(addpointsUsage.contains("addpoints <player> <points>"), addpointsUsage);
         assertFalse(usage.contains("addpoints"), usage);

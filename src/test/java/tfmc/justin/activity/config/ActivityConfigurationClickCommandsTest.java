@@ -15,13 +15,6 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-// ====================================
-// The 'click-commands:' activity key and the 'click-command-cooldown-millis'
-// rate limit that guards it. load() needs a live Bukkit server, so the two
-// parsing methods are driven directly through reflection - the same trick, and
-// the same hand-built JavaPlugin, as ActivityConfigurationGuaranteedTest. The
-// plugin's logger is captured so the warnings can be asserted on.
-// ====================================
 class ActivityConfigurationClickCommandsTest {
 
     private final List<String> logged = new ArrayList<>();
@@ -68,8 +61,6 @@ class ActivityConfigurationClickCommandsTest {
         assertEquals(List.of(), only(config).clickCommands());
     }
 
-    // A single 'click-commands: sudo %player% votelist' is the natural typo,
-    // and it must not be swallowed the way a malformed list once was here
     @Test
     void aNonListValueWarnsAndYieldsAnEmptyList() {
         ActivityConfiguration config = configFor("  vote:\n    points: 1\n"
@@ -87,7 +78,6 @@ class ActivityConfigurationClickCommandsTest {
         assertEquals(List.of("say hi"), only(config).clickCommands());
     }
 
-    // The one numeric parser all three click-command knobs go through
     private int clamped(String yaml, String path, int fallback, int min, int max) {
         ActivityConfiguration config = new ActivityConfiguration(stubPlugin());
         try {
@@ -126,8 +116,6 @@ class ActivityConfigurationClickCommandsTest {
         assertEquals(2500, cooldown(ActivityConfiguration.CLICK_COMMAND_COOLDOWN_PATH + ": 2500\n"));
     }
 
-    // There is no "off" value: 0 would let a held mouse button dispatch
-    // console commands at click rate
     @Test
     void aCooldownBelowTheFloorIsClampedUp() {
         assertEquals(50, cooldown(ActivityConfiguration.CLICK_COMMAND_COOLDOWN_PATH + ": 0\n"));
@@ -146,9 +134,6 @@ class ActivityConfigurationClickCommandsTest {
         assertTrue(warned("is not a number"), logged.toString());
     }
 
-    // The shipped file, against the exact paths the parser reads - a typo in
-    // either would otherwise go unnoticed, since the shipped cooldown is also
-    // the fallback
     @Test
     void theShippedConfigWiresVotingUpAndSetsTheCooldown() {
         YamlConfiguration shipped =
@@ -161,12 +146,6 @@ class ActivityConfigurationClickCommandsTest {
         assertEquals(5, shipped.getInt(ActivityConfiguration.CLICK_COMMANDS_PER_CLICK_PATH));
     }
 
-    // ====================================
-    // The server-wide ceiling and the per-click cap, which the per-player
-    // cooldown cannot give: they are parsed by the same method, so what is
-    // pinned here is that each one is read from its own path with its own
-    // default and its own bounds.
-    // ====================================
     @Test
     void anAbsentGlobalLimitIsTwentyASecond() {
         assertEquals(20, perSecond("bar:\n  max: 50\n"));
@@ -177,8 +156,6 @@ class ActivityConfigurationClickCommandsTest {
         assertEquals(60, perSecond(ActivityConfiguration.CLICK_COMMANDS_PER_SECOND_PATH + ": 60\n"));
     }
 
-    // No "off" value here either: 0 a second would stop the feature dead
-    // rather than bound it, which is what removing 'click-commands' is for
     @Test
     void aGlobalLimitOutsideTheBoundsIsClamped() {
         assertEquals(1, perSecond(ActivityConfiguration.CLICK_COMMANDS_PER_SECOND_PATH + ": 0\n"));

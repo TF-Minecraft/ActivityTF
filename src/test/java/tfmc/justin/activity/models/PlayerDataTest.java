@@ -36,12 +36,6 @@ class PlayerDataTest {
         return data.record(amount, def, MAX, DAILY_MAX, MILESTONES);
     }
 
-    // ====================================
-    // /activity add --force: the same count, none of the daily limits. VOTE is
-    // every: 1, points: 1, daily-cap: 5 - the shipped vote activity - and the
-    // budget handed in is deliberately smaller than the award, since a forced
-    // add is not supposed to look at it at all.
-    // ====================================
     private RecordResult forced(PlayerData data, ActivityDef def, int amount, int max) {
         return data.recordForced(amount, def, max, MILESTONES);
     }
@@ -56,9 +50,6 @@ class PlayerDataTest {
         assertEquals(Recorded.RECORDED, result.outcome());
         assertEquals(50, data.points());
         assertEquals(50, data.count("vote"));
-        // Nothing of a forced award is spent out of today's budget, so
-        // dailyPoints can never be pushed past the bar.daily-max the loader
-        // clamps it to
         assertEquals(0, data.dailyPoints());
     }
 
@@ -72,16 +63,13 @@ class PlayerDataTest {
         assertEquals(Recorded.WEEKLY_CLAMPED, clamped.outcome());
         assertEquals(MAX, data.points());
 
-        // ...and once the bar is full there is nothing left to clamp
         RecordResult full = forced(data, VOTE, 10, MAX);
         assertEquals(0, full.pointsAwarded());
         assertEquals(Recorded.WEEKLY_MAX, full.outcome());
         assertEquals(MAX, data.points());
-        // the count still went in
         assertEquals(60, data.count("vote"));
     }
 
-    // A count part-way to its next award is a plain success, not a cap
     @Test
     void aForcedRecordPartWayToThePointIsStillRecorded() {
         PlayerData data = data();
@@ -93,13 +81,6 @@ class PlayerDataTest {
         assertEquals(5, data.count("instrument"));
     }
 
-    // ====================================
-    // A forced award that saturates at Integer.MAX_VALUE must fill the bar,
-    // not wrap it. 'points + p' as an int would go negative and be clamped to
-    // 0, wiping a bar that already had points on it - and leaving points below
-    // claimedPoints, which PlayerStore.parse resolves by cutting claimedPoints
-    // down, handing every milestone the player already collected back.
-    // ====================================
     @Test
     void aForcedAwardThatSaturatesFillsTheBarInsteadOfWrappingIt() {
         ActivityDef rich = new ActivityDef("boss", "Boss", Material.STONE, null, 1, 2500, 0);
@@ -123,12 +104,6 @@ class PlayerDataTest {
         assertEquals(MILESTONES.size(), forced(data, VOTE, 50, MAX).milestonesReached());
     }
 
-    // ====================================
-    // Because a forced award never touches dailyPoints, a later reroll hands
-    // back only what the player genuinely earned today - the staff-granted
-    // points stay on the bar - and the reroll.max-points gate (which reads
-    // dailyPoints) is not tripped by a forced add either.
-    // ====================================
     @Test
     void aForcedAwardIsNotRefundedByAReroll() {
         PlayerData data = data();
@@ -240,8 +215,6 @@ class PlayerDataTest {
         assertEquals(1, data.claimable(MILESTONES));
     }
 
-    // A paid milestone stays paid: adding milestones below it must not make
-    // what was already handed over claimable again
     @Test
     void addingLowerMilestonesDoesNotReviveAPaidClaim() {
         PlayerData data = data();
@@ -346,7 +319,6 @@ class PlayerDataTest {
         record(data, UNCAPPED, 15);
         data.setClaimedPoints(10);
 
-        // 15 has reached 5, 10 and 15; 5 and 10 are already paid for
         assertEquals(1, data.claimable(List.of(5, 10, 15, 20)));
     }
 
@@ -354,7 +326,6 @@ class PlayerDataTest {
     void droppingMilestonesAfterAFullClaimDoesNotReviveIt() {
         PlayerData data = data();
         record(data, UNCAPPED, MAX);
-        // Claimed everything: the highest milestone on the bar is burned
         data.setClaimedPoints(MAX);
 
         assertEquals(0, data.claimable(List.of(20)));
@@ -366,7 +337,6 @@ class PlayerDataTest {
         record(data, UNCAPPED, MAX);
         data.setClaimedPoints(MAX);
 
-        // Every one of them is at or under what was already paid for
         assertEquals(0, data.claimable(List.of(7, 14)));
     }
 
@@ -377,20 +347,13 @@ class PlayerDataTest {
         data.setClaimedPoints(10);
         record(data, UNCAPPED, 7);
 
-        // points=17, claimed=10: 14 has been reached and never paid for
         assertEquals(1, data.claimable(List.of(7, 14)));
     }
 
-    // ====================================
-    // claimable() is what is left unpaid, not everything the bar has reached:
-    // a player who has already been paid for part of the bar must be owed only
-    // the rest, or every claim would hand out the whole bar again.
-    // ====================================
     @Test
     void partlyClaimedPointsOnlyOweTheRemainder() {
         PlayerData data = new PlayerData(20, 0, WEEK, DAY, 10, java.util.Map.of());
 
-        // 15 and 20 are left; 5 and 10 were paid for
         assertEquals(2, data.claimable(List.of(5, 10, 15, 20)));
     }
 
@@ -398,7 +361,6 @@ class PlayerDataTest {
     void pointsShortOfAMilestoneDoNotOweIt() {
         PlayerData data = new PlayerData(45, 0, WEEK, DAY, 0, java.util.Map.of());
 
-        // 20 and 40 are reached; the last 5 points fall short of 60
         assertEquals(2, data.claimable(List.of(20, 40, 60)));
     }
 
@@ -412,8 +374,6 @@ class PlayerDataTest {
         assertEquals(0, data.claimable(MILESTONES));
     }
 
-    // Points past the daily max are lost: they must not reach the weekly bar
-    // today, nor leak into it once the day rolls over.
     @Test
     void pointsPastTheDailyMaxAreLost() {
         PlayerData data = data();
@@ -431,9 +391,6 @@ class PlayerDataTest {
         assertEquals(6, data.points());
     }
 
-    // Product-owner example: dailyMax 10, barMax large enough to never bind.
-    // Earning "36 points" worth on day one and "25 points" worth on day two
-    // must land on weekly points 20 (10 + 10) and dailyPoints 10 (today only).
     @Test
     void productOwnerExampleTwoDaysOfThirtySixAndTwentyFive() {
         PlayerData data = data();
@@ -500,9 +457,6 @@ class PlayerDataTest {
         assertEquals(0, data.points());
     }
 
-    // Milestones must reflect what actually reached the weekly bar, not the
-    // raw earned amount before the daily clamp trims it: a raw 20 would cross
-    // two milestones (10 and 20), but a dailyMax of 5 trims it to 5.
     @Test
     void milestonesAreComputedFromTheDailyClampedAmount() {
         PlayerData data = data();
@@ -524,10 +478,6 @@ class PlayerDataTest {
         assertEquals(barMax, result.pointsAwarded());
     }
 
-    // Pinning documented behaviour: dailyPoints tracks only the amount that
-    // actually landed on the weekly total, not the (possibly larger) amount
-    // earned before the weekly bar clamped it. A weekly-clamped award only
-    // consumes as much daily budget as reached the bar.
     @Test
     void weeklyClampedAwardConsumesOnlyWhatReachedTheBar() {
         PlayerData data = data();
@@ -540,15 +490,10 @@ class PlayerDataTest {
         assertEquals(5, data.dailyPoints());
     }
 
-    // ====================================
-    // bar.vote-share 50 on a daily-max of 10: everything but vote shares 5
-    // ====================================
     private RecordResult shared(PlayerData data, ActivityDef def, int amount, int nonVoteMax) {
         return data.record(amount, def, MAX, 10, nonVoteMax, MILESTONES);
     }
 
-    // A forced vote is not a vote point of the day: it must not open the
-    // non-vote share up past its 5
     @Test
     void aForcedVoteDoesNotWidenTheNonVoteShare() {
         PlayerData data = data();
@@ -560,9 +505,6 @@ class PlayerDataTest {
         assertEquals(0, data.votePoints());
     }
 
-    // 5 vote + 5 non-vote, then a reroll the claimed 8 lets only 2 come back
-    // off: the 8 carried keep the day's half-and-half mix, so 4 non-vote are
-    // spent and 1 is left - not 0, as if every carried point were non-vote
     @Test
     void votePointsCarriedPastARerollStillCountAsVote() {
         PlayerData data = data();
@@ -608,8 +550,6 @@ class PlayerDataTest {
         assertEquals(10, data.dailyPoints());
     }
 
-    // A row saved before vote-share existed: 8 non-vote points already in.
-    // Nothing is taken back, no more non-vote lands, vote still gets the rest.
     @Test
     void nonVotePointsAlreadyOverTheShareAreKept() {
         PlayerData data = new PlayerData(8, 8, WEEK, DAY, 0, Map.of("free", 8));
@@ -637,9 +577,6 @@ class PlayerDataTest {
         assertEquals(0, data.dailyPoints());
     }
 
-    // dailyPoints already past dailyMax (e.g. read off disk after dailyMax was
-    // lowered) must not drive the remaining budget negative and give an award
-    // out of thin air.
     @Test
     void dailyPointsAlreadyOverTheLoweredMaxNeverGoesNegativeOrAwards() {
         PlayerData data = new PlayerData(0, 15, WEEK, DAY, 0, java.util.Map.of());
@@ -650,16 +587,11 @@ class PlayerDataTest {
         assertEquals(15, data.dailyPoints());
     }
 
-    // ====================================
-    // Which cap swallowed the points, so /activity add can name it instead of
-    // reporting a success nobody was credited for.
-    // ====================================
     @Test
     void aCreditedPointReportsPlainSuccess() {
         assertEquals(Recorded.RECORDED, record(data(), VOTE, 1).outcome());
     }
 
-    // Part-way to the next point is a success too - nothing capped it
     @Test
     void partialProgressTowardsTheNextPointIsNotACap() {
         assertEquals(Recorded.RECORDED, record(data(), INSTRUMENT, 1).outcome());
@@ -673,9 +605,6 @@ class PlayerDataTest {
         assertEquals(Recorded.ACTIVITY_CAP, record(data, VOTE, 1).outcome());
     }
 
-    // A cap in points > 1 per award: worth() must compare against capPoints(),
-    // not the raw award count, or a cap of 1 would let a second every:1 award
-    // through when its points happen to be more than 1.
     @Test
     void anActivityCapWithMultiPointAwardsStopsAtItsCapPoints() {
         ActivityDef cappedAtOne =
@@ -709,10 +638,6 @@ class PlayerDataTest {
         assertEquals(Recorded.WEEKLY_MAX, data.record(1, UNCAPPED, MAX, DAILY_MAX, MILESTONES).outcome());
     }
 
-    // ====================================
-    // PlayerData.due: the static helper claim() and claimable() both go
-    // through. Milestones [10, 20] throughout.
-    // ====================================
     @Test
     void pointsExactlyOnAMilestoneOwesIt() {
         assertEquals(List.of(10), PlayerData.due(10, 0, MILESTONES));
@@ -723,8 +648,6 @@ class PlayerDataTest {
         assertEquals(List.of(20), PlayerData.due(20, 10, MILESTONES));
     }
 
-    // Config order is not guaranteed ascending; due() must sort its own
-    // output regardless of the order milestones are given in.
     @Test
     void dueReturnsAscendingEvenWhenMilestonesAreUnsorted() {
         assertEquals(List.of(10, 20), PlayerData.due(30, 0, List.of(20, 10)));
@@ -735,8 +658,6 @@ class PlayerDataTest {
         assertEquals(List.of(), PlayerData.due(50, 20, MILESTONES));
     }
 
-    // A stale claimedPoints above the current points (e.g. milestones edited
-    // down after a claim) must owe nothing, not a negative count
     @Test
     void claimedAboveCurrentPointsOwesNothingAndNeverGoesNegative() {
         assertEquals(List.of(), PlayerData.due(5, 100, MILESTONES));
@@ -760,8 +681,6 @@ class PlayerDataTest {
         assertEquals(2, result.milestonesReached());
     }
 
-    // The same two milestones must come due regardless of how the points were
-    // earned: 10 in one day then 10 the next, versus 5 a day for four days.
     @Test
     void theSameTwoMilestonesComeDueRegardlessOfPace() {
         PlayerData playerA = new PlayerData(WEEK, DAY);
@@ -784,10 +703,6 @@ class PlayerDataTest {
         assertEquals(List.of(10, 20), PlayerData.due(playerB.points(), playerB.claimedPoints(), MILESTONES));
     }
 
-    // ====================================
-    // The daily draw: up to TASKS_PER_DAY distinct loaded ids, wiped by both
-    // rollovers so the next day hands out a fresh, fully hidden set.
-    // ====================================
     private static List<String> ids(int count) {
         List<String> ids = new java.util.ArrayList<>();
         for (int i = 0; i < count; i++) {
@@ -886,12 +801,6 @@ class PlayerDataTest {
         assertFalse(data.isRevealed("stranger"));
     }
 
-    // ====================================
-    // An activity removed by /activity reload leaves a dead id in the draw.
-    // The next use drops it, discards its revealed flag and tops the draw back
-    // up out of what is still loaded - never below TASKS_PER_DAY while there
-    // are ids left to draw.
-    // ====================================
     @Test
     void aRemovedActivityIsDroppedAndTheDrawToppedBackUp() {
         PlayerData data = new PlayerData(0, 0, WEEK, DAY, 0, java.util.Map.of(),
@@ -903,7 +812,6 @@ class PlayerDataTest {
         assertFalse(data.tasks().contains("gone"), "a removed activity stays in the draw");
         assertEquals(data.tasks().size(), new HashSet<>(data.tasks()).size(), "the top-up repeats an id");
         assertTrue(ids(30).containsAll(data.tasks()));
-        // The survivors keep their order; the refill lands at the end
         assertEquals(List.of("a0", "a1", "a2", "a3", "a4", "a5"), data.tasks().subList(0, 6));
     }
 
@@ -919,7 +827,6 @@ class PlayerDataTest {
         assertFalse(data.isRevealed(data.tasks().get(6)), "the refilled slot is revealed");
     }
 
-    // Nothing left to draw from: the draw just shrinks rather than looping
     @Test
     void aDrawCannotBeToppedUpPastWhatIsLoaded() {
         PlayerData data = new PlayerData(0, 0, WEEK, DAY, 0, java.util.Map.of(),
@@ -929,10 +836,6 @@ class PlayerDataTest {
         assertEquals(List.of("a0", "a1"), data.tasks());
     }
 
-    // ====================================
-    // A guaranteed activity is in every draw, wherever the shuffle puts it,
-    // and a draw persisted without it gains it on the next use.
-    // ====================================
     private static Set<Integer> guaranteedSlots(List<String> ids, List<String> guaranteed, String id) {
         Set<Integer> slots = new HashSet<>();
         Random random = new Random(11);
@@ -972,7 +875,6 @@ class PlayerDataTest {
         assertEquals(new HashSet<>(ids(3)), new HashSet<>(drawn));
     }
 
-    // Its plugin is missing, so config never loaded it - nothing special happens
     @Test
     void aGuaranteedIdThatIsNotLoadedIsSimplyNotDrawn() {
         List<String> drawn = PlayerData.draw(ids(30), List.of("ghost"), new Random(5));
@@ -982,10 +884,6 @@ class PlayerDataTest {
         assertTrue(ids(30).containsAll(drawn));
     }
 
-    // ====================================
-    // More guaranteed ids than slots: the draw is TASKS_PER_DAY of them,
-    // randomly chosen and randomly ordered, and nothing else can get in.
-    // ====================================
     @Test
     void moreGuaranteedIdsThanSlotsFillTheWholeDraw() {
         List<String> guaranteed = ids(9);
@@ -1012,7 +910,6 @@ class PlayerDataTest {
 
         assertEquals(PlayerData.TASKS_PER_DAY, data.tasks().size());
         assertTrue(data.tasks().contains("a9"));
-        // Exactly one of the old tasks made room, and it was an unrevealed one
         assertTrue(data.tasks().containsAll(List.of("a1", "a2")), "a revealed task was taken over");
         assertEquals(Set.of("a1", "a2"), data.revealed(), "a revealed flag was lost");
         assertEquals(6, data.tasks().stream().filter(id -> !id.equals("a9")).count());
@@ -1041,15 +938,6 @@ class PlayerDataTest {
         assertEquals(first, data.tasks());
     }
 
-    // ====================================
-    // The one bit of reroll arithmetic worth pinning: today's points come back
-    // off the weekly bar, but never below what has already been paid out, or
-    // the same milestone would become claimable twice. What the floor keeps on
-    // the bar was not refunded, so it carries forward as today's starting
-    // dailyPoints instead of handing the budget back for free: 12 - 5 = 7 is
-    // under the claimed 10, so only 2 of the 5 come off and the other 3 stay
-    // spent.
-    // ====================================
     @Test
     void aRerollTakesTodayBackOffTheWeeklyBarButNeverBelowWhatWasClaimed() {
         PlayerData data = new PlayerData(12, 5, "w", "d", 10, Map.of("a1", 3),
@@ -1076,8 +964,6 @@ class PlayerDataTest {
         assertEquals(0, data.rerolls());
     }
 
-    // A week rollover resets the counter too, even when the day key inside it
-    // happens not to change - the counter is not keyed off the day string
     @Test
     void aWeekRolloverGivesTheRerollBackEvenWithTheSameDayKey() {
         PlayerData data = data();
@@ -1088,9 +974,6 @@ class PlayerDataTest {
         assertEquals(0, data.rerolls());
     }
 
-    // Below the claimed floor, the ordinary case: dailyPoints fits entirely
-    // inside points - claimedPoints, so the subtraction lands exactly and the
-    // floor never engages
     @Test
     void anOrdinaryRerollDropsTheWeeklyTotalByExactlyTodaysPoints() {
         PlayerData data = new PlayerData(20, 6, "w", "d", 5, Map.of("a1", 3),
@@ -1100,16 +983,9 @@ class PlayerDataTest {
 
         assertEquals(14, data.points());
         assertEquals(5, data.claimedPoints());
-        // Every one of today's points was refunded, so today starts over
         assertEquals(0, data.dailyPoints());
     }
 
-    // ====================================
-    // Claim-then-reroll: the whole of today sits on top of claimedPoints, so
-    // the floor blocks the entire subtraction. Nothing is refunded, so nothing
-    // of today's budget comes back either - the player keeps their 10 points
-    // and has 0 of bar.daily-max left to earn against.
-    // ====================================
     @Test
     void aFullyFlooredRerollRefundsNothingAndCarriesTheWholeDayForward() {
         PlayerData data = new PlayerData(10, 10, "w", "d", 10, Map.of("a1", 3),
@@ -1123,10 +999,6 @@ class PlayerDataTest {
         assertTrue(data.daily().isEmpty());
     }
 
-    // ====================================
-    // bar.max lowered under a claimedPoints that was earned against the old
-    // one: the reroll must not push the bar back over the new max.
-    // ====================================
     @Test
     void aRerollNeverRaisesTheWeeklyTotalAboveTheBarMax() {
         PlayerData data = new PlayerData(8, 4, "w", "d", 20, Map.of(),
@@ -1138,9 +1010,6 @@ class PlayerDataTest {
         assertEquals(4, data.dailyPoints());
     }
 
-    // Stored points above the bar max: the refund the reroll computes (12)
-    // is larger than dailyPoints (5). Without the Math.max(0, ...) floor on
-    // the refund itself, dailyPoints would go negative here.
     @Test
     void aRefundLargerThanDailyPointsFloorsAtZero() {
         PlayerData data = new PlayerData(20, 5, "w", "d", 0, Map.of(),
@@ -1152,13 +1021,6 @@ class PlayerDataTest {
         assertEquals(0, data.dailyPoints());
     }
 
-    // ====================================
-    // Pins the exact regression from the bug report: bar.max was lowered and
-    // then raised back after claimedPoints (80) was already banked against
-    // the higher max, leaving stored points (60) below claimedPoints. The
-    // reroll then RAISES points (60 -> 80), so before - points is negative.
-    // dailyPoints must stay unchanged, not increase.
-    // ====================================
     @Test
     void aRerollThatRaisesPointsDoesNotIncreaseDailyPoints() {
         PlayerData data = new PlayerData(60, 10, "w", "d", 80, Map.of(),
@@ -1170,7 +1032,6 @@ class PlayerDataTest {
         assertEquals(10, data.dailyPoints());
     }
 
-    // No points earned today means a reroll changes no points at all
     @Test
     void aRerollWithNoDailyPointsChangesNoPoints() {
         PlayerData data = new PlayerData(15, 0, "w", "d", 5, Map.of(),
@@ -1183,7 +1044,6 @@ class PlayerDataTest {
         assertEquals(0, data.dailyPoints());
     }
 
-    // The counter keeps counting across multiple rerolls in the same day
     @Test
     void aSecondRerollTheSameDayIncrementsTheCounterAgain() {
         PlayerData data = data();
@@ -1202,10 +1062,6 @@ class PlayerDataTest {
         assertThrows(UnsupportedOperationException.class, () -> drawn.add("a99"));
     }
 
-    // ====================================
-    // daily-reward's once-a-day flag
-    // ====================================
-
     @Test
     void theDailyRewardFlagIsClearedByTheNextDayAndTheNextWeek() {
         PlayerData data = new PlayerData("2026-W38", "2026-09-19");
@@ -1221,7 +1077,6 @@ class PlayerDataTest {
         assertFalse(data.dailyRewardClaimed());
     }
 
-    // A fresh draw revealed again the same day must not pay a second time
     @Test
     void aRerollKeepsTheDailyRewardFlag() {
         PlayerData data = new PlayerData("2026-W38", "2026-09-19");

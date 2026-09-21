@@ -19,17 +19,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-// ====================================
-// Five new tier-1 hooks (VFBuilders, RPCharacters, InteractibleFurniture,
-// SimpleFactions, AdvancedCrafting) each map a foreign event
-// to manager.recordAction(uuid, "<id>", amount). The listener classes
-// themselves need a live server / foreign event instances and are not
-// unit-tested here. These tests check the parts that are pure data and can
-// be loaded headlessly: the config.yml entries the listeners rely on, the
-// plugin.yml softdepend declarations, and that every literal activity id a
-// listener passes to recordAction actually exists in config.yml (a typo
-// there would silently drop the points at runtime).
-// ====================================
 class Tier1HooksTest {
 
     private static final List<String> NEW_ACTIVITY_IDS = List.of(
@@ -38,12 +27,6 @@ class Tier1HooksTest {
             "casino_win", "cook_dish", "animal_universal_feed"
     );
 
-    // ====================================
-    // The MMOItems station activities are fed through
-    // ActivityConfiguration.stationActivity(), so the listener never names
-    // them as literals - they are checked for sane config, not for a
-    // recordAction literal.
-    // ====================================
     private static final List<String> STATION_ACTIVITY_IDS = List.of(
             "ingot_flint", "ingot_coal",
             "tool_iron_pickaxe", "tool_iron_axe",
@@ -85,9 +68,6 @@ class Tier1HooksTest {
         }
     }
 
-    // Each station activity must carry the 'station:' key that feeds it, and
-    // no two may claim the same station/recipe - a duplicate silently drops
-    // one of them at load
     @Test
     void everyStationActivityDeclaresAUniqueStationRecipe() {
         YamlConfiguration config = loadConfig();
@@ -141,8 +121,6 @@ class Tier1HooksTest {
             }
         }
 
-        // Sanity: the five new ids should actually have been found via the
-        // literal-string scan, otherwise this test would trivially pass.
         assertTrue(recordedIds.containsAll(NEW_ACTIVITY_IDS),
                 "expected to find all new ids recorded by listeners, found: " + recordedIds);
 

@@ -29,8 +29,6 @@ class ActivityDefTest {
         assertEquals("m.item.ballot", def.iconPath());
     }
 
-    // daily-cap counts awards, not points: a day is worth min(count / every,
-    // dailyCap) * points
     @Test
     void dailyCapCountsAwardsNotPoints() {
         ActivityDef def = new ActivityDef("injured", "Injured", Material.BONE, null, 1, 5, 1);
@@ -67,9 +65,6 @@ class ActivityDefTest {
         assertEquals(1_000_000, def.worth(1));
     }
 
-    // The GUI's "Today" line counts payouts, not points: every 1, points 5,
-    // daily-cap 1 reads 0/1 before an action and 1/1 after - never "0/5" or
-    // "5/5", which players misread as "do it five times"
     @Test
     void completionsCountPayoutsNotPoints() {
         ActivityDef def = new ActivityDef("injured", "Injured", Material.BONE, null, 1, 5, 1);

@@ -12,7 +12,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-// Only the pure half of the manager: the rest needs a running server
 class ActivityManagerTest {
 
     @Test
@@ -74,11 +73,6 @@ class ActivityManagerTest {
         assertFalse(ActivityManager.canRunCommand(null, "Notch"));
     }
 
-    // ====================================
-    // runnableEntries: the pool narrowed to what this player's name can
-    // actually be paid from. An entry survives if at least one of its
-    // commands can run, even if the rest of its commands cannot.
-    // ====================================
     @Test
     void unsafeNameKeepsOnlyEntriesWithAUuidOrNoPlaceholderCommand() {
         RewardEntry playerOnly = new RewardEntry(1, "player-only",
@@ -112,15 +106,10 @@ class ActivityManagerTest {
         assertEquals(List.of(), ActivityManager.runnableEntries(List.of(), "Bedrock Player"));
     }
 
-    // ====================================
-    // The claim arithmetic. A full claim burns every milestone the bar has
-    // reached; a partial one gives back only what never went out.
-    // ====================================
     @Test
     void aPartialRollbackKeepsOnlyTheMilestonesThatPaid() {
         List<Integer> due = List.of(20, 30, 40);
 
-        // Claimed 10 before, 3 milestones were due, 1 went out
         assertEquals(20, ActivityManager.rollbackClaimedPoints(10, 1, due));
         assertEquals(30, ActivityManager.rollbackClaimedPoints(10, 2, due));
     }
@@ -147,14 +136,6 @@ class ActivityManagerTest {
         assertEquals(40, ActivityManager.rollbackClaimedPoints(10, due.size(), due));
     }
 
-    // ====================================
-    // The two bounds that make a partial payout safe, over every shape the
-    // numbers can take:
-    //
-    //   never below claimedBefore  - a failure cannot hand back a milestone
-    //                                that was paid before this click
-    //   always below a full claim  - what did not go out stays claimable
-    // ====================================
     @Test
     void aPartialRollbackStaysBetweenWhereItStartedAndAFullClaim() {
         for (int points : new int[] {0, 7, 10, 19, 20, 45}) {
@@ -179,11 +160,6 @@ class ActivityManagerTest {
         }
     }
 
-    // ====================================
-    // The weighted draw. A roll is an index into the cumulative weights, so
-    // the boundaries are what matter: the last roll of one entry and the first
-    // of the next.
-    // ====================================
     @Test
     void aWeightedDrawWalksTheCumulativeWeights() {
         RewardEntry common = new RewardEntry(3, "common", List.of("give %player% diamond 3"), List.of());
@@ -200,12 +176,6 @@ class ActivityManagerTest {
     void anEmptyPoolDrawsNothing() {
         assertNull(RewardEntry.pick(List.of(), 0));
     }
-
-    // ====================================
-    // The idle threshold the playtime timer skips a player on. 0 and below are
-    // the admin switching the check off; a zero-length Duration would instead
-    // be met by everyone every minute and pay nobody at all.
-    // ====================================
 
     @Test
     void aPositiveAfkSettingIsThatManyMinutes() {
