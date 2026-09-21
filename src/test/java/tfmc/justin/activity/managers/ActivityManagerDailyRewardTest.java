@@ -33,13 +33,6 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-// ====================================
-// daily-reward: ActivityManager.claimDailyReward on a real manager built
-// without a server (see TestManagers). The store is pointed at a temp file,
-// since the payout saves before it pays; the item check and the payout are
-// the seams the package-private overload takes, because a real item needs a
-// running server.
-// ====================================
 class ActivityManagerDailyRewardTest {
 
     @TempDir
@@ -53,12 +46,10 @@ class ActivityManagerDailyRewardTest {
     private ActivityManager manager;
     private final UUID uuid = UUID.randomUUID();
     private final List<String> chat = new ArrayList<>();
-    // What each payout was handed, and what it answers
     private final List<RewardEntry> paid = new ArrayList<>();
     private final List<Integer> paidMultipliers = new ArrayList<>();
     private boolean payWorks = true;
     private boolean resolves = true;
-    // Whether the claim was already on disk when the payout ran
     private final List<Boolean> onDiskAtPayout = new ArrayList<>();
 
     @BeforeEach
@@ -76,7 +67,6 @@ class ActivityManagerDailyRewardTest {
         ActivityManager.reportedItemPaths.clear();
     }
 
-    // A player whose group.<name> nodes are set exactly as given
     private Player player(Set<String> permissions) {
         return player(permissions::contains, permissions::contains);
     }
@@ -106,7 +96,6 @@ class ActivityManagerDailyRewardTest {
         });
     }
 
-    // Reveals every slot of today's draw but the last
     private void revealAllButLast() {
         int tasks = manager.tasks(uuid).tasks().size();
         for (int slot = 0; slot < tasks - 1; slot++) {
@@ -144,13 +133,10 @@ class ActivityManagerDailyRewardTest {
         assertTrue(data().dailyRewardClaimed());
         assertTrue(chat.get(0).contains("x1") && chat.get(0).contains("Diamond"), chat.toString());
 
-        // Another open or click the same day pays nothing more
         assertFalse(claim(player));
         assertEquals(1, paid.size());
     }
 
-    // The claim is on disk before anything is handed over, so a crash
-    // mid-payout cannot pay it twice
     @Test
     void theClaimIsSavedBeforeThePayoutRuns() {
         revealAllButLast();
@@ -196,7 +182,6 @@ class ActivityManagerDailyRewardTest {
         revealLast();
         assertTrue(claim(player));
 
-        // Back-date the row to a day it was claimed on; get() rolls it on
         PlayerData row = manager.getStore().peek(uuid);
         row.roll(row.weekKey(), "1999-01-01");
         row.setDailyRewardClaimed(true);
@@ -215,16 +200,10 @@ class ActivityManagerDailyRewardTest {
         assertTrue(paid.isEmpty());
         assertFalse(data().dailyRewardClaimed());
 
-        // Joined the group since, and opens the GUI again
         assertTrue(claim(player(Set.of("group.vip"))));
         assertEquals(1, paid.size());
     }
 
-    // ====================================
-    // An operator (or a '*' holder whose wildcard does not set the node):
-    // hasPermission answers true for every node through its OP default, but
-    // none of the group nodes is actually set on him
-    // ====================================
     @Test
     void anOperatorInNoGroupGetsNothing() {
         revealAllButLast();
@@ -235,7 +214,6 @@ class ActivityManagerDailyRewardTest {
         assertFalse(data().dailyRewardClaimed());
     }
 
-    // A node set to false - a negated group permission - is not membership
     @Test
     void aNodeSetToFalseIsNotMembership() {
         revealAllButLast();
@@ -262,11 +240,6 @@ class ActivityManagerDailyRewardTest {
         assertTrue(data().dailyRewardClaimed());
     }
 
-    // ====================================
-    // An item that does not resolve is refused before the flag or the file is
-    // touched: every open reaches this, and must not cost a players.yml write.
-    // The warning is said once per path, however often it is hit.
-    // ====================================
     @Test
     void anUnresolvableItemIsRefusedWithoutAnyWriteAndWarnedOnce() {
         List<String> warnings = new ArrayList<>();
@@ -301,7 +274,6 @@ class ActivityManagerDailyRewardTest {
             assertEquals(1, warnings.stream().filter(line -> line.contains("Daily reward item 'DIAMOND'")).count(),
                 warnings.toString());
 
-            // Fixed by the operator: the next open pays
             resolves = true;
             assertTrue(claim(player));
             assertEquals(1, paid.size());
@@ -310,8 +282,6 @@ class ActivityManagerDailyRewardTest {
         }
     }
 
-    // A players.yml that cannot be written pays nothing and leaves the claim
-    // for later
     @Test
     void aClaimThatCannotBeSavedPaysNothing() throws IOException {
         File notADirectory = new File(dir, "blocker");
@@ -350,11 +320,6 @@ class ActivityManagerDailyRewardTest {
         assertFalse(data().dailyRewardClaimed());
     }
 
-    // ====================================
-    // A 'pool' group: one draw from rewards.pool, paid as written - no
-    // multiplier on the amounts or the chat line - and announced with the
-    // entry's display
-    // ====================================
     @Test
     void aPoolGroupPaysOneDrawFromThePoolAtMultiplierOne() throws ReflectiveOperationException {
         RewardEntry gem = new RewardEntry(1, "&dA Gem", List.of(), List.of(new RewardEntry.Item("EMERALD", 2)));
@@ -392,7 +357,6 @@ class ActivityManagerDailyRewardTest {
         assertEquals(gem, paid.get(1));
     }
 
-    // Nothing to draw: nothing is saved or marked, and the next open retries
     @Test
     void aPoolGroupWithAnEmptyPoolPaysNothingAndStaysUnclaimed() {
         pool(List.of());
@@ -407,7 +371,6 @@ class ActivityManagerDailyRewardTest {
         assertEquals(1, chat.size());
     }
 
-    // The same rollback as a fixed item when the drawn entry hands nothing over
     @Test
     void aFailedPoolPayoutIsNotMarkedAndIsRetried() {
         pool(List.of(new RewardEntry(1, "A Gem", List.of(), List.of(new RewardEntry.Item("EMERALD", 1)))));
@@ -428,10 +391,6 @@ class ActivityManagerDailyRewardTest {
         TestManagers.pool(manager, ActivityConfiguration.DEFAULT_POOL, pool);
     }
 
-    // ====================================
-    // Group matching on its own: the first listed group the player is in
-    // wins, whatever order his permissions come in
-    // ====================================
     @Test
     void theFirstListedGroupWins() {
         Map<String, RewardEntry> groups = new LinkedHashMap<>();

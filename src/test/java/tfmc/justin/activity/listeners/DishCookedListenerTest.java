@@ -14,23 +14,6 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-// ====================================
-// DishCookedListener needs a live server for a real ActivityManager, so it is
-// built with a null manager here, same as MarketSaleListenerTest - a
-// NullPointerException from the null manager is used as a witness that the
-// listener tried to record a dish.
-//
-// DishCookedEvent's own constructor unconditionally clones its ItemStack
-// argument (result.clone()), and building any real ItemStack headless blows
-// up on the Bukkit Material registry (see TLibsItemsTest) - and passing null
-// would NPE inside the constructor itself, before this listener ever sees the
-// event. The listener under test never reads getResult(), so the event is
-// built here by bypassing its constructor via the same
-// newConstructorForSerialization trick common serialization libraries use:
-// it allocates the object and runs only Object's constructor, then the
-// player/method fields are set directly by reflection. That sidesteps the
-// clone() call entirely instead of needing a live server.
-// ====================================
 class DishCookedListenerTest {
 
     private static Player stubPlayer(UUID uuid) {
@@ -73,10 +56,6 @@ class DishCookedListenerTest {
         assertDoesNotThrow(() -> listener.onDishCooked(dish(null)));
     }
 
-    // Sanity check that the NPE-as-witness approach above actually detects a
-    // credit: a real player cooking a dish DOES reach the manager, which
-    // requires the null manager and blows up - proving the null-player test
-    // above is not vacuously passing
     @Test
     void aCookedDishForARealPlayerReachesTheManager() {
         DishCookedListener listener = new DishCookedListener(null);

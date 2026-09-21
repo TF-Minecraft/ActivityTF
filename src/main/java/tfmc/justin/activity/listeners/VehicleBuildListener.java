@@ -8,11 +8,6 @@ import tfmc.justin.activity.managers.ActivityManager;
 
 import java.util.UUID;
 
-// ====================================
-// VFBuilders fires VehicleConstructEvent synchronously on the main thread.
-// Not cancellable - the vehicle already exists by the time it fires. Only
-// constructed when VFBuilders is enabled - see ActivityPlugin.
-// ====================================
 public class VehicleBuildListener implements Listener {
 
     private final ActivityManager manager;
@@ -23,9 +18,6 @@ public class VehicleBuildListener implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onVehicleConstruct(VehicleConstructEvent event) {
-        // the uuid, not getConstructor(): that resolves to a live Player and is
-        // null once the builder logs off, but recordAction takes a UUID and
-        // credits an offline player just fine
         UUID constructor = event.getConstructorUuid();
         if (constructor == null) {
             return;

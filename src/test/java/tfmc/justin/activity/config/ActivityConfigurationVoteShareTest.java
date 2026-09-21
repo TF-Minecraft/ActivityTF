@@ -10,11 +10,6 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-// ====================================
-// bar.vote-share: the clamp on the value read and the non-vote share of
-// bar.daily-max it leaves. load() needs a live server, so the parser and the
-// arithmetic are driven directly, with the plugin's logger captured.
-// ====================================
 class ActivityConfigurationVoteShareTest {
 
     private final List<String> logged = new ArrayList<>();

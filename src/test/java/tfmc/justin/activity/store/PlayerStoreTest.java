@@ -19,23 +19,10 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-// ====================================
-// PlayerStore's parsing/snapshot rules are pure logic over a
-// ConfigurationSection / PlayerData, but PlayerStore itself needs a live
-// JavaPlugin + ActivityConfiguration to construct, which this suite cannot
-// build. Both rules are therefore exercised through the package-private
-// statics the instance methods delegate to:
-//
-//   - readEntry(ConfigurationSection root, String key, int barMax, int dailyMax, Predicate), returning
-//     null for a missing section or a key that is not a UUID
-//   - snapshot(Map<UUID, PlayerData>)
-// ====================================
 class PlayerStoreTest {
 
     private static final int BAR_MAX = 20;
     private static final int DAILY_MAX = 10;
-    // Stands in for "this id is a loaded activity"; the unknown-task test
-    // below hands in a narrower one
     private static final Predicate<String> KNOWN = id -> true;
 
     @Test
@@ -140,12 +127,6 @@ class PlayerStoreTest {
         assertEquals(3, PlayerStore.readEntry(players, id.toString(), BAR_MAX, DAILY_MAX, KNOWN).votePoints());
     }
 
-    // ====================================
-    // A row saved before vote-points existed: today's vote count's worth
-    // (daily-cap 5 of the 7 votes) is taken as what voting put in, never more
-    // than the day's points. With no vote activity loaded there is nothing to
-    // go on, and 0 it is.
-    // ====================================
     @Test
     void aRowWithoutVotePointsFallsBackToWhatTodaysVotesAreWorth() {
         ConfigurationSection root = new YamlConfiguration().createSection("players");
@@ -163,25 +144,13 @@ class PlayerStoreTest {
         assertEquals(2, PlayerStore.readEntry(root, id.toString(), BAR_MAX, DAILY_MAX, KNOWN, vote).votePoints());
     }
 
-    // ====================================
-    // /activity add --force awards past both daily limits, so what it leaves
-    // behind has to survive a save and a load unchanged: parse() clamps points
-    // to bar.max and daily-points to bar.daily-max, and a forced add that
-    // pushed either past its clamp would be silently cut back on the next
-    // restart - memory and disk disagreeing about a live player.
-    // ====================================
     @Test
     void aForcedAwardAgreesBetweenMemoryAndDisk() throws InvalidConfigurationException {
         UUID id = UUID.randomUUID();
         PlayerData inMemory = new PlayerData(0, 0, "2026-09-07", "2026-09-09", 0, Map.of());
-        // every: 1, points: 1, daily-cap: 5 - the shipped vote activity, with
-        // BAR_MAX (20) well under what 50 actions are worth uncapped
         ActivityDef vote = new ActivityDef("vote", "Vote", Material.PAPER, null, 1, 1, 5);
         inMemory.recordForced(50, vote, BAR_MAX, List.of());
 
-        // Through the file's own text, not just the in-memory snapshot: the
-        // daily counts go in as a plain Map and only become a section once
-        // YAML has been written and read back
         YamlConfiguration onDisk = new YamlConfiguration();
         onDisk.loadFromString(PlayerStore.snapshot(Map.of(id, inMemory)).saveToString());
         PlayerData fromDisk = PlayerStore.readEntry(onDisk.getConfigurationSection("players"),
@@ -191,7 +160,6 @@ class PlayerStoreTest {
         assertEquals(inMemory.dailyPoints(), fromDisk.dailyPoints());
         assertEquals(inMemory.claimedPoints(), fromDisk.claimedPoints());
         assertEquals(inMemory.count("vote"), fromDisk.count("vote"));
-        // and neither clamp had anything to cut
         assertEquals(BAR_MAX, fromDisk.points());
         assertEquals(0, fromDisk.dailyPoints());
         assertEquals(50, fromDisk.count("vote"));
@@ -262,11 +230,6 @@ class PlayerStoreTest {
         assertTrue(yaml.isSet(path + ".daily"));
     }
 
-    // ====================================
-    // Today's draw and which of its slots have been revealed survive a
-    // restart, or a player would be handed a fresh set of hidden tasks every
-    // time the server came back up.
-    // ====================================
     @Test
     void theDrawAndRevealedFlagsRoundTripThroughSnapshotAndReadEntry() {
         UUID id = UUID.randomUUID();
@@ -283,8 +246,6 @@ class PlayerStoreTest {
         assertFalse(parsed.isRevealed("mine"));
     }
 
-    // A player whose only state is today's draw is still worth writing, or
-    // the draw would be lost on the first save
     @Test
     void aPlayerWithOnlyADrawIsStillWritten() {
         UUID id = UUID.randomUUID();
@@ -297,7 +258,6 @@ class PlayerStoreTest {
         assertEquals(List.of("vote"), yaml.getStringList("players." + id + ".tasks"));
     }
 
-    // An activity dropped from config.yml is not a task any more
     @Test
     void aStoredTaskWhoseActivityIsGoneIsIgnored() {
         ConfigurationSection root = new YamlConfiguration().createSection("players");
@@ -315,10 +275,6 @@ class PlayerStoreTest {
         assertTrue(data.isRevealed("quest"));
     }
 
-    // ====================================
-    // A draw is all a row needs to be worth keeping: the player has been
-    // handed today's tasks and a restart must not re-roll them.
-    // ====================================
     @Test
     void aDrawOnlyEntryIsStillWritten() {
         UUID id = UUID.randomUUID();
@@ -330,10 +286,6 @@ class PlayerStoreTest {
         assertEquals(List.of("vote", "quest"), yaml.getStringList("players." + id + ".tasks"));
     }
 
-    // ====================================
-    // revealed() is a hash set, so its iteration order is not the order the
-    // ids went in - written as-is it would churn the file between saves.
-    // ====================================
     @Test
     void revealedIsWrittenSortedSoTheFileDoesNotChurn() {
         UUID id = UUID.randomUUID();
@@ -349,12 +301,6 @@ class PlayerStoreTest {
         assertEquals(first, second);
     }
 
-    // ====================================
-    // rerolls: same round-trip and clamping rules as the other counters on
-    // this entry - a missing key defaults to zero, a negative or garbled
-    // stored value is clamped rather than trusted, and the count survives a
-    // save/load cycle.
-    // ====================================
     @Test
     void rerollsRoundTripsThroughSnapshotAndReadEntry() {
         UUID id = UUID.randomUUID();
@@ -392,8 +338,6 @@ class PlayerStoreTest {
         assertEquals(0, data.rerolls());
     }
 
-    // A non-numeric value is exactly what getInt() already falls back to 0
-    // for, the same as every other counter parsed off this entry
     @Test
     void aNonNumericStoredRerollsDoesNotCrashAndLoadsAsZero() {
         ConfigurationSection root = new YamlConfiguration().createSection("players");
@@ -407,8 +351,6 @@ class PlayerStoreTest {
         assertEquals(0, data.rerolls());
     }
 
-    // A player whose only non-default state is a reroll count is still worth
-    // writing, or a restart would hand their budget straight back to them
     @Test
     void aPlayerWithOnlyARerollCountIsStillWritten() {
         UUID id = UUID.randomUUID();
@@ -420,11 +362,6 @@ class PlayerStoreTest {
         assertEquals(1, yaml.getInt("players." + id + ".rerolls"));
     }
 
-    // ====================================
-    // Disk and memory must end up with the same draw when an activity is
-    // removed: the read path drops the dead id, the in-memory path drops it
-    // too, and both are topped back up to TASKS_PER_DAY on next use.
-    // ====================================
     @Test
     void aDrawWithARemovedActivityAgreesBetweenDiskAndMemory() {
         List<String> stored = List.of("a0", "gone", "a1", "a2", "a3", "a4", "a5");
@@ -447,7 +384,6 @@ class PlayerStoreTest {
         assertFalse(fromDisk.tasks().contains("gone"));
     }
 
-    // A row saved before daily-reward existed has no key for it
     @Test
     void aRowWithoutTheDailyRewardKeyLoadsAsNotClaimed() {
         ConfigurationSection root = new YamlConfiguration().createSection("players");

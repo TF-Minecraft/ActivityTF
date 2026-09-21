@@ -8,10 +8,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-// ====================================
-// How the four forms an item-valued config key accepts are told apart.
-// Material.matchMaterial is a name lookup, so all of this runs headless.
-// ====================================
 class ItemPathTest {
 
     @Test
@@ -33,7 +29,6 @@ class ItemPathTest {
     void anItemPathIsKeptWhole() {
         assertTrue(ItemPath.isPluginPath("m.material.steel"));
         assertEquals("m.material.steel", ItemPath.pluginPath("m.material.steel"));
-        // never a Material, so it can never be mistaken for a typo'd one
         assertNull(ItemPath.material("m.material.steel"));
     }
 
@@ -91,12 +86,6 @@ class ItemPathTest {
         assertFalse(ItemPath.isUnsupportedPath("ia.tfmc:saucepan"));
     }
 
-    // ====================================
-    // ia.<namespace:id> - the id /iagive takes. It is a path, never a
-    // material, and never "unsupported": the whole point of the form is that
-    // the admin gets an ItemsAdder lookup rather than a warning.
-    // ====================================
-
     @Test
     void anItemsAdderPathIsAPathNotAMaterialAndNotUnsupported() {
         assertTrue(ItemPath.isItemsAdderPath("ia.tfmc:saucepan"));
@@ -106,8 +95,6 @@ class ItemPathTest {
         assertNull(ItemPath.pluginPath("ia.tfmc:saucepan"));
     }
 
-    // The colon form goes to ItemsAdder untouched; the dotted form an admin
-    // writes by analogy with m.<type>.<id> means the same item
     @Test
     void bothSeparatorsNormalizeToTheColonForm() {
         assertEquals("tfmc:saucepan", ItemPath.itemsAdderId("ia.tfmc:saucepan"));
@@ -116,9 +103,6 @@ class ItemPathTest {
         assertEquals("tfmc:saucepan", ItemPath.itemsAdderId("  Ia.tfmc:saucepan  "));
     }
 
-    // Every one of these is still an ia. path - so it never falls through to
-    // matchMaterial - but there is no id to hand over, and asking must not
-    // throw
     @Test
     void aMalformedItemsAdderPathIsRejectedAsAPathNotAsAMaterial() {
         for (String broken : new String[]{"ia.", "ia.:", "ia.ns:", "ia.:id", "ia.a:b:c",
@@ -130,8 +114,6 @@ class ItemPathTest {
         }
     }
 
-    // 'ia' alone has no prefix at all: it is just an unknown material name,
-    // and asking for an id must answer null rather than index out of bounds
     @Test
     void theBarePrefixIsNotAnItemsAdderPath() {
         assertFalse(ItemPath.isItemsAdderPath("ia"));

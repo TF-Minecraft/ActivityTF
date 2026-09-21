@@ -15,13 +15,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-// ====================================
-// The 'daily-guaranteed:' activity key, parsed by the private loadActivities()
-// and read back through guaranteed(). load() itself needs a live Bukkit server,
-// so the parsing method is driven directly - the same trick, and the same
-// hand-built JavaPlugin, as ActivityConfigurationStationTest. The plugin's
-// logger is captured so the warnings can be asserted on.
-// ====================================
 class ActivityConfigurationGuaranteedTest {
 
     private final List<String> logged = new ArrayList<>();
@@ -72,8 +65,6 @@ class ActivityConfigurationGuaranteedTest {
         assertEquals(List.of("vote", "battle"), config.guaranteed());
     }
 
-    // A typo is named and the activity is left not guaranteed, the same way a
-    // non-number 'every' falls back
     @Test
     void aGarbageValueIsReportedAndFallsBackToFalse() {
         ActivityConfiguration config = configFor(entry("vote", "\"yes please\""));
@@ -83,7 +74,6 @@ class ActivityConfigurationGuaranteedTest {
             && line.contains("not true or false")), logged.toString());
     }
 
-    // An activity dropped for being worth nothing never reaches the flag
     @Test
     void anActivityDroppedForZeroPointsIsNotGuaranteed() {
         ActivityConfiguration config = configFor("  vote:\n    points: 0\n    daily-guaranteed: true\n");

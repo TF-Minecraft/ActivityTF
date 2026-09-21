@@ -11,11 +11,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-// ====================================
-// The ic_chat anti-farm decision. The event itself needs a server, so this
-// drives the static helpers with plain strings, and process() for the
-// per-player history rules.
-// ====================================
 class CharacterChatListenerTest {
 
     private final CharacterChatListener listener = new CharacterChatListener(null);
@@ -70,7 +65,6 @@ class CharacterChatListenerTest {
         assertTrue(say("abcdefghij......"));
     }
 
-    // Digits are dropped by normalization, so number-only differences are repeats (accepted)
     @Test
     void messagesDifferingOnlyInNumbersAreRepeats() {
         assertTrue(say("I hand him 30 silver coins"));
@@ -196,7 +190,6 @@ class CharacterChatListenerTest {
         cycle(CharacterChatListener.HISTORY);
     }
 
-    // n distinct lines, then the same n again: the repeats never count
     private void cycle(int n) {
         for (int i = 0; i < n; i++) {
             assertTrue(say(line(i)), "first " + i);
@@ -206,7 +199,6 @@ class CharacterChatListenerTest {
         }
     }
 
-    // Distinct lines whose normalized forms are far apart
     private static String line(int i) {
         String[] words = {"tavern", "silver", "hooded", "barkeep", "stranger",
                 "window", "candle", "forest", "river", "mountain", "castle",
@@ -221,11 +213,8 @@ class CharacterChatListenerTest {
     @Test
     void similarityThreshold() {
         String fifty = "a".repeat(50);
-        // exactly 0.8 is too similar
         assertTrue(CharacterChatListener.similar(fifty, "a".repeat(40) + "b".repeat(10)));
-        // 0.78 is not
         assertFalse(CharacterChatListener.similar(fifty, "a".repeat(39) + "b".repeat(11)));
-        // length-difference shortcut sits on the same boundary
         assertTrue(CharacterChatListener.similar(fifty, "a".repeat(40)));
         assertFalse(CharacterChatListener.similar(fifty, "a".repeat(39)));
     }
@@ -236,12 +225,10 @@ class CharacterChatListenerTest {
             assertTrue(say(line(i)));
         }
         assertEquals(CharacterChatListener.HISTORY, listener.historySize(player));
-        // line 1 is still remembered, line 0 scrolled out
         assertFalse(say(line(1)));
         assertTrue(say(line(0)));
     }
 
-    // Relogging must not clear the history, so nothing listens for quits
     @Test
     void historyPersistsWithoutQuitHandling() {
         for (Method m : CharacterChatListener.class.getDeclaredMethods()) {

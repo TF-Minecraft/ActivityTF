@@ -8,43 +8,14 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
-// ====================================
-// Leftover fraction of a point per player per activity, so a 5.5 xp gain or a
-// 0.5 denar sale is not repeatedly rounded down to nothing. Kept per activity
-// because each has its own goal and daily cap - a mining fraction must not be
-// credited to fishing.
-//
-// The leftover is a BigDecimal, not a double: cent-denominated values drift
-// when summed in binary (250 additions of 0.10 land just short of 25), so a
-// player selling cheap items would never reach the goal. BigDecimal.valueOf
-// takes the shortest decimal representation, so 0.10 goes in as exactly 0.10.
-//
-// A plain HashMap is safe: the events that feed this are not async, and Bukkit
-// refuses to deliver a non-async event off the primary thread, so the source
-// plugin would throw before ever reaching a listener.
-//
-// In-memory only - the worst a restart costs a player is under one point.
-// ====================================
 class FractionCarry {
 
     private static final BigDecimal MAX = BigDecimal.valueOf(Integer.MAX_VALUE);
 
     private final Map<UUID, Map<String, BigDecimal>> carry = new HashMap<>();
 
-    // The week and day every banked fraction belongs to - see add()
     private ActivityConfiguration.Keys keys;
 
-    // ====================================
-    // Adds this event's value to the player's leftover for the activity and
-    // returns the whole points to record now (0 if there are none yet).
-    //
-    // Fractions never cross a rollover: the daily counters they feed are wiped
-    // at one, and a player who stays online through it would otherwise carry
-    // the old cycle's sub-point into the new one. Both keys are watched, not
-    // just the day: the week flips at the configured reset hour, which wipes
-    // the counters while the day key is unchanged. The first event after
-    // either key moves drops every banked fraction, for every player.
-    // ====================================
     int add(UUID uuid, String activityId, double value, ActivityConfiguration.Keys currentKeys) {
         if (!currentKeys.equals(keys)) {
             carry.clear();
@@ -57,17 +28,10 @@ class FractionCarry {
         return credit.amount();
     }
 
-    // Nothing to carry for a player who is gone
     void forget(UUID uuid) {
         carry.remove(uuid);
     }
 
-    // ====================================
-    // Dropped whenever the daily-task gate refuses the activity, which is the
-    // cheapest way to keep a fraction banked while the task was revealed from
-    // paying out days later when it is drawn and revealed again - the gate is
-    // asked on every event, so this runs on the first refused one.
-    // ====================================
     void forget(UUID uuid, String activityId) {
         Map<String, BigDecimal> byActivity = carry.get(uuid);
         if (byActivity != null && byActivity.remove(activityId) != null && byActivity.isEmpty()) {
@@ -75,7 +39,6 @@ class FractionCarry {
         }
     }
 
-    // Whole points to record now, and the fraction left over for next time
     record Credit(int amount, BigDecimal exact) {
 
         double carry() {
@@ -83,11 +46,6 @@ class FractionCarry {
         }
     }
 
-    // ====================================
-    // Pure: (leftover fraction, this event's value) -> what to record. The
-    // incoming value is sanitized first so a poisoned one cannot corrupt the
-    // stored carry, which always stays in [0, 1).
-    // ====================================
     static Credit credit(BigDecimal carry, double value) {
         BigDecimal total = carry.add(BigDecimal.valueOf(sanitize(value)));
         BigDecimal whole = total.setScale(0, RoundingMode.FLOOR);
@@ -101,13 +59,6 @@ class FractionCarry {
         return credit(BigDecimal.valueOf(carry), value);
     }
 
-    // ====================================
-    // These values are doubles other plugins can set: NaN, a negative (an XP
-    // penalty) and infinity are all worth nothing. The comparison is written
-    // this way round so NaN fails it. Huge values are capped rather than
-    // overflowing recordAction's int - and the cap also keeps BigDecimal.valueOf
-    // away from the NaN and infinity it refuses to convert.
-    // ====================================
     private static double sanitize(double value) {
         if (!(value > 0)) {
             return 0;

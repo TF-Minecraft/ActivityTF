@@ -11,35 +11,18 @@ import java.io.InputStreamReader;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 
-// ====================================
-// Every string the plugin sends to chat, read from messages.yml.
-//
-// The packaged copy is installed as the defaults, so a key an admin deleted
-// still resolves to shipped text rather than showing a raw path in chat.
-// ====================================
 public class Messages {
 
     public static final String FILE = "messages.yml";
 
     private final JavaPlugin plugin;
 
-    // Volatile: /activity reload swaps it on the main thread while
-    // PlaceholderAPI can be reading a message off one
     private volatile YamlConfiguration messages;
 
-    // Not loaded here: ActivityConfiguration.load() calls reload() before
-    // anything can ask for a message, and parsing the file twice per enable
-    // was the only thing the constructor call added
     public Messages(JavaPlugin plugin) {
         this.plugin = plugin;
     }
 
-    // ====================================
-    // Re-read messages.yml from disk, so /activity reload picks up text edits.
-    // Built entirely into a local 'next' and only assigned to the volatile
-    // field as the last step, so a reader on another thread never observes it
-    // between being loaded and having its defaults applied.
-    // ====================================
     public void reload() {
         File file = new File(plugin.getDataFolder(), FILE);
         if (!file.exists()) {
@@ -56,15 +39,9 @@ public class Messages {
         messages = next;
     }
 
-    // ====================================
-    // Look up a message and fill in its placeholders.
-    // Pairs are given inline: get("admin.add-done", "%count%", n, "%player%", name)
-    // ====================================
     public String get(String path, Object... placeholderPairs) {
         String raw = messages.getString(path);
         if (raw == null) {
-            // Only reachable if the key is missing from both the live file and
-            // the packaged defaults, which means a typo in a call site
             plugin.getLogger().warning("Missing message '" + path + "' in " + FILE);
             return path;
         }
@@ -74,11 +51,6 @@ public class Messages {
             return Utils.colorize(raw);
         }
 
-        // ====================================
-        // Colour codes are translated before the values go in, so a value that
-        // happens to contain '&c' or a hex code lands in chat as literal text
-        // instead of recolouring the rest of the line.
-        // ====================================
         String message = Utils.colorize(raw);
         for (int index = 0; index < placeholderPairs.length; index += 2) {
             message = message.replace(String.valueOf(placeholderPairs[index]),
@@ -88,11 +60,6 @@ public class Messages {
         return message;
     }
 
-    // ====================================
-    // Verbatim lookup: no colour translation, no placeholder substitution and
-    // no warning on a miss, where get() logs one. The path is returned as-is
-    // when the key resolves to nothing. Callers colorize what they get back.
-    // ====================================
     public String raw(String path) {
         String value = messages.getString(path);
         return value == null ? path : value;

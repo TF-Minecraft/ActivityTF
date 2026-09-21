@@ -7,14 +7,6 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerQuitEvent;
 import tfmc.justin.activity.managers.ActivityManager;
 
-// ====================================
-// Games fires PlayerWonMoneyEvent synchronously on the main thread after a
-// card-table payout. Only constructed when Games is enabled - see
-// ActivityPlugin.
-//
-// Profit is fractional denar, so the leftover fraction is carried between
-// wins rather than rounded away.
-// ====================================
 public class CasinoWinListener implements Listener {
 
     private final ActivityManager manager;
@@ -26,20 +18,14 @@ public class CasinoWinListener implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onPlayerWonMoney(PlayerWonMoneyEvent event) {
-        // The source plugin builds the event itself; a null player would
-        // only be a bug there, but it must not take this listener down
         if (event.getPlayer() == null) {
             return;
         }
 
-        // A hand that did not net a profit is not a win
         if (!(event.getProfit() > 0)) {
             return;
         }
 
-        // A hidden or undrawn task must not bank a fraction either - and
-        // whatever it banked while it was revealed is dropped here, so it
-        // cannot pay out on a later day the task comes back
         if (!manager.isTracked(event.getPlayer().getUniqueId(), "casino_win")) {
             carry.forget(event.getPlayer().getUniqueId(), "casino_win");
             return;
