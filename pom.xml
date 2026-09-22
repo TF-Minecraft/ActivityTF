@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
-            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-            xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://www.apache.org/xsd/maven-4.0.0.xsd">
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>tfmc.justin</groupId>
@@ -12,22 +12,254 @@
     <url>tfminecraft.net</url>
 
     <properties>
+        <maven.compiler.release>21</maven.compiler.release>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <advancedcrafting.version>1.2.3</advancedcrafting.version>
+        <archeology-plugin.version>1.0.1</archeology-plugin.version>
         <cooking.version>0.1.6-ALPHA</cooking.version>
         <games.version>0.1.1</games.version>
-        <marketblock.version>0.0.3</marketblock.version>
-        <archeology-plugin.version>1.0.1</archeology-plugin.version>
-        <advancedcrafting.version>1.2.3</advancedcrafting.version>
-        <simplefactions.version>2.8.7</simplefactions.version>
+        <geiger_counter.version>1.1.3</geiger_counter.version>
         <interactiblefurniture.version>0.1.4-BETA</interactiblefurniture.version>
+        <marketblock.version>0.0.3</marketblock.version>
+        <musicalinstruments.version>2.5</musicalinstruments.version>
         <rpcharacters.version>1.1.7</rpcharacters.version>
+        <simplefactions.version>2.8.7</simplefactions.version>
+        <tlibs.version>1.1.1</tlibs.version>
         <vehicleframework.version>1.1.13</vehicleframework.version>
         <vfbuilders.version>1.0.1</vfbuilders.version>
-        <geiger_counter.version>1.1.3</geiger_counter.version>
-        <musicalinstruments.version>2.5</musicalinstruments.version>
-        <tlibs.version>1.1.1</tlibs.version>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <maven.compiler.release>21</maven.compiler.release>
     </properties>
+
+    <dependencies>
+        <!-- Paper API -->
+        <dependency>
+            <groupId>io.papermc.paper</groupId>
+            <artifactId>paper-api</artifactId>
+            <version>1.21.10-R0.1-SNAPSHOT</version>
+            <scope>provided</scope>
+        </dependency>
+        <!-- PlaceholderAPI -->
+        <dependency>
+            <groupId>me.clip</groupId>
+            <artifactId>placeholderapi</artifactId>
+            <version>2.11.6</version>
+            <scope>provided</scope>
+        </dependency>
+        <!-- VotingPlugin: jar-only release, compiled against for PlayerVoteEvent -->
+        <dependency>
+            <groupId>local</groupId>
+            <artifactId>VotingPlugin</artifactId>
+            <version>7.0</version>
+            <scope>system</scope>
+            <systemPath>${project.basedir}/libs/VotingPlugin-7.0.jar</systemPath>
+        </dependency>
+        <!-- MusicalInstruments: provided plugin API, compiled against for InstrumentPlayEvent -->
+        <dependency>
+            <groupId>tfmc.justin</groupId>
+            <artifactId>musicalinstruments</artifactId>
+            <version>${musicalinstruments.version}</version>
+            <scope>provided</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>*</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <!-- geiger_counter: provided plugin API, compiled against for GeigerSourceCollectEvent -->
+        <dependency>
+            <groupId>net.tfminecraft</groupId>
+            <artifactId>geiger_counter</artifactId>
+            <version>${geiger_counter.version}</version>
+            <scope>provided</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>*</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <!-- MMOCore: jar-only release, compiled against for PlayerExperienceGainEvent -->
+        <dependency>
+            <groupId>local</groupId>
+            <artifactId>MMOCore</artifactId>
+            <version>1.13.1</version>
+            <scope>system</scope>
+            <systemPath>${project.basedir}/libs/MMOCore-1.13.1.jar</systemPath>
+        </dependency>
+        <!-- MMOItems: jar-only release, compiled against for
+             PlayerUseCraftingStationEvent -->
+        <dependency>
+            <groupId>local</groupId>
+            <artifactId>MMOItems</artifactId>
+            <version>6.10.1</version>
+            <scope>system</scope>
+            <systemPath>${project.basedir}/libs/MMOItems-6.10.1.jar</systemPath>
+        </dependency>
+        <!-- MythicLib: MMOCore's own hard dependency. Not used directly, but
+             MMOCore's Profession implements one of its interfaces, so javac
+             needs it on the classpath to resolve Profession at all. -->
+        <dependency>
+            <groupId>local</groupId>
+            <artifactId>MythicLib</artifactId>
+            <version>1.7.1</version>
+            <scope>system</scope>
+            <systemPath>${project.basedir}/libs/MythicLib-dist-1.7.1.jar</systemPath>
+        </dependency>
+        <!-- VFBuilders: provided plugin API, compiled against for VehicleConstructEvent -->
+        <dependency>
+            <groupId>net.tfminecraft</groupId>
+            <artifactId>vfbuilders</artifactId>
+            <version>${vfbuilders.version}</version>
+            <scope>provided</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>*</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <!-- VehicleFramework: VFBuilders' own hard dependency, on the classpath
+             so javac can resolve VehicleConstructEvent's ActiveVehicle field -->
+        <dependency>
+            <groupId>net.tfminecraft</groupId>
+            <artifactId>vehicleframework</artifactId>
+            <version>${vehicleframework.version}</version>
+            <scope>provided</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>*</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <!-- TLibs: shared by every tfminecraft plugin below, needed on the
+             classpath for their event types to resolve -->
+        <dependency>
+            <groupId>me.plugins</groupId>
+            <artifactId>tlibs</artifactId>
+            <version>${tlibs.version}</version>
+            <scope>provided</scope>
+            <exclusions>
+                <!-- The server supplies TLibs and its integrations. -->
+                <exclusion>
+                    <groupId>*</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <!-- RPCharacters: provided plugin API, compiled against for CharacterChatEvent -->
+        <dependency>
+            <groupId>net.tfminecraft</groupId>
+            <artifactId>rpcharacters</artifactId>
+            <version>${rpcharacters.version}</version>
+            <scope>provided</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>*</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <!-- InteractibleFurniture: provided plugin API, compiled against for FurniturePlaceEvent -->
+        <dependency>
+            <groupId>net.tfminecraft</groupId>
+            <artifactId>interactiblefurniture</artifactId>
+            <version>${interactiblefurniture.version}</version>
+            <scope>provided</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>*</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <!-- SimpleFactions: provided plugin API, compiled against for BattleEndedEvent -->
+        <dependency>
+            <groupId>net.tfminecraft</groupId>
+            <artifactId>simplefactions</artifactId>
+            <version>${simplefactions.version}</version>
+            <scope>provided</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>*</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <!-- AdvancedCrafting: provided plugin API, compiled against for
+             ItemCraftedEvent and AlloyCraftedEvent -->
+        <dependency>
+            <groupId>net.tfminecraft</groupId>
+            <artifactId>advancedcrafting</artifactId>
+            <version>${advancedcrafting.version}</version>
+            <scope>provided</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>*</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <!-- Archaeo: jar-only release, compiled against for FindRecoveredEvent -->
+        <dependency>
+            <groupId>com.nowko</groupId>
+            <artifactId>archeology-plugin</artifactId>
+            <version>${archeology-plugin.version}</version>
+            <scope>provided</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>*</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <!-- MarketBlock: provided plugin API, compiled against for MarketSaleEvent -->
+        <dependency>
+            <groupId>net.tfminecraft</groupId>
+            <artifactId>marketblock</artifactId>
+            <version>${marketblock.version}</version>
+            <scope>provided</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>*</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <!-- Games: compile-time API from the verified full plugin JAR -->
+        <dependency>
+            <groupId>net.tfminecraft</groupId>
+            <artifactId>games</artifactId>
+            <version>${games.version}</version>
+            <scope>provided</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>*</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <!-- Cooking: compile-time API from the verified full plugin JAR -->
+        <dependency>
+            <groupId>net.tfminecraft</groupId>
+            <artifactId>cooking</artifactId>
+            <version>${cooking.version}</version>
+            <scope>provided</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>*</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <!-- Tests -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>5.11.4</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
 
     <repositories>
         <repository>
@@ -40,229 +272,21 @@
         </repository>
     </repositories>
 
-    <dependencies>
-        <!-- Paper API -->
-        <dependency>
-            <groupId>io.papermc.paper</groupId>
-            <artifactId>paper-api</artifactId>
-            <version>1.21.10-R0.1-SNAPSHOT</version>
-            <scope>provided</scope>
-        </dependency>
-
-        <!-- PlaceholderAPI -->
-        <dependency>
-            <groupId>me.clip</groupId>
-            <artifactId>placeholderapi</artifactId>
-            <version>2.11.6</version>
-            <scope>provided</scope>
-        </dependency>
-
-        <!-- VotingPlugin: jar-only release, compiled against for PlayerVoteEvent -->
-        <dependency>
-            <groupId>local</groupId>
-            <artifactId>VotingPlugin</artifactId>
-            <version>7.0</version>
-            <scope>system</scope>
-            <systemPath>${project.basedir}/libs/VotingPlugin-7.0.jar</systemPath>
-        </dependency>
-
-        <!-- MusicalInstruments: provided plugin API, compiled against for InstrumentPlayEvent -->
-        <dependency>
-            <groupId>tfmc.justin</groupId>
-            <artifactId>musicalinstruments</artifactId>
-            <version>${musicalinstruments.version}</version>
-            <scope>provided</scope>
-            <exclusions>
-                <exclusion><groupId>*</groupId><artifactId>*</artifactId></exclusion>
-            </exclusions>
-        </dependency>
-
-        <!-- geiger_counter: provided plugin API, compiled against for GeigerSourceCollectEvent -->
-        <dependency>
-            <groupId>net.tfminecraft</groupId>
-            <artifactId>geiger_counter</artifactId>
-            <version>${geiger_counter.version}</version>
-            <scope>provided</scope>
-            <exclusions>
-                <exclusion><groupId>*</groupId><artifactId>*</artifactId></exclusion>
-            </exclusions>
-        </dependency>
-
-        <!-- MMOCore: jar-only release, compiled against for PlayerExperienceGainEvent -->
-        <dependency>
-            <groupId>local</groupId>
-            <artifactId>MMOCore</artifactId>
-            <version>1.13.1</version>
-            <scope>system</scope>
-            <systemPath>${project.basedir}/libs/MMOCore-1.13.1.jar</systemPath>
-        </dependency>
-
-        <!-- MMOItems: jar-only release, compiled against for
-             PlayerUseCraftingStationEvent -->
-        <dependency>
-            <groupId>local</groupId>
-            <artifactId>MMOItems</artifactId>
-            <version>6.10.1</version>
-            <scope>system</scope>
-            <systemPath>${project.basedir}/libs/MMOItems-6.10.1.jar</systemPath>
-        </dependency>
-
-        <!-- MythicLib: MMOCore's own hard dependency. Not used directly, but
-             MMOCore's Profession implements one of its interfaces, so javac
-             needs it on the classpath to resolve Profession at all. -->
-        <dependency>
-            <groupId>local</groupId>
-            <artifactId>MythicLib</artifactId>
-            <version>1.7.1</version>
-            <scope>system</scope>
-            <systemPath>${project.basedir}/libs/MythicLib-dist-1.7.1.jar</systemPath>
-        </dependency>
-
-        <!-- VFBuilders: provided plugin API, compiled against for VehicleConstructEvent -->
-        <dependency>
-            <groupId>net.tfminecraft</groupId>
-            <artifactId>vfbuilders</artifactId>
-            <version>${vfbuilders.version}</version>
-            <scope>provided</scope>
-            <exclusions>
-                <exclusion><groupId>*</groupId><artifactId>*</artifactId></exclusion>
-            </exclusions>
-        </dependency>
-
-        <!-- VehicleFramework: VFBuilders' own hard dependency, on the classpath
-             so javac can resolve VehicleConstructEvent's ActiveVehicle field -->
-        <dependency>
-            <groupId>net.tfminecraft</groupId>
-            <artifactId>vehicleframework</artifactId>
-            <version>${vehicleframework.version}</version>
-            <scope>provided</scope>
-            <exclusions>
-                <exclusion><groupId>*</groupId><artifactId>*</artifactId></exclusion>
-            </exclusions>
-        </dependency>
-
-        <!-- TLibs: shared by every tfminecraft plugin below, needed on the
-             classpath for their event types to resolve -->
-        <dependency>
-            <groupId>me.plugins</groupId>
-            <artifactId>tlibs</artifactId>
-            <version>${tlibs.version}</version>
-            <scope>provided</scope>
-            <exclusions>
-                <!-- The server supplies TLibs and its integrations. -->
-                <exclusion><groupId>*</groupId><artifactId>*</artifactId></exclusion>
-            </exclusions>
-        </dependency>
-
-        <!-- RPCharacters: provided plugin API, compiled against for CharacterChatEvent -->
-        <dependency>
-            <groupId>net.tfminecraft</groupId>
-            <artifactId>rpcharacters</artifactId>
-            <version>${rpcharacters.version}</version>
-            <scope>provided</scope>
-            <exclusions>
-                <exclusion><groupId>*</groupId><artifactId>*</artifactId></exclusion>
-            </exclusions>
-        </dependency>
-
-        <!-- InteractibleFurniture: provided plugin API, compiled against for FurniturePlaceEvent -->
-        <dependency>
-            <groupId>net.tfminecraft</groupId>
-            <artifactId>interactiblefurniture</artifactId>
-            <version>${interactiblefurniture.version}</version>
-            <scope>provided</scope>
-            <exclusions>
-                <exclusion><groupId>*</groupId><artifactId>*</artifactId></exclusion>
-            </exclusions>
-        </dependency>
-
-        <!-- SimpleFactions: provided plugin API, compiled against for BattleEndedEvent -->
-        <dependency>
-            <groupId>net.tfminecraft</groupId>
-            <artifactId>simplefactions</artifactId>
-            <version>${simplefactions.version}</version>
-            <scope>provided</scope>
-            <exclusions>
-                <exclusion><groupId>*</groupId><artifactId>*</artifactId></exclusion>
-            </exclusions>
-        </dependency>
-
-        <!-- AdvancedCrafting: provided plugin API, compiled against for
-             ItemCraftedEvent and AlloyCraftedEvent -->
-        <dependency>
-            <groupId>net.tfminecraft</groupId>
-            <artifactId>advancedcrafting</artifactId>
-            <version>${advancedcrafting.version}</version>
-            <scope>provided</scope>
-            <exclusions>
-                <exclusion><groupId>*</groupId><artifactId>*</artifactId></exclusion>
-            </exclusions>
-        </dependency>
-
-        <!-- Archaeo: jar-only release, compiled against for FindRecoveredEvent -->
-        <dependency>
-            <groupId>com.nowko</groupId>
-            <artifactId>archeology-plugin</artifactId>
-            <version>${archeology-plugin.version}</version>
-            <scope>provided</scope>
-            <exclusions>
-                <exclusion><groupId>*</groupId><artifactId>*</artifactId></exclusion>
-            </exclusions>
-        </dependency>
-
-        <!-- MarketBlock: provided plugin API, compiled against for MarketSaleEvent -->
-        <dependency>
-            <groupId>net.tfminecraft</groupId>
-            <artifactId>marketblock</artifactId>
-            <version>${marketblock.version}</version>
-            <scope>provided</scope>
-            <exclusions>
-                <exclusion><groupId>*</groupId><artifactId>*</artifactId></exclusion>
-            </exclusions>
-        </dependency>
-
-        <!-- Games: compile-time API from the verified full plugin JAR -->
-        <dependency>
-            <groupId>net.tfminecraft</groupId>
-            <artifactId>games</artifactId>
-            <version>${games.version}</version>
-            <scope>provided</scope>
-            <exclusions>
-                <exclusion><groupId>*</groupId><artifactId>*</artifactId></exclusion>
-            </exclusions>
-        </dependency>
-
-        <!-- Cooking: compile-time API from the verified full plugin JAR -->
-        <dependency>
-            <groupId>net.tfminecraft</groupId>
-            <artifactId>cooking</artifactId>
-            <version>${cooking.version}</version>
-            <scope>provided</scope>
-            <exclusions>
-                <exclusion><groupId>*</groupId><artifactId>*</artifactId></exclusion>
-            </exclusions>
-        </dependency>
-
-        <!-- Tests -->
-        <dependency>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter</artifactId>
-            <version>5.11.4</version>
-            <scope>test</scope>
-        </dependency>
-    </dependencies>
-
     <build>
         <resources>
             <resource>
                 <directory>src/main/resources</directory>
                 <filtering>true</filtering>
-                <includes><include>plugin.yml</include></includes>
+                <includes>
+                    <include>plugin.yml</include>
+                </includes>
             </resource>
             <resource>
                 <directory>src/main/resources</directory>
                 <filtering>false</filtering>
-                <excludes><exclude>plugin.yml</exclude></excludes>
+                <excludes>
+                    <exclude>plugin.yml</exclude>
+                </excludes>
             </resource>
         </resources>
         <plugins>
@@ -276,7 +300,6 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.5.2</version>
             </plugin>
-
         </plugins>
     </build>
 </project>
