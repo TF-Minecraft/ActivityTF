@@ -13,12 +13,11 @@ import org.bukkit.inventory.ItemStack;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
-import sun.reflect.ReflectionFactory;
+import org.objenesis.ObjenesisStd;
 import net.tfminecraft.activitytf.config.ActivityConfiguration;
 import net.tfminecraft.activitytf.managers.ActivityManager;
 import net.tfminecraft.activitytf.models.ActivityDef;
 
-import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
@@ -47,16 +46,8 @@ class MmoItemsStationListenerTest {
             MmoItemsStationListenerTest.class.getClassLoader(), new Class<?>[]{Player.class}, handler);
     }
 
-    @SuppressWarnings("unchecked")
     private static <T> T bypassNew(Class<T> type) {
-        try {
-            ReflectionFactory rf = ReflectionFactory.getReflectionFactory();
-            Constructor<Object> objectCtor = Object.class.getDeclaredConstructor();
-            Constructor<?> bypass = rf.newConstructorForSerialization(type, objectCtor);
-            return (T) bypass.newInstance();
-        } catch (ReflectiveOperationException e) {
-            throw new RuntimeException(e);
-        }
+        return new ObjenesisStd().newInstance(type);
     }
 
     private static void setField(Object target, Class<?> declaringClass, String name, Object value) {

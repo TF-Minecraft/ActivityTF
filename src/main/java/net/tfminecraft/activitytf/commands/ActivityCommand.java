@@ -178,6 +178,8 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
         return data != null && data.weekKey().equals(keys.week()) && data.dayKey().equals(keys.day());
     }
 
+    // Keep the existing legacy text representation, formatting, and exact-string comparisons.
+    @SuppressWarnings("deprecation")
     private void handleCheck(CommandSender sender, String[] args) {
         if (args.length < 2) {
             usage(sender);
@@ -300,6 +302,8 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
             + " result=" + outcome);
     }
 
+    // Keep the existing legacy text representation, formatting, and exact-string comparisons.
+    @SuppressWarnings("deprecation")
     private void handleAddPoints(CommandSender sender, String[] args) {
         if (args.length != 3) {
             usage(sender);

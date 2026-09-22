@@ -48,9 +48,8 @@
         <dependency>
             <groupId>local</groupId>
             <artifactId>VotingPlugin</artifactId>
-            <version>7.0</version>
-            <scope>system</scope>
-            <systemPath>${project.basedir}/libs/VotingPlugin-7.0.jar</systemPath>
+            <version>7.0-tfmc-27e9906f1377</version>
+            <scope>provided</scope>
         </dependency>
         <!-- MusicalInstruments: provided plugin API, compiled against for InstrumentPlayEvent -->
         <dependency>
@@ -82,18 +81,16 @@
         <dependency>
             <groupId>local</groupId>
             <artifactId>MMOCore</artifactId>
-            <version>1.13.1</version>
-            <scope>system</scope>
-            <systemPath>${project.basedir}/libs/MMOCore-1.13.1.jar</systemPath>
+            <version>1.13.1-tfmc-14850d745437</version>
+            <scope>provided</scope>
         </dependency>
         <!-- MMOItems: jar-only release, compiled against for
              PlayerUseCraftingStationEvent -->
         <dependency>
             <groupId>local</groupId>
             <artifactId>MMOItems</artifactId>
-            <version>6.10.1</version>
-            <scope>system</scope>
-            <systemPath>${project.basedir}/libs/MMOItems-6.10.1.jar</systemPath>
+            <version>6.10.1-tfmc-8ff714bd3f48</version>
+            <scope>provided</scope>
         </dependency>
         <!-- MythicLib: MMOCore's own hard dependency. Not used directly, but
              MMOCore's Profession implements one of its interfaces, so javac
@@ -101,9 +98,8 @@
         <dependency>
             <groupId>local</groupId>
             <artifactId>MythicLib</artifactId>
-            <version>1.7.1</version>
-            <scope>system</scope>
-            <systemPath>${project.basedir}/libs/MythicLib-dist-1.7.1.jar</systemPath>
+            <version>1.7.1-tfmc-a3f86a50d382</version>
+            <scope>provided</scope>
         </dependency>
         <!-- VFBuilders: provided plugin API, compiled against for VehicleConstructEvent -->
         <dependency>
@@ -251,6 +247,13 @@
                     <artifactId>*</artifactId>
                 </exclusion>
             </exclusions>
+        </dependency>
+        <!-- Constructor-free test fixtures through Objenesis' supported API. -->
+        <dependency>
+            <groupId>org.objenesis</groupId>
+            <artifactId>objenesis</artifactId>
+            <version>3.3</version>
+            <scope>test</scope>
         </dependency>
         <!-- Tests -->
         <dependency>

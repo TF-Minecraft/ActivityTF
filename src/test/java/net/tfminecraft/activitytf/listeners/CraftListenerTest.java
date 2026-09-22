@@ -104,7 +104,7 @@ class CraftListenerTest {
     }
 
     @Test
-    @SuppressWarnings("deprecation")
+    @SuppressWarnings({"deprecation", "removal"})
     void aNumberKeySwapOntoAnOccupiedSlotTakesNothing() {
         assertFalse(CraftListener.takesFromResult(ClickType.NUMBER_KEY, InventoryAction.HOTBAR_MOVE_AND_READD, OCCUPIED));
         assertFalse(CraftListener.takesFromResult(ClickType.NUMBER_KEY, InventoryAction.HOTBAR_SWAP, OCCUPIED));
@@ -112,7 +112,7 @@ class CraftListenerTest {
     }
 
     @Test
-    @SuppressWarnings("deprecation")
+    @SuppressWarnings({"deprecation", "removal"})
     void anOffhandSwapOntoAnOccupiedOffhandTakesNothing() {
         assertFalse(CraftListener.takesFromResult(ClickType.SWAP_OFFHAND, InventoryAction.HOTBAR_MOVE_AND_READD, OCCUPIED));
         assertFalse(CraftListener.takesFromResult(ClickType.SWAP_OFFHAND, InventoryAction.HOTBAR_SWAP, OCCUPIED));
@@ -150,7 +150,7 @@ class CraftListenerTest {
     private static final int RESULT_SLOT = 0;
 
     @Test
-    @SuppressWarnings("deprecation")
+    @SuppressWarnings({"deprecation", "removal"})
     void anEmptyResultSlotCreditsNothingWhateverTheClick() {
         for (ClickType click : ClickType.values()) {
             for (InventoryAction action : InventoryAction.values()) {

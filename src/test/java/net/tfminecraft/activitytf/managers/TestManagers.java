@@ -5,7 +5,7 @@ import org.bukkit.Server;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
-import sun.reflect.ReflectionFactory;
+import org.objenesis.ObjenesisStd;
 import net.tfminecraft.activitytf.config.ActivityConfiguration;
 import net.tfminecraft.activitytf.models.ActivityDef;
 import net.tfminecraft.activitytf.models.RewardEntry;
@@ -221,10 +221,7 @@ public final class TestManagers {
 
     private static JavaPlugin stubPlugin() {
         try {
-            ReflectionFactory rf = ReflectionFactory.getReflectionFactory();
-            Constructor<Object> objectCtor = Object.class.getDeclaredConstructor();
-            Constructor<?> bypass = rf.newConstructorForSerialization(TestPlugin.class, objectCtor);
-            JavaPlugin plugin = (JavaPlugin) bypass.newInstance();
+            JavaPlugin plugin = new ObjenesisStd().newInstance(TestPlugin.class);
 
             Field logger = JavaPlugin.class.getDeclaredField("logger");
             logger.setAccessible(true);

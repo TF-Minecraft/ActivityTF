@@ -96,7 +96,7 @@ class MarketSaleListenerTest {
         Player player = stubPlayer(uuid);
 
         listener.onMarketSale(sale(player, 0.5));
-        listener.onQuit(new PlayerQuitEvent(player, (String) null));
+        listener.onQuit(new PlayerQuitEvent(player, (net.kyori.adventure.text.Component) null, PlayerQuitEvent.QuitReason.DISCONNECTED));
         listener.onMarketSale(sale(player, 0.5));
 
         assertEquals(0, manager.tasks(uuid).count("market_sale"));

@@ -4,10 +4,9 @@ import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.junit.jupiter.api.Test;
-import sun.reflect.ReflectionFactory;
+import org.objenesis.ObjenesisStd;
 
 import java.io.StringReader;
-import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Optional;
@@ -24,10 +23,7 @@ class ActivityConfigurationStationTest {
 
     private static JavaPlugin stubPlugin() {
         try {
-            ReflectionFactory rf = ReflectionFactory.getReflectionFactory();
-            Constructor<Object> objectCtor = Object.class.getDeclaredConstructor();
-            Constructor<?> bypass = rf.newConstructorForSerialization(TestPlugin.class, objectCtor);
-            JavaPlugin plugin = (JavaPlugin) bypass.newInstance();
+            JavaPlugin plugin = new ObjenesisStd().newInstance(TestPlugin.class);
 
             Field loggerField = JavaPlugin.class.getDeclaredField("logger");
             loggerField.setAccessible(true);

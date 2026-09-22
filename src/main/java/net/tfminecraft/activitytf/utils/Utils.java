@@ -6,6 +6,8 @@ import net.md_5.bungee.api.ChatColor;
 
 public class Utils {
 
+    // Keep the existing legacy text representation, formatting, and exact-string comparisons.
+    @SuppressWarnings("deprecation")
     public static String colorize(String msg) {
         Matcher match = Pattern.compile("#[a-fA-F0-9]{6}").matcher(msg);
         while (match.find()) {
