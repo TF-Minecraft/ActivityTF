@@ -16,6 +16,6 @@ python3 ../tlibs/tools/install-dependency.py --pom pom.xml
 mvn clean verify
 ```
 
-See [TLibs dependency setup](https://github.com/TF-Minecraft/TLibs/blob/804728d2c0d62d64e3194bcdeffc3708acfbc514/DEPENDENCIES.md)
+See [TLibs dependency setup](https://github.com/TF-Minecraft/TLibs/blob/61bd61b17fba45e5178612578805d7108596e8a0/DEPENDENCIES.md)
 for private-source access, offline installation and the pinned binary versions.
 Other declared build dependencies still need their usual preparation.
