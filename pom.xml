@@ -16,16 +16,16 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <advancedcrafting.version>2.0.0</advancedcrafting.version>
         <archeology-plugin.version>1.0.1</archeology-plugin.version>
-        <cooking.version>0.2.0-ALPHA</cooking.version>
+        <cooking.version>0.2.1-ALPHA</cooking.version>
         <games.version>0.2.0</games.version>
         <geiger_counter.version>2.0.0</geiger_counter.version>
         <interactiblefurniture.version>0.2.0-BETA</interactiblefurniture.version>
         <marketblock.version>0.1.0</marketblock.version>
         <musicalinstruments.version>3.0.0</musicalinstruments.version>
-        <rpcharacters.version>2.0.0</rpcharacters.version>
-        <simplefactions.version>3.0.0</simplefactions.version>
+        <rpcharacters.version>2.0.1</rpcharacters.version>
+        <simplefactions.version>3.0.1</simplefactions.version>
         <tlibs.version>2.0.0</tlibs.version>
-        <vehicleframework.version>2.0.0</vehicleframework.version>
+        <vehicleframework.version>2.0.1</vehicleframework.version>
         <vfbuilders.version>2.0.0</vfbuilders.version>
     </properties>
 
