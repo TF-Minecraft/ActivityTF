@@ -12,7 +12,7 @@
     <url>tfminecraft.net</url>
 
     <properties>
-        <tlibs.version>1.0-tfmc-ecddb0e40a4d</tlibs.version>
+        <tlibs.version>1.1.0</tlibs.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
@@ -190,7 +190,7 @@
             <systemPath>${project.basedir}/libs/marketblock-0.0.2.jar</systemPath>
         </dependency>
 
-        <!-- Games: compiled against for CasinoWinEvent -->
+        <!-- Games: compile-time API from the verified full plugin JAR -->
         <dependency>
             <groupId>local</groupId>
             <artifactId>games</artifactId>
@@ -199,7 +199,7 @@
             <systemPath>${project.basedir}/libs/games-0.1.1.jar</systemPath>
         </dependency>
 
-        <!-- Cooking: compiled against for DishCookedEvent -->
+        <!-- Cooking: compile-time API from the verified full plugin JAR -->
         <dependency>
             <groupId>local</groupId>
             <artifactId>cooking</artifactId>
