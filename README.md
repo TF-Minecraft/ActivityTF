@@ -25,10 +25,9 @@ Builds and server runtime require Java 25. Local builds default to [TLibs 1.1.0]
 Other compile-time plugin APIs are fetched from a pinned private ServerAssets commit:
 `GH_TOKEN` needs Contents read access to `TF-Minecraft/ServerAssets`; run
 `bash .github/scripts/prepare-release.sh` before Maven. The script verifies
-`.github/dependencies.sha256`. It uses the authorized inputs validated with this
-upgrade, including VehicleFramework 1.1.12, AdvancedCrafting 1.2.1 and full
-Cooking/Games JARs for their compile-time APIs. TLibs still downloads separately
-from its public versioned release.
+`.github/dependencies.sha256` for the remaining third-party inputs. Shared TFMC
+plugin APIs, including MusicalInstruments 2.5 and AdvancedCrafting 1.2.2, resolve
+separately through the public release installer described below.
 
 ## Shared plugin dependencies
 
@@ -46,5 +45,6 @@ python3 ../tlibs/tools/install-plugins.py --pom pom.xml
 ```
 
 Prepare any remaining third-party inputs with `.github/scripts/prepare-release.sh`
-before running Maven. Any source-unavailable inputs remain private and checksum-pinned wherever declared; see the installer
-documentation for authentication and reproducible rebuilds.
+before running Maven. All shared plugin APIs now use public releases; the remaining
+third-party inputs still require private access. See the installer documentation
+for exact-version rebuilds and legacy rollback.
