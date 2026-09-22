@@ -15,7 +15,7 @@
         <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <advancedcrafting.version>2.0.0</advancedcrafting.version>
-        <archeology-plugin.version>1.0.1</archeology-plugin.version>
+        <archeology-plugin.version>2.0.0</archeology-plugin.version>
         <cooking.version>0.2.1</cooking.version>
         <games.version>0.2.0</games.version>
         <geiger_counter.version>2.0.0</geiger_counter.version>

@@ -1,6 +1,6 @@
 package net.tfminecraft.activitytf.listeners;
 
-import com.nowko.archeology.events.FindRecoveredEvent;
+import net.tfminecraft.archaeo.events.FindRecoveredEvent;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
