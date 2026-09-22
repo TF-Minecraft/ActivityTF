@@ -29,6 +29,11 @@ jobs:
           java-version: '21'
           cache: maven
 
+      - name: Install pinned TLibs in Maven
+        uses: TF-Minecraft/TLibs/.github/actions/setup@61bd61b17fba45e5178612578805d7108596e8a0
+        with:
+          token: ${{ secrets.DEPS_TOKEN }}
+
       - name: Fetch private dependencies
         env:
           GH_TOKEN: ${{ secrets.DEPS_TOKEN }}
@@ -41,7 +46,6 @@ jobs:
             --pattern 'MMOCore-1.13.1.jar' \
             --pattern 'MMOItems-6.10.1.jar' \
             --pattern 'MythicLib-dist-1.7.1.jar' \
-            --pattern 'TLibs-1.0.jar' \
             --pattern 'vehicleframework-1.1.11.jar' \
             --pattern 'vfbuilders-1.0.0.jar' \
             --pattern 'rpcharacters-1.1.7.jar' \

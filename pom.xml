@@ -12,6 +12,7 @@
     <url>tfminecraft.net</url>
 
     <properties>
+        <tlibs.version>1.0-tfmc-ecddb0e40a4d</tlibs.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
@@ -124,11 +125,14 @@
         <!-- TLibs: shared by every tfminecraft plugin below, needed on the
              classpath for their event types to resolve -->
         <dependency>
-            <groupId>local</groupId>
-            <artifactId>TLibs</artifactId>
-            <version>1.0</version>
-            <scope>system</scope>
-            <systemPath>${project.basedir}/libs/TLibs-1.0.jar</systemPath>
+            <groupId>me.plugins</groupId>
+            <artifactId>tlibs</artifactId>
+            <version>${tlibs.version}</version>
+            <scope>provided</scope>
+            <exclusions>
+                <!-- The server supplies TLibs and its integrations. -->
+                <exclusion><groupId>*</groupId><artifactId>*</artifactId></exclusion>
+            </exclusions>
         </dependency>
 
         <!-- RPCharacters: jar-only release, compiled against for CharacterChatEvent -->
