@@ -3,9 +3,8 @@ package net.tfminecraft.activitytf.listeners;
 import net.tfminecraft.cooking.events.DishCookedEvent;
 import org.bukkit.entity.Player;
 import org.junit.jupiter.api.Test;
-import sun.reflect.ReflectionFactory;
+import org.objenesis.ObjenesisStd;
 
-import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Proxy;
@@ -31,10 +30,7 @@ class DishCookedListenerTest {
 
     private static DishCookedEvent dish(Player player) {
         try {
-            ReflectionFactory rf = ReflectionFactory.getReflectionFactory();
-            Constructor<Object> objectCtor = Object.class.getDeclaredConstructor();
-            Constructor<?> bypass = rf.newConstructorForSerialization(DishCookedEvent.class, objectCtor);
-            DishCookedEvent event = (DishCookedEvent) bypass.newInstance();
+            DishCookedEvent event = new ObjenesisStd().newInstance(DishCookedEvent.class);
 
             Field playerField = DishCookedEvent.class.getDeclaredField("player");
             playerField.setAccessible(true);

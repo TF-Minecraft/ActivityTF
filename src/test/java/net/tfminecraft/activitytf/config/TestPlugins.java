@@ -1,9 +1,8 @@
 package net.tfminecraft.activitytf.config;
 
 import org.bukkit.plugin.java.JavaPlugin;
-import sun.reflect.ReflectionFactory;
+import org.objenesis.ObjenesisStd;
 
-import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.util.List;
 import java.util.logging.Handler;
@@ -21,10 +20,7 @@ final class TestPlugins {
 
     static JavaPlugin capturing(List<String> logged) {
         try {
-            ReflectionFactory rf = ReflectionFactory.getReflectionFactory();
-            Constructor<Object> objectCtor = Object.class.getDeclaredConstructor();
-            Constructor<?> bypass = rf.newConstructorForSerialization(TestPlugin.class, objectCtor);
-            JavaPlugin plugin = (JavaPlugin) bypass.newInstance();
+            JavaPlugin plugin = new ObjenesisStd().newInstance(TestPlugin.class);
 
             Logger logger = Logger.getAnonymousLogger();
             logger.setUseParentHandlers(false);

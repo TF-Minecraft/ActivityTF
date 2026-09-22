@@ -165,7 +165,7 @@ class Tier1HooksTest {
     }
 
     @Test
-    void everyPomSystemPathJarIsListedInSha256sums() throws IOException {
+    void everyInstalledLocalJarIsChecksumPinned() throws IOException {
         Path pomFile = Path.of("pom.xml");
         assertTrue(Files.exists(pomFile), "pom.xml should exist");
         Path sumsFile = Path.of(".github/dependencies.sha256");
@@ -179,14 +179,19 @@ class Tier1HooksTest {
             jarsInSums.add(m.group(1));
         }
 
-        Pattern systemPath = Pattern.compile("<systemPath>[^<]*?libs/([^<]+\\.jar)</systemPath>");
-        Matcher m = systemPath.matcher(Files.readString(pomFile));
-        Set<String> jarsInPom = new HashSet<>();
-        while (m.find()) {
-            jarsInPom.add(m.group(1));
+        String pom = Files.readString(pomFile);
+        assertFalse(pom.contains("<systemPath>"), "Local APIs must use provided Maven dependencies");
+        String installer = Files.readString(Path.of(".github/scripts/install-local-dependencies.sh"));
+        assertTrue(installer.contains("sha256sum --check .github/dependencies.sha256"));
+        Set<String> installed = new HashSet<>();
+        Matcher files = Pattern.compile("-Dfile=\"libs/([^\"]+\\.jar)\"").matcher(installer);
+        while (files.find()) installed.add(files.group(1));
+        assertEquals(jarsInSums, installed, "Every installed JAR must have a pinned checksum");
+        for (String line : Files.readAllLines(sumsFile)) {
+            if (line.isBlank()) continue;
+            String suffix = "-tfmc-" + line.substring(0, 12);
+            assertTrue(installer.contains(suffix), "Installer must use hash-qualified coordinates");
+            assertTrue(pom.contains(suffix + "</version>"), "POM must use the same pinned coordinates");
         }
-        assertFalse(jarsInPom.isEmpty(), "pom.xml should have at least one systemPath jar");
-
-        assertEquals(jarsInPom, jarsInSums, "Every system dependency must have exactly one pinned checksum");
     }
 }

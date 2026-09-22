@@ -57,6 +57,8 @@ public class ActivityGui implements Listener {
         }
     }
 
+    // Keep the existing legacy text representation, formatting, and exact-string comparisons.
+    @SuppressWarnings("deprecation")
     public Inventory build(Player player) {
         ActivityConfiguration config = manager.getConfiguration();
         Messages messages = config.messages();
@@ -229,6 +231,8 @@ public class ActivityGui implements Listener {
         return item(new ItemStack(material), name, lore);
     }
 
+    // Keep the existing legacy text representation, formatting, and exact-string comparisons.
+    @SuppressWarnings("deprecation")
     private ItemStack item(ItemStack stack, String name, List<String> lore) {
         ItemMeta meta = stack.getItemMeta();
         if (meta != null) {
