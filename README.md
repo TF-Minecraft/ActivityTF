@@ -1,50 +1,24 @@
-# activity-tf
+# ActivityTF
 
-Technical documentation is maintained in [TF-Minecraft/Docs](https://github.com/TF-Minecraft/Docs/blob/main/projects/ActivityTF/README.md).
+> Daily activities and weekly rewards for TF-Minecraft.
 
-Use that project index for setup, configuration, architecture, integration and testing guides. This repository contains the source and project-specific assets.
+ActivityTF gives players a rotating set of things to do across the server. Each day's activity menu contains seven tasks to reveal, with progress feeding into a weekly reward bar. It brings exploration, crafting, roleplay, and community participation together in one place.
 
+Tasks only start earning activity credit once revealed, giving players a reason to check their daily selection before heading out.
 
+## Features
 
-## TLibs build dependency
+- **Personal daily task menus** — a fresh selection of activities, with progress displays and descriptions for revealed tasks.
+- **Weekly reward milestones** — activity points unlock claimable rewards from weighted reward pools.
+- **Daily reveal rewards** — players can claim a separate reward after revealing all of their daily tasks.
+- **Activities across the server** — supported integrations track actions such as voting, cooking, archaeology, instrument playing, market sales, and vehicle building.
+- **Varied progression limits** — daily caps and a voting share of the daily allowance shape how points are earned.
+- **Task rerolls** — eligible players can redraw their daily selection within the server's limits.
 
-TLibs is a versioned Maven `provided` dependency. From this repository, prepare
-it once with the shared installer, then build as usual:
+Available activities depend on the gameplay plugins and activity definitions in use.
 
-```sh
-python3 ../tlibs/tools/install-dependency.py --pom pom.xml
-mvn clean verify
-```
+## Documentation
 
-See [TLibs dependency setup](https://github.com/TF-Minecraft/TLibs/blob/5da8e77d0e0696bbff7d7064a2644072da9c6428/DEPENDENCIES.md)
-for public release installation, offline builds and rollback.
-Other declared build dependencies still need their usual preparation.
+[Project documentation](https://github.com/TF-Minecraft/Docs/blob/main/projects/ActivityTF/README.md)
 
-Builds and server runtime require Java 25. Local builds default to [TLibs 1.1.0](https://github.com/TF-Minecraft/TLibs/releases/tag/v1.1.0); CI resolves the latest published stable TLibs release for each build, verifies its checksum, and uses its exact version throughout that job.
-
-Other compile-time plugin APIs are fetched from a pinned private ServerAssets commit:
-`GH_TOKEN` needs Contents read access to `TF-Minecraft/ServerAssets`; run
-`bash .github/scripts/prepare-release.sh` before Maven. The script verifies
-`.github/dependencies.sha256` for the remaining third-party inputs. Shared TFMC
-plugin APIs, including MusicalInstruments 2.5 and AdvancedCrafting 1.2.2, resolve
-separately through the public release installer described below.
-
-## Shared plugin dependencies
-
-Build and release workflows install checksum-verified plugin releases through
-[TLibs' shared installer](https://github.com/TF-Minecraft/TLibs/blob/main/DEPENDENCIES.md).
-CI selects the latest published versions; local builds use the explicit Maven
-version properties. Shared plugins use `provided` scope and remain separate
-server plugins. Each build records exact versions and checksums in
-`.build/plugin-dependencies.json` alongside its JAR.
-
-From this checkout, with the TLibs repository next to it:
-
-```sh
-python3 ../tlibs/tools/install-plugins.py --pom pom.xml
-```
-
-Prepare any remaining third-party inputs with `.github/scripts/prepare-release.sh`
-before running Maven. All shared plugin APIs now use public releases; the remaining
-third-party inputs still require private access. See the installer documentation
-for exact-version rebuilds and legacy rollback.
+Technical documentation is maintained in [TF-Minecraft/Docs](https://github.com/TF-Minecraft/Docs).
