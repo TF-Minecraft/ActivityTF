@@ -117,9 +117,9 @@
         <dependency>
             <groupId>local</groupId>
             <artifactId>vehicleframework</artifactId>
-            <version>1.1.11</version>
+            <version>1.1.12</version>
             <scope>system</scope>
-            <systemPath>${project.basedir}/libs/vehicleframework-1.1.11.jar</systemPath>
+            <systemPath>${project.basedir}/libs/vehicleframework-1.1.12.jar</systemPath>
         </dependency>
 
         <!-- TLibs: shared by every tfminecraft plugin below, needed on the
@@ -167,9 +167,9 @@
         <dependency>
             <groupId>local</groupId>
             <artifactId>advancedcrafting</artifactId>
-            <version>1.1.7</version>
+            <version>1.2.1</version>
             <scope>system</scope>
-            <systemPath>${project.basedir}/libs/advancedcrafting-1.1.7.jar</systemPath>
+            <systemPath>${project.basedir}/libs/advancedcrafting-1.2.1.jar</systemPath>
         </dependency>
 
         <!-- Archaeo: jar-only release, compiled against for FindRecoveredEvent -->
@@ -190,22 +190,22 @@
             <systemPath>${project.basedir}/libs/marketblock-0.0.2.jar</systemPath>
         </dependency>
 
-        <!-- Games: API-only stub jar, the full plugin cannot be built here -->
+        <!-- Games: compile-time API from the verified full plugin JAR -->
         <dependency>
             <groupId>local</groupId>
             <artifactId>games</artifactId>
             <version>0.1.1</version>
             <scope>system</scope>
-            <systemPath>${project.basedir}/libs/games-0.1.1-api.jar</systemPath>
+            <systemPath>${project.basedir}/libs/games-0.1.1.jar</systemPath>
         </dependency>
 
-        <!-- Cooking: API-only stub jar, the full plugin cannot be built here -->
+        <!-- Cooking: compile-time API from the verified full plugin JAR -->
         <dependency>
             <groupId>local</groupId>
             <artifactId>cooking</artifactId>
             <version>0.1.5-ALPHA</version>
             <scope>system</scope>
-            <systemPath>${project.basedir}/libs/cooking-0.1.5-ALPHA-api.jar</systemPath>
+            <systemPath>${project.basedir}/libs/cooking-0.1.5-ALPHA.jar</systemPath>
         </dependency>
 
         <!-- Tests -->
