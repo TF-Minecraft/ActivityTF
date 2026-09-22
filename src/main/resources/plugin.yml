@@ -1,4 +1,4 @@
-main: tfmc.justin.activity.ActivityPlugin
+main: net.tfminecraft.activitytf.ActivityPlugin
 version: ${project.version}
 name: activity
 author: Justin
