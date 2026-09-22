@@ -5,79 +5,56 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-  workflow_dispatch:
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name != 'pull_request' }}
 
 permissions:
   contents: read
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
-
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '25'
-          cache: maven
-
       - name: Install pinned TLibs in Maven
         uses: TF-Minecraft/TLibs/.github/actions/setup@905a196217471252b96be5ecf8eeb16c9e85e41d
         with:
           token: ${{ secrets.DEPS_TOKEN }}
 
-      - name: Fetch and verify private dependencies
+      - name: Prepare pinned dependencies
         env:
           GH_TOKEN: ${{ secrets.DEPS_TOKEN }}
         run: bash .github/scripts/prepare-release.sh
-
-      - name: Build
-        run: mvn -B --no-transfer-progress clean package
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: activity-jar-${{ github.sha }}
-          path: target/*.jar
-          if-no-files-found: error
-          retention-days: 90
-
-  publish:
-    needs: build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: write
-    concurrency:
-      group: publish-latest-release
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: activity-jar-${{ github.sha }}
-          path: target
-
-      # --clobber only replaces an asset with the same filename; a pom.xml
-      # version bump changes the jar name, so old jars won't be pruned
-      # automatically and must be removed from the release manually.
-      - name: Publish latest release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set dated development version
+        id: dev
+        shell: bash
         run: |
-          if gh release view latest >/dev/null 2>&1; then
-            gh release upload latest target/*.jar --clobber
-          else
-            gh release create latest target/*.jar \
-              --title "Latest build" --notes "Auto-published from main" --latest=false
-          fi
+          dev_version="DEV-$(date -u +%Y%m%d-%H%M)"
+          mvn -B --no-transfer-progress org.codehaus.mojo:versions-maven-plugin:2.22.0:set \
+            -DnewVersion="$dev_version" -DgenerateBackupPoms=false
+          mvn -B --no-transfer-progress help:evaluate \
+            -Dexpression=project.build.finalName -Doutput="$RUNNER_TEMP/final-name"
+          final_name=$(cat "$RUNNER_TEMP/final-name")
+          echo "name=$final_name" >> "$GITHUB_OUTPUT"
+          echo "jar=target/$final_name.jar" >> "$GITHUB_OUTPUT"
+
+      - name: Run unit tests and build
+        run: mvn -B --no-transfer-progress clean verify -DskipTests=false -Dmaven.test.skip=false
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.dev.outputs.name }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.dev.outputs.jar }}
+          if-no-files-found: error
+
+      - name: Upload unit test reports
+        if: ${{ !cancelled() && hashFiles('target/surefire-reports/*.xml') != '' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: unit-test-reports-${{ github.run_id }}-${{ github.run_attempt }}
+          path: target/surefire-reports/
+          if-no-files-found: error

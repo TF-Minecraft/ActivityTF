@@ -1,8 +1,10 @@
-﻿target/
+target/
 *.jar
 libs/*
-!libs/SHA256SUMS
 .idea/
 *.iml
 .claude/
 CLAUDE.md
+
+# Downloaded build dependencies
+/libs/*.jar
