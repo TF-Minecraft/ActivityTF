@@ -135,14 +135,14 @@ class Tier1HooksTest {
     }
 
     @Test
-    void everySha256sumsJarHasMatchingWorkflowPatternAndViceVersa() throws IOException {
-        Path sumsFile = Path.of("libs/SHA256SUMS");
-        assertTrue(Files.exists(sumsFile), "libs/SHA256SUMS should exist");
-        Path workflowFile = Path.of(".github/workflows/build.yml");
-        assertTrue(Files.exists(workflowFile), "build.yml should exist");
+    void everyChecksumJarHasMatchingDownloadAndViceVersa() throws IOException {
+        Path sumsFile = Path.of(".github/dependencies.sha256");
+        assertTrue(Files.exists(sumsFile), ".github/dependencies.sha256 should exist");
+        Path workflowFile = Path.of(".github/scripts/prepare-release.sh");
+        assertTrue(Files.exists(workflowFile), "prepare-release.sh should exist");
 
         Set<String> jarsInSums = new HashSet<>();
-        Pattern sumsLine = Pattern.compile("\\*(?:libs/)?(\\S+\\.jar)\\s*$");
+        Pattern sumsLine = Pattern.compile("^[0-9a-f]{64}  libs/(\\S+\\.jar)$");
         for (String line : Files.readAllLines(sumsFile)) {
             if (line.isBlank()) continue;
             Matcher m = sumsLine.matcher(line.trim());
@@ -152,26 +152,26 @@ class Tier1HooksTest {
         assertFalse(jarsInSums.isEmpty(), "SHA256SUMS should list at least one jar");
 
         Set<String> jarsInWorkflow = new HashSet<>();
-        Pattern patternLine = Pattern.compile("--pattern\\s+'([^']+\\.jar)'");
+        Pattern patternLine = Pattern.compile("> \"libs/([^\"]+\\.jar)\"");
         String workflowSource = Files.readString(workflowFile);
         Matcher m = patternLine.matcher(workflowSource);
         while (m.find()) {
             jarsInWorkflow.add(m.group(1));
         }
-        assertFalse(jarsInWorkflow.isEmpty(), "build.yml should download at least one jar pattern");
+        assertFalse(jarsInWorkflow.isEmpty(), "prepare-release.sh should download at least one jar");
 
         assertEquals(jarsInSums, jarsInWorkflow,
-                "SHA256SUMS jars and build.yml --pattern jars should match exactly");
+                "Checksum entries and downloaded jars should match exactly");
     }
 
     @Test
     void everyPomSystemPathJarIsListedInSha256sums() throws IOException {
         Path pomFile = Path.of("pom.xml");
         assertTrue(Files.exists(pomFile), "pom.xml should exist");
-        Path sumsFile = Path.of("libs/SHA256SUMS");
+        Path sumsFile = Path.of(".github/dependencies.sha256");
 
         Set<String> jarsInSums = new HashSet<>();
-        Pattern sumsLine = Pattern.compile("\\*(?:libs/)?(\\S+\\.jar)\\s*$");
+        Pattern sumsLine = Pattern.compile("^[0-9a-f]{64}  libs/(\\S+\\.jar)$");
         for (String line : Files.readAllLines(sumsFile)) {
             if (line.isBlank()) continue;
             Matcher m = sumsLine.matcher(line.trim());
@@ -187,8 +187,6 @@ class Tier1HooksTest {
         }
         assertFalse(jarsInPom.isEmpty(), "pom.xml should have at least one systemPath jar");
 
-        for (String jar : jarsInPom) {
-            assertTrue(jarsInSums.contains(jar), "pom.xml systemPath jar '" + jar + "' missing from libs/SHA256SUMS");
-        }
+        assertEquals(jarsInPom, jarsInSums, "Every system dependency must have exactly one pinned checksum");
     }
 }
