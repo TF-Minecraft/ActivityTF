@@ -2,7 +2,7 @@ main: tfmc.justin.activity.ActivityPlugin
 version: ${project.version}
 name: activity
 author: Justin
-api-version: 1.21
+api-version: '1.21.10'
 softdepend: [VotingPlugin, MusicalInstruments, geiger_counter, MMOCore, MMOItems, MythicLib, PlaceholderAPI,
              VFBuilders, RPCharacters, InteractibleFurniture, SimpleFactions, AdvancedCrafting, TLibs, Archaeo,
              MarketBlock, Games, Cooking, ItemsAdder]
