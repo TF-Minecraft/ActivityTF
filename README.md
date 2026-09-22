@@ -29,3 +29,22 @@ Other compile-time plugin APIs are fetched from a pinned private ServerAssets co
 upgrade, including VehicleFramework 1.1.12, AdvancedCrafting 1.2.1 and full
 Cooking/Games JARs for their compile-time APIs. TLibs still downloads separately
 from its public versioned release.
+
+## Shared plugin dependencies
+
+Build and release workflows install checksum-verified plugin releases through
+[TLibs' shared installer](https://github.com/TF-Minecraft/TLibs/blob/main/DEPENDENCIES.md).
+CI selects the latest published versions; local builds use the explicit Maven
+version properties. Shared plugins use `provided` scope and remain separate
+server plugins. Each build records exact versions and checksums in
+`.build/plugin-dependencies.json` alongside its JAR.
+
+From this checkout, with the TLibs repository next to it:
+
+```sh
+python3 ../tlibs/tools/install-plugins.py --pom pom.xml
+```
+
+Prepare any remaining third-party inputs with `.github/scripts/prepare-release.sh`
+before running Maven. Any source-unavailable inputs remain private and checksum-pinned wherever declared; see the installer
+documentation for authentication and reproducible rebuilds.
