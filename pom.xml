@@ -48,7 +48,7 @@
         <dependency>
             <groupId>local</groupId>
             <artifactId>VotingPlugin</artifactId>
-            <version>7.0-tfmc-27e9906f1377</version>
+            <version>7.1.1-tfmc-ca0afd4776bb</version>
             <scope>provided</scope>
         </dependency>
         <!-- MusicalInstruments: provided plugin API, compiled against for InstrumentPlayEvent -->
@@ -81,7 +81,7 @@
         <dependency>
             <groupId>local</groupId>
             <artifactId>MMOCore</artifactId>
-            <version>1.13.1-tfmc-14850d745437</version>
+            <version>1.13.1-SNAPSHOT-tfmc-81d511d08309</version>
             <scope>provided</scope>
         </dependency>
         <!-- MMOItems: jar-only release, compiled against for
@@ -89,7 +89,7 @@
         <dependency>
             <groupId>local</groupId>
             <artifactId>MMOItems</artifactId>
-            <version>6.10.1-tfmc-8ff714bd3f48</version>
+            <version>6.10.1-SNAPSHOT-tfmc-a37f7789fcdc</version>
             <scope>provided</scope>
         </dependency>
         <!-- MythicLib: MMOCore's own hard dependency. Not used directly, but
@@ -98,7 +98,7 @@
         <dependency>
             <groupId>local</groupId>
             <artifactId>MythicLib</artifactId>
-            <version>1.7.1-tfmc-a3f86a50d382</version>
+            <version>1.7.1-SNAPSHOT-tfmc-225aa7f75d4e</version>
             <scope>provided</scope>
         </dependency>
         <!-- VFBuilders: provided plugin API, compiled against for VehicleConstructEvent -->
