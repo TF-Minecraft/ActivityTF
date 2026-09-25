@@ -10,7 +10,9 @@ import java.util.ArrayDeque;
 import java.util.Collection;
 import java.util.Deque;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
@@ -24,6 +26,11 @@ public class CharacterChatListener implements Listener {
 
     private static final Pattern COLOUR = Pattern.compile("[&§](#[0-9a-fA-F]{6}|[0-9a-fk-orxA-FK-ORX])");
 
+    // CharacterChatEvent also carries OOC and staff chat. Use RPCharacters channel IDs,
+    // not command aliases, and leave unknown channels out of roleplay activity credit.
+    private static final Set<String> ROLEPLAY_CHANNELS = Set.of(
+            "rp", "whisper", "shout", "yell", "action", "scene", "dm");
+
     private final ActivityManager manager;
     private final Map<UUID, Deque<String>> history = new HashMap<>();
 
@@ -34,6 +41,10 @@ public class CharacterChatListener implements Listener {
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onCharacterChat(CharacterChatEvent event) {
         if (event.getSender() == null || event.getMessage() == null) {
+            return;
+        }
+        String channel = event.getChannel();
+        if (channel == null || !ROLEPLAY_CHANNELS.contains(channel.toLowerCase(Locale.ROOT))) {
             return;
         }
 
