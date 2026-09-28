@@ -355,7 +355,8 @@ public class ActivityManager {
             return 0;
         }
 
-        Payout payout = payMilestones(due, drops, config.rewardMultiplier(), pools, ActivityManager::draw,
+        Payout payout = payMilestones(due, drops, config.rewardMultiplier(), config.multiplierPools(),
+            pools, ActivityManager::draw,
             (milestone, drawn, itemMultiplier) -> {
                 if (!dispatchRewards(player, drawn, "milestone " + milestone, itemMultiplier)) {
                     return false;
@@ -402,13 +403,14 @@ public class ActivityManager {
     }
 
     static Payout payMilestones(List<Integer> due, Map<Integer, RewardEntry> drops, int multiplier,
+                                Set<String> multiplierPools,
                                 Function<String, List<RewardEntry>> pools,
                                 Function<List<RewardEntry>, RewardEntry> draw,
                                 SpinPayer pay, String who, Logger logger) {
         int paid = 0;
         for (int milestone : due) {
             int itemMultiplier = poolOf(drops.get(milestone)) == null ? multiplier : 1;
-            List<RewardEntry> spins = rewardFor(milestone, drops, multiplier, pools, draw);
+            List<RewardEntry> spins = rewardFor(milestone, drops, multiplier, multiplierPools, pools, draw);
             int spun = 0;
             for (RewardEntry drawn : spins) {
                 if (drawn != null && pay.pay(milestone, drawn, itemMultiplier)) {
@@ -450,6 +452,7 @@ public class ActivityManager {
     }
 
     static List<RewardEntry> rewardFor(int milestone, Map<Integer, RewardEntry> drops, int multiplier,
+                                Set<String> multiplierPools,
                                        Function<String, List<RewardEntry>> pools,
                                        Function<List<RewardEntry>, RewardEntry> draw) {
         RewardEntry fixed = drops.get(milestone);
@@ -459,7 +462,8 @@ public class ActivityManager {
         }
         List<RewardEntry> entries = pools.apply(pool);
         List<RewardEntry> spins = new ArrayList<>();
-        for (int spin = 0; spin < multiplier; spin++) {
+        int spinCount = multiplierPools.contains(pool) ? multiplier : 1;
+        for (int spin = 0; spin < spinCount; spin++) {
             spins.add(draw.apply(entries));
         }
         return spins;

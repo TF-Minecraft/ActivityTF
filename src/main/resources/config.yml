@@ -449,8 +449,8 @@ activities:
 
 # The reward pool. Clicking the weekly bar in /activity claims every
 # milestone reached and not yet claimed (see bar.milestones), drawing one
-# entry from this pool at random per spin (rewards.multiplier spins per
-# milestone), handing over that entry's items and running its commands.
+# entry from this pool at random per spin (extra spins only for pools in
+# rewards.multiplier-pools), handing over the entry's items and commands.
 #   weight   - how likely the entry is, relative to the others. Optional,
 #              defaults to 1; an entry with weight 0 or less is dropped with a
 #              warning and can never be drawn.
@@ -468,8 +468,8 @@ activities:
 # Bedrock/Floodgate or other unsafe names, write reward commands using only
 # %uuid% (e.g. via a plugin that can look a player up by UUID).
 rewards:
-  # How many spins each pool milestone gets: at 2, claiming it draws from the
-  # pool twice, independently - the same entry can come up both times - and
+  # Spins per whitelisted pool milestone: at 2, it draws from the pool
+  # twice, independently - the same entry can come up both times - and
   # pays each draw's items and commands at the amounts written, with one chat
   # line per draw. A fixed drop has nothing to spin and hands over its amount
   # times this instead. Read at payout, so a reload changes what the next
@@ -477,11 +477,17 @@ rewards:
   # reads as 1 rather than as "pay nothing". A total above one stack is
   # handed over as whole stacks of the item's own maximum size.
   multiplier: 1
+  # Only these weekly reward pools get extra spins. Names are case-insensitive.
+  # Missing or empty means every pool draws once. Add only material pools,
+  # e.g. [pool_prologue]; leave skin/scroll pools out. Include 'pool' explicitly
+  # to multiply the default pool. Daily pool rewards still draw once; fixed
+  # item rewards keep their existing amount multiplier.
+  multiplier-pools: []
   # What each milestone pays. N counts the bar.milestones that survive
   # loading - sorted, deduped, out-of-range values dropped - so drop_1 is the
   # lowest of those, drop_2 the next, and so on. Adding or removing a
   # milestone renumbers every drop_N above it. 'pool' spins the pool (once per
-  # multiplier) below; anything else is a fixed item, written as a block:
+  # multiplier when whitelisted); anything else is a fixed item block:
   # 'item:' (required, the same four forms as a pool item) and 'amount:'
   # (optional, 1-64, default 1). The one-line form '<item path> [amount 1-64]'
   # (e.g. "m.material.steel 3") still works too. A fixed item is multiplied,
