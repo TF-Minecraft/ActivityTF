@@ -21,11 +21,13 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.Predicate;
 
@@ -62,6 +64,8 @@ public class ActivityConfiguration {
     private volatile Map<String, List<RewardEntry>> rewardPools = Map.of();
 
     private volatile int rewardMultiplier = 1;
+
+    private volatile Set<String> multiplierPools = Set.of();
 
     private volatile Map<Integer, RewardEntry> milestoneDrops = Map.of();
 
@@ -143,6 +147,7 @@ public class ActivityConfiguration {
 
         rewardPools = loadRewardPools(config);
         rewardMultiplier = rewardMultiplier(config);
+        multiplierPools = loadMultiplierPools(config);
 
         barMax = Math.max(1, config.getInt("bar.max", 50));
         dailyMax = Math.max(1, config.getInt("bar.daily-max", 10));
@@ -700,6 +705,31 @@ public class ActivityConfiguration {
             return (int) clamped;
         }
         return (int) amount;
+    }
+
+    Set<String> loadMultiplierPools(ConfigurationSection config) {
+        String path = "rewards.multiplier-pools";
+        Object raw = config.get(path);
+        if (raw == null) {
+            return Set.of();
+        }
+        if (!(raw instanceof List<?> entries)) {
+            plugin.getLogger().warning(path + " must be a list of pool names - no pools are multiplied.");
+            return Set.of();
+        }
+        Set<String> names = new HashSet<>();
+        for (Object entry : entries) {
+            if (!(entry instanceof String name) || !isPoolName(name)) {
+                plugin.getLogger().warning(path + " contains an invalid pool name - ignored.");
+                continue;
+            }
+            names.add(poolName(name));
+        }
+        return Set.copyOf(names);
+    }
+
+    public Set<String> multiplierPools() {
+        return multiplierPools;
     }
 
     private int rewardMultiplier(ConfigurationSection config) {

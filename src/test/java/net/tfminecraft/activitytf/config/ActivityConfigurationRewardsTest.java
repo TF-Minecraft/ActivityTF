@@ -16,6 +16,7 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
@@ -933,6 +934,25 @@ class ActivityConfigurationRewardsTest {
         assertTrue(loggedContains("pool_prologue"));
         assertTrue(loggedContains("pool_end"));
         assertFalse(ActivityConfiguration.poolNeededButEmpty(List.of(), drops, List.of(10, 20)));
+    }
+
+    @Test
+    void multiplierWhitelistNormalizesNamesAndIgnoresInvalidEntries() {
+        ActivityConfiguration config = new ActivityConfiguration(stubPlugin());
+        assertEquals(Set.of("pool", "pool_prologue"), config.loadMultiplierPools(yaml(
+            "rewards:\n  multiplier-pools: [POOL, ' Pool_Prologue ', pool_prologue, '*', 12, null]\n")));
+        assertTrue(loggedContains("invalid pool name"));
+    }
+
+    @Test
+    void absentEmptyOrMalformedWhitelistNeverEnablesExtraPoolDraws() {
+        ActivityConfiguration config = new ActivityConfiguration(stubPlugin());
+        assertTrue(config.multiplierPools().isEmpty());
+        for (String value : List.of("", "rewards:\n  multiplier-pools: []\n",
+                "rewards:\n  multiplier-pools: pool_prologue\n")) {
+            assertTrue(config.loadMultiplierPools(yaml(value)).isEmpty());
+        }
+        assertTrue(loggedContains("must be a list"));
     }
 
 }

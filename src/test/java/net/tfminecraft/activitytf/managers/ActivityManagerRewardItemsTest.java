@@ -15,6 +15,7 @@ import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Set;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
@@ -530,7 +531,7 @@ class ActivityManagerRewardItemsTest {
 
     @Test
     void aFixedDropIsPaidWithoutDrawingFromThePool() {
-        List<RewardEntry> spins = ActivityManager.rewardFor(10, Map.of(10, DIAMONDS), 1, pools(POOLED), NO_DRAW);
+        List<RewardEntry> spins = ActivityManager.rewardFor(10, Map.of(10, DIAMONDS), 1, Set.of("pool"), pools(POOLED), NO_DRAW);
 
         assertEquals(1, spins.size());
         RewardEntry paid = spins.get(0);
@@ -541,7 +542,7 @@ class ActivityManagerRewardItemsTest {
     @Test
     void aPoolMilestoneStillDrawsFromThePool() {
         List<List<RewardEntry>> drawnFrom = new ArrayList<>();
-        List<RewardEntry> drawn = ActivityManager.rewardFor(20, Map.of(10, DIAMONDS), 1, pools(POOLED), pool -> {
+        List<RewardEntry> drawn = ActivityManager.rewardFor(20, Map.of(10, DIAMONDS), 1, Set.of("pool"), pools(POOLED), pool -> {
             drawnFrom.add(pool);
             return pool.get(0);
         });
@@ -553,14 +554,14 @@ class ActivityManagerRewardItemsTest {
     @Test
     void aFixedDropsChatLineCarriesTheMultipliedAmount() {
         assertEquals("#50d990x3 #b8906eDiamond",
-            ActivityManager.rewardFor(10, Map.of(10, DIAMONDS), 1, pools(), NO_DRAW).get(0).display());
+            ActivityManager.rewardFor(10, Map.of(10, DIAMONDS), 1, Set.of("pool"), pools(), NO_DRAW).get(0).display());
         assertEquals("#50d990x6 #b8906eDiamond",
-            ActivityManager.rewardFor(10, Map.of(10, DIAMONDS), 2, pools(), NO_DRAW).get(0).display());
+            ActivityManager.rewardFor(10, Map.of(10, DIAMONDS), 2, Set.of("pool"), pools(), NO_DRAW).get(0).display());
     }
 
     @Test
     void aFixedDropIsOnePayoutAtAnyMultiplier() {
-        List<RewardEntry> spins = ActivityManager.rewardFor(10, Map.of(10, DIAMONDS), 3, pools(POOLED), NO_DRAW);
+        List<RewardEntry> spins = ActivityManager.rewardFor(10, Map.of(10, DIAMONDS), 3, Set.of("pool"), pools(POOLED), NO_DRAW);
 
         assertEquals(1, spins.size());
         assertEquals(DIAMONDS.items(), spins.get(0).items());
@@ -576,7 +577,7 @@ class ActivityManagerRewardItemsTest {
         List<RewardEntry> rolls = new ArrayList<>(List.of(STEEL_PICK, POOLED, STEEL_PICK));
         List<List<RewardEntry>> drawnFrom = new ArrayList<>();
 
-        List<RewardEntry> spins = ActivityManager.rewardFor(20, Map.of(10, DIAMONDS), 3, name -> pool, p -> {
+        List<RewardEntry> spins = ActivityManager.rewardFor(20, Map.of(10, DIAMONDS), 3, Set.of("pool"), name -> pool, p -> {
             drawnFrom.add(p);
             return rolls.remove(0);
         });
@@ -588,7 +589,7 @@ class ActivityManagerRewardItemsTest {
     @Test
     void aMultiplierOfOneSpinsThePoolOnce() {
         int[] draws = {0};
-        List<RewardEntry> spins = ActivityManager.rewardFor(20, Map.of(), 1, pools(POOLED, STEEL_PICK), p -> {
+        List<RewardEntry> spins = ActivityManager.rewardFor(20, Map.of(), 1, Set.of("pool"), pools(POOLED, STEEL_PICK), p -> {
             draws[0]++;
             return p.get(1);
         });
@@ -599,7 +600,7 @@ class ActivityManagerRewardItemsTest {
 
     @Test
     void spinsCanRepeatAnEntryAtItsOwnAmount() {
-        List<RewardEntry> spins = ActivityManager.rewardFor(20, Map.of(), 2, pools(DIAMONDS, POOLED),
+        List<RewardEntry> spins = ActivityManager.rewardFor(20, Map.of(), 2, Set.of("pool"), pools(DIAMONDS, POOLED),
             p -> p.get(0));
 
         assertEquals(List.of(DIAMONDS, DIAMONDS), spins);
@@ -629,7 +630,7 @@ class ActivityManagerRewardItemsTest {
     private ActivityManager.Payout payMilestones(List<Integer> due, Map<Integer, RewardEntry> drops,
                                                  int multiplier, List<PaidSpin> calls, boolean... answers) {
         int[] next = {0};
-        return ActivityManager.payMilestones(due, drops, multiplier, pools(POOLED), FIRST,
+        return ActivityManager.payMilestones(due, drops, multiplier, Set.of("pool"), pools(POOLED), FIRST,
             (milestone, entry, m) -> {
                 calls.add(new PaidSpin(milestone, entry, m));
                 return next[0] < answers.length ? answers[next[0]++] : true;
@@ -724,14 +725,46 @@ class ActivityManagerRewardItemsTest {
             "pool_end", List.of(POOLED));
         List<PaidSpin> calls = new ArrayList<>();
         assertEquals(new ActivityManager.Payout(2, false), ActivityManager.payMilestones(
-            List.of(10, 20), drops, 2, name -> pools.getOrDefault(name, List.of()), FIRST,
+            List.of(10, 20), drops, 2, Set.of("pool_prologue", "pool_end"), name -> pools.getOrDefault(name, List.of()), FIRST,
             (milestone, reward, multiplier) -> { calls.add(new PaidSpin(milestone, reward, multiplier)); return true; },
             "test", logger()));
         assertEquals(List.of(new PaidSpin(10, DIAMONDS, 1), new PaidSpin(10, DIAMONDS, 1),
             new PaidSpin(20, POOLED, 1), new PaidSpin(20, POOLED, 1)), calls);
         assertEquals(new ActivityManager.Payout(0, true), ActivityManager.payMilestones(
-            List.of(10), drops, 1, name -> List.of(), pool -> RewardEntry.pick(pool, 0),
+            List.of(10), drops, 1, Set.of(), name -> List.of(), pool -> RewardEntry.pick(pool, 0),
             (milestone, reward, multiplier) -> { throw new AssertionError("Missing pool paid"); }, "test", logger()));
+    }
+
+    @Test
+    void onlyWhitelistedMaterialPoolsGetExtraSpinsWhileScrollsPayOnce() {
+        Map<Integer, RewardEntry> drops = Map.of(
+            10, net.tfminecraft.activitytf.config.ActivityConfiguration.poolRef("pool_prologue"),
+            20, net.tfminecraft.activitytf.config.ActivityConfiguration.poolRef("pool_prologue"),
+            40, net.tfminecraft.activitytf.config.ActivityConfiguration.poolRef("pool_skin"));
+        RewardEntry scroll = new RewardEntry(1, "Skin scroll", List.of("say scroll"),
+            List.of(new RewardEntry.Item("m.loot.common_item_skin_scroll", 1)));
+        List<PaidSpin> calls = new ArrayList<>();
+        assertEquals(new ActivityManager.Payout(3, false), ActivityManager.payMilestones(
+            List.of(10, 20, 40), drops, 2, Set.of("pool_prologue"),
+            name -> List.of(name.equals("pool_prologue") ? DIAMONDS : scroll), FIRST,
+            (milestone, reward, multiplier) -> {
+                calls.add(new PaidSpin(milestone, reward, multiplier));
+                return true;
+            }, "test", logger()));
+        assertEquals(List.of(new PaidSpin(10, DIAMONDS, 1), new PaidSpin(10, DIAMONDS, 1),
+            new PaidSpin(20, DIAMONDS, 1), new PaidSpin(20, DIAMONDS, 1),
+            new PaidSpin(40, scroll, 1)), calls);
+    }
+
+    @Test
+    void unlistedDefaultAndNamedPoolsDrawOnceEvenAtMaximumMultiplier() {
+        for (String name : List.of("pool", "pool_skin", "pool_ascended_skin", "pool_gilded_skin")) {
+            var drop = net.tfminecraft.activitytf.config.ActivityConfiguration.poolRef(name);
+            assertEquals(List.of(POOLED), ActivityManager.rewardFor(10, Map.of(10, drop),
+                64, Set.of(), pools(POOLED), FIRST));
+        }
+        assertEquals(List.of(POOLED), ActivityManager.rewardFor(10, Map.of(),
+            64, Set.of("pool_prologue"), pools(POOLED), FIRST));
     }
 
 }
