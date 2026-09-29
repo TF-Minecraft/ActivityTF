@@ -90,6 +90,22 @@ class ActivityConfigurationStationTest {
     }
 
     @Test
+    void invalidBulkAmountsDoNotCreditActions() {
+        ActivityConfiguration config = configFor(
+            "  coal:\n    points: 1\n    station: ingot-station/coal\n    station-actions:\n"
+                + "      ingot-station/fractional: 16.9\n"
+                + "      ingot-station/zero: 0\n"
+                + "      ingot-station/overflow: 2147483648\n"
+                + "      ingot-station/text: sixteen\n");
+
+        assertEquals(Optional.of(new ActivityConfiguration.StationActionCredit("coal", 1)),
+            config.stationAction("ingot-station", "coal"));
+        for (String recipe : java.util.List.of("fractional", "zero", "overflow", "text")) {
+            assertEquals(Optional.empty(), config.stationAction("ingot-station", recipe));
+        }
+    }
+
+    @Test
     void specificRecipeBeatsWholeStation() {
         ActivityConfiguration config = configFor(
             entry("smelt_anything", "forge") + entry("smelt_flint", "forge/flint"));

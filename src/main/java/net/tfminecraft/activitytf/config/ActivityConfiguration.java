@@ -392,13 +392,17 @@ public class ActivityConfiguration {
         }
         for (String recipe : alternatives.getKeys(false)) {
             String key = stationKey(recipe);
-            int amount = alternatives.getInt(recipe, 0);
+            Object raw = alternatives.get(recipe);
+            double value = raw instanceof Number number ? number.doubleValue() : Double.NaN;
             if (key.isEmpty() || key.startsWith("/") || key.endsWith("/") || !key.contains("/")
-                    || key.equals(stationKey) || amount <= 0) {
+                    || key.equals(stationKey) || !Double.isFinite(value) || value < 1
+                    || value > Integer.MAX_VALUE || Math.rint(value) != value) {
                 plugin.getLogger().warning("Activity '" + id + "' has invalid station-actions entry '"
-                    + Utils.safeForLog(recipe) + "' - expected a different <station>/<recipe> with a positive amount.");
+                    + Utils.safeForLog(recipe) + "' - expected a different <station>/<recipe>"
+                    + " with a positive whole-number amount within the int range.");
                 continue;
             }
+            int amount = (int) value;
             String displaced = stations.put(key, id);
             if (displaced != null) {
                 plugin.getLogger().warning("Activities '" + displaced + "' and '" + id
