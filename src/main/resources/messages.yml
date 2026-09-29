@@ -14,8 +14,9 @@ reroll-locked: "&7Rerolling daily tasks is an #823FFF&l[#8939EE&lA#9033DD&ls#972
 gui:
   bar-name: "#e6ca40&lWeekly Activity&e: #50d990%points%&7/&f%max%"
   daily-bar-name: "#e6ca40&lDaily Activity&e: #50d990%points%&7/&f%max%"
-  bar-lore-next: "#d97b66Next reward at&e: &6%points% #b8906epoints"
-  bar-lore-done: "&8All rewards claimed this week"
+  bar-lore-reward: "#d97b66Next reward&e: %reward% #b8906eat &6%points% #b8906epoints"
+  bar-lore-next-options: "#d97b66Next reward at&e: &6%points% #b8906epoints"
+  bar-lore-none: "&7No more rewards this week"
   reward-click: "#6b9c68[#fafa16Click to claim %count% reward(s)#6b9c68]"
   activity-lore-progress: "#af97bdProgress&e: %bar%"
   activity-lore-today: "#d97b66Today&e: &6%today%"

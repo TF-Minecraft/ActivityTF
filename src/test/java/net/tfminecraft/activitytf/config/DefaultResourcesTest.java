@@ -48,7 +48,13 @@ class DefaultResourcesTest {
         assertTrue(messages.getString("gui.activity-lore-today-capped").contains("%today%"));
         assertTrue(messages.getString("gui.activity-lore-today-capped").contains("%cap%"));
         assertNull(messages.getString("gui.bar-lore-milestones"));
-        assertTrue(messages.getString("gui.bar-lore-next").contains("%points%"));
+        assertNull(messages.getString("gui.bar-lore-next"));
+        assertNull(messages.getString("gui.bar-lore-done"));
+        assertTrue(messages.getString("gui.bar-lore-reward").contains("%points%"));
+        assertTrue(messages.getString("gui.bar-lore-reward").contains("%reward%"));
+        assertTrue(messages.getString("gui.bar-lore-next-options").contains("%points%"));
+        assertTrue(messages.getString("gui.bar-lore-none").toLowerCase(java.util.Locale.ROOT)
+            .contains("no more rewards this week"));
     }
 
     private static final Pattern HEX_MARKER = Pattern.compile("#[0-9a-fA-F]{6}");

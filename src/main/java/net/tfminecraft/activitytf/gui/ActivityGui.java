@@ -22,12 +22,14 @@ import net.tfminecraft.activitytf.config.Messages;
 import net.tfminecraft.activitytf.managers.ActivityManager;
 import net.tfminecraft.activitytf.models.ActivityDef;
 import net.tfminecraft.activitytf.models.PlayerData;
+import net.tfminecraft.activitytf.models.RewardEntry;
 import net.tfminecraft.activitytf.utils.Bar;
 import net.tfminecraft.activitytf.utils.ItemPath;
 import net.tfminecraft.activitytf.utils.Utils;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Function;
 
 public class ActivityGui implements Listener {
@@ -117,23 +119,65 @@ public class ActivityGui implements Listener {
     private ItemStack barItem(ActivityConfiguration config, Messages messages, PlayerData data) {
         List<Integer> milestones = config.milestones();
         String bar = Bar.render(data.points(), config.barMax(), config.barLength(), milestones);
-        int due = data.claimable(milestones);
-        Integer next = nextMilestone(data, milestones);
 
         List<String> lore = new ArrayList<>();
         lore.add(Utils.colorize(bar));
         lore.add(" ");
-        if (due > 0) {
-            lore.add(messages.get("gui.reward-click", "%count%", due));
-        } else if (next != null) {
-            lore.add(messages.get("gui.bar-lore-next", "%points%", next));
-        } else {
-            lore.add(messages.get("gui.bar-lore-done"));
-        }
+        lore.addAll(weeklyRewardLore(messages, data, milestones, config.milestoneDrops(),
+            config.rewardMultiplier(), config::rewardPool));
 
         return item(Material.EXPERIENCE_BOTTLE,
             messages.get("gui.bar-name", "%points%", data.points(), "%max%", config.barMax()),
             lore);
+    }
+
+    static List<String> weeklyRewardLore(Messages messages, PlayerData data, List<Integer> milestones,
+                                          Map<Integer, RewardEntry> drops, int multiplier,
+                                          Function<String, List<RewardEntry>> pools) {
+        List<String> lore = new ArrayList<>();
+        int due = data.claimable(milestones);
+        Integer next = nextMilestone(data, milestones);
+        if (next == null) {
+            lore.add(messages.get("gui.bar-lore-none"));
+            return lore;
+        }
+
+        List<String> rewards = nextRewardDisplays(next, drops, multiplier, pools);
+        if (rewards.size() == 1) {
+            lore.add(messages.get("gui.bar-lore-reward", "%points%", next, "%reward%",
+                Utils.colorize(rewards.get(0))));
+        } else {
+            lore.add(messages.get("gui.bar-lore-next-options", "%points%", next));
+            for (String reward : rewards) {
+                lore.add(Utils.colorize(reward));
+            }
+        }
+        if (due > 0) {
+            lore.add(messages.get("gui.reward-click", "%count%", due));
+        }
+        return lore;
+    }
+
+    static List<String> nextRewardDisplays(int milestone, Map<Integer, RewardEntry> drops, int multiplier,
+                                            Function<String, List<RewardEntry>> pools) {
+        RewardEntry drop = drops.get(milestone);
+        String pool = drop == null ? ActivityConfiguration.DEFAULT_POOL
+            : ActivityConfiguration.referencedPool(drop);
+        if (pool == null) {
+            RewardEntry.Item item = drop.items().get(0);
+            return List.of("#50d990x" + item.amount() * multiplier + " #b8906e" + drop.display());
+        }
+        List<RewardEntry> entries = pools.apply(pool);
+        if (entries == null || entries.isEmpty()) {
+            return List.of();
+        }
+        List<String> displays = new ArrayList<>();
+        for (RewardEntry entry : entries) {
+            if (entry.display() != null && !entry.display().isBlank()) {
+                displays.add(entry.display());
+            }
+        }
+        return displays;
     }
 
     private static Integer nextMilestone(PlayerData data, List<Integer> milestones) {

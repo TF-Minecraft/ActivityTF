@@ -262,6 +262,65 @@ class ActivityGuiTest {
     }
 
     @Test
+    void theWeeklyIconNamesTheNextReward() {
+        Messages messages = shippedMessages();
+        PlayerData data = new PlayerData(5, 0, "2026-W38", "2026-09-17", 0, java.util.Map.of());
+        RewardEntry steel = new RewardEntry(1, "Steel", List.of(),
+            List.of(new RewardEntry.Item("m.material.steel", 3)));
+
+        List<String> lore = ActivityGui.weeklyRewardLore(messages, data, List.of(10, 20),
+            Map.of(10, steel), 1, pool -> List.of());
+
+        assertEquals(List.of(messages.get("gui.bar-lore-reward", "%points%", 10, "%reward%",
+            Utils.colorize("#50d990x3 #b8906eSteel"))), lore);
+        assertTrue(String.join(" ", lore).contains("Steel"), lore.toString());
+    }
+
+    @Test
+    void theWeeklyIconListsEachDrawInTheNextPool() {
+        Messages messages = shippedMessages();
+        PlayerData data = new PlayerData(12, 0, "2026-W38", "2026-09-17", 10, java.util.Map.of());
+        List<RewardEntry> pool = List.of(
+            new RewardEntry(65, "#50d990x2 #7f7d80Ignitium", List.of(), List.of()),
+            new RewardEntry(3, "#50d990x8 #7f7d80Ignitium", List.of(), List.of()));
+
+        List<String> lore = ActivityGui.weeklyRewardLore(messages, data, List.of(10, 20),
+            Map.of(20, ActivityConfiguration.poolRef("pool_prologue")), 1, name -> pool);
+
+        assertEquals(messages.get("gui.bar-lore-next-options", "%points%", 20), lore.get(0));
+        assertTrue(lore.get(1).contains("x2"), lore.toString());
+        assertTrue(lore.get(2).contains("x8"), lore.toString());
+        assertFalse(lore.get(1).contains("#50d990"), lore.toString());
+    }
+
+    @Test
+    void theWeeklyIconSaysThereAreNoMoreRewardsThisWeek() {
+        Messages messages = shippedMessages();
+        PlayerData data = new PlayerData(40, 0, "2026-W38", "2026-09-17", 40, java.util.Map.of());
+
+        List<String> lore = ActivityGui.weeklyRewardLore(messages, data, List.of(10, 20, 40),
+            Map.of(), 1, pool -> List.of());
+
+        assertEquals(List.of(messages.get("gui.bar-lore-none")), lore);
+        assertTrue(lore.get(0).toLowerCase(java.util.Locale.ROOT).contains("no more rewards this week"),
+            lore.toString());
+    }
+
+    @Test
+    void aReadyRewardStillSaysWhatItIsAndThatItCanBeClaimed() {
+        Messages messages = shippedMessages();
+        PlayerData data = new PlayerData(10, 0, "2026-W38", "2026-09-17", 0, java.util.Map.of());
+        RewardEntry steel = new RewardEntry(1, "Steel", List.of(),
+            List.of(new RewardEntry.Item("DIAMOND", 1)));
+
+        List<String> lore = ActivityGui.weeklyRewardLore(messages, data, List.of(10),
+            Map.of(10, steel), 2, pool -> List.of());
+
+        assertTrue(lore.get(0).contains("x2"), lore.toString());
+        assertEquals(messages.get("gui.reward-click", "%count%", 1), lore.get(1));
+    }
+
+    @Test
     void descriptionLinesAreColorized() {
         List<String> lore = ActivityGui.activityLore(shippedMessages(), described(List.of("#e6ca40&lX")), 0);
 
