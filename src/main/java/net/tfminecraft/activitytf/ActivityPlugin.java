@@ -46,7 +46,15 @@ public class ActivityPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new CraftListener(manager), this);
         getServer().getPluginManager().registerEvents(gui, this);
 
-        registerHooks();
+        // Paper can enable soft dependencies after this plugin when their own dependencies form
+        // a cycle, so re-check them once every plugin has finished enabling.
+        getServer().getScheduler().runTask(this, () -> {
+            if (manager.getConfiguration().itemPluginsChanged()) {
+                getLogger().info("An item plugin finished enabling after activity - reloading the config.");
+                manager.reload();
+            }
+            registerHooks();
+        });
 
         getLogger().info("activity has been enabled!");
     }

@@ -129,12 +129,7 @@ public class ActivityConfiguration {
         FileConfiguration config = plugin.getConfig();
         messages.reload();
 
-        List<String> missing = new ArrayList<>();
-        for (String name : List.of("TLibs", "MMOItems", "MythicLib")) {
-            if (!Bukkit.getPluginManager().isPluginEnabled(name)) {
-                missing.add(name);
-            }
-        }
+        List<String> missing = missingItemPathPlugins();
         itemPathsUsable = missing.isEmpty();
         missingItemPathPlugins = String.join(", ", missing);
         itemsAdderUsable = Bukkit.getPluginManager().isPluginEnabled("ItemsAdder");
@@ -1266,6 +1261,25 @@ public class ActivityConfiguration {
 
     public boolean itemPathsUsable() {
         return itemPathsUsable;
+    }
+
+    private static List<String> missingItemPathPlugins() {
+        List<String> missing = new ArrayList<>();
+        for (String name : List.of("TLibs", "MMOItems", "MythicLib")) {
+            if (!Bukkit.getPluginManager().isPluginEnabled(name)) {
+                missing.add(name);
+            }
+        }
+        return missing;
+    }
+
+    /**
+     * True when an item plugin was enabled or disabled since the last load, e.g. when Paper
+     * breaks a dependency cycle by enabling MMOItems after this plugin.
+     */
+    public boolean itemPluginsChanged() {
+        return itemPathsUsable != missingItemPathPlugins().isEmpty()
+            || itemsAdderUsable != Bukkit.getPluginManager().isPluginEnabled("ItemsAdder");
     }
 
     public boolean itemsAdderUsable() {
