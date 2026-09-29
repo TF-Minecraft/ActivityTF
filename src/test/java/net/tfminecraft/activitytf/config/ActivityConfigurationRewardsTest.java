@@ -17,7 +17,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
@@ -34,13 +33,31 @@ class ActivityConfigurationRewardsTest {
     private static final class TestPlugin extends JavaPlugin {
     }
 
+    private static final ThreadLocal<List<String>> LOGGED = ThreadLocal.withInitial(ArrayList::new);
+
+    private static final class CapturingLogger extends Logger {
+        CapturingLogger() {
+            super("ActivityConfigurationRewardsTest", null);
+            setLevel(Level.ALL);
+        }
+
+        @Override
+        public void log(LogRecord record) {
+            String message = record.getMessage();
+            if (message != null) {
+                LOGGED.get().add(message);
+            }
+            super.log(record);
+        }
+    }
+
     private static JavaPlugin stubPlugin() {
         try {
             JavaPlugin plugin = new ObjenesisStd().newInstance(TestPlugin.class);
 
             Field loggerField = JavaPlugin.class.getDeclaredField("logger");
             loggerField.setAccessible(true);
-            loggerField.set(plugin, Logger.getLogger("ActivityConfigurationRewardsTest"));
+            loggerField.set(plugin, new CapturingLogger());
 
             return plugin;
         } catch (ReflectiveOperationException e) {
@@ -48,37 +65,22 @@ class ActivityConfigurationRewardsTest {
         }
     }
 
-    private final List<String> logged = new ArrayList<>();
-
-    private final Handler capture = new Handler() {
-        @Override
-        public void publish(LogRecord record) {
-            logged.add(record.getMessage());
-        }
-
-        @Override
-        public void flush() {
-        }
-
-        @Override
-        public void close() {
-        }
-    };
-
     @BeforeEach
     void captureLog() {
-        Logger logger = Logger.getLogger("ActivityConfigurationRewardsTest");
-        logger.setLevel(Level.ALL);
-        logger.addHandler(capture);
+        LOGGED.get().clear();
     }
 
     @AfterEach
     void releaseLog() {
-        Logger.getLogger("ActivityConfigurationRewardsTest").removeHandler(capture);
+        LOGGED.remove();
+    }
+
+    private static List<String> logged() {
+        return LOGGED.get();
     }
 
     private boolean loggedContains(String fragment) {
-        return logged.stream().anyMatch(message -> message.contains(fragment));
+        return logged().stream().anyMatch(message -> message != null && message.contains(fragment));
     }
 
     private static FileConfiguration yaml(String content) {
@@ -487,20 +489,20 @@ class ActivityConfigurationRewardsTest {
                 List.of(new RewardEntry.Item("m.material.steel", 3))),
             30, new RewardEntry(1, "Diamond", List.of(),
                 List.of(new RewardEntry.Item("DIAMOND", 1)))), drops);
-        assertTrue(logged.isEmpty());
+        assertTrue(logged().isEmpty());
     }
 
     @Test
     void aMissingDropsSectionMeansEveryMilestoneDrawsFromThePool() {
         assertTrue(loadDrops(List.of(10, 20), "rewards:\n  multiplier: 1\n").isEmpty());
-        assertTrue(logged.isEmpty());
+        assertTrue(logged().isEmpty());
     }
 
     @Test
     void poolIsCaseInsensitive() {
         assertTrue(loadDrops(List.of(10, 20), "rewards:\n  drops:\n    drop_1: POOL\n    drop_2: Pool\n")
             .isEmpty());
-        assertTrue(logged.isEmpty());
+        assertTrue(logged().isEmpty());
     }
 
     @Test
@@ -616,14 +618,14 @@ class ActivityConfigurationRewardsTest {
             groups.get("vip"));
         assertEquals(new RewardEntry(1, "Steel", List.of(),
             List.of(new RewardEntry.Item("m.material.steel", 3))), groups.get("ascended"));
-        assertTrue(logged.isEmpty());
+        assertTrue(logged().isEmpty());
     }
 
     @Test
     void noDailyRewardSectionOrAnEmptyOnePaysNothingQuietly() {
         assertTrue(loadDailyRewards("rewards:\n  multiplier: 1\n").isEmpty());
         assertTrue(loadDailyRewards("daily-reward:\n  groups: {}\n").isEmpty());
-        assertTrue(logged.isEmpty());
+        assertTrue(logged().isEmpty());
     }
 
     @Test
@@ -659,7 +661,7 @@ class ActivityConfigurationRewardsTest {
         assertSame(ActivityConfiguration.DAILY_POOL, groups.get("old"));
         assertEquals(new RewardEntry(1, "Diamond", List.of(), List.of(new RewardEntry.Item("DIAMOND", 2))),
             groups.get("noble"));
-        assertTrue(logged.isEmpty(), logged.toString());
+        assertTrue(logged().isEmpty(), logged().toString());
     }
 
     @Test
@@ -674,7 +676,7 @@ class ActivityConfigurationRewardsTest {
     @Test
     void anEmptyPoolIsNotWarnedAboutWithoutAPoolGroup() {
         loadDailyRewards("daily-reward:\n  groups:\n    vip: DIAMOND\n");
-        assertTrue(logged.isEmpty(), logged.toString());
+        assertTrue(logged().isEmpty(), logged().toString());
     }
 
     @Test
@@ -695,7 +697,7 @@ class ActivityConfigurationRewardsTest {
 
         assertEquals(Map.of(10, new RewardEntry(1, "Steel", List.of(),
             List.of(new RewardEntry.Item("m.material.steel", 3)))), drops);
-        assertTrue(logged.isEmpty());
+        assertTrue(logged().isEmpty());
     }
 
     @Test
@@ -705,7 +707,7 @@ class ActivityConfigurationRewardsTest {
 
         assertEquals(Map.of(10, new RewardEntry(1, "Diamond", List.of(),
             List.of(new RewardEntry.Item("DIAMOND", 1)))), drops);
-        assertTrue(logged.isEmpty());
+        assertTrue(logged().isEmpty());
     }
 
     @Test
@@ -715,7 +717,7 @@ class ActivityConfigurationRewardsTest {
 
         assertEquals(Map.of(10, new RewardEntry(1, "Diamond", List.of(),
             List.of(new RewardEntry.Item("DIAMOND", 3)))), drops);
-        assertTrue(logged.isEmpty());
+        assertTrue(logged().isEmpty());
     }
 
     @Test
@@ -790,7 +792,7 @@ class ActivityConfigurationRewardsTest {
                 List.of(new RewardEntry.Item("m.material.steel", 3))),
             20, new RewardEntry(1, "Diamond", List.of(),
                 List.of(new RewardEntry.Item("DIAMOND", 1)))), drops);
-        assertTrue(logged.isEmpty());
+        assertTrue(logged().isEmpty());
     }
 
     @Test
@@ -800,7 +802,7 @@ class ActivityConfigurationRewardsTest {
 
         assertEquals(Map.of("legacy", new RewardEntry(1, "Rare Item Skin Scroll", List.of(),
             List.of(new RewardEntry.Item("m.loot.rare_item_skin_scroll", 1)))), groups);
-        assertTrue(logged.isEmpty());
+        assertTrue(logged().isEmpty());
     }
 
     @Test
@@ -810,7 +812,7 @@ class ActivityConfigurationRewardsTest {
 
         assertEquals(Map.of("vip", new RewardEntry(1, "Diamond", List.of(),
             List.of(new RewardEntry.Item("DIAMOND", 1)))), groups);
-        assertTrue(logged.isEmpty());
+        assertTrue(logged().isEmpty());
     }
 
     @Test
@@ -820,7 +822,7 @@ class ActivityConfigurationRewardsTest {
 
         assertEquals(Map.of("vip", new RewardEntry(1, "Diamond", List.of(),
             List.of(new RewardEntry.Item("DIAMOND", 3)))), groups);
-        assertTrue(logged.isEmpty());
+        assertTrue(logged().isEmpty());
     }
 
     @Test
@@ -897,7 +899,7 @@ class ActivityConfigurationRewardsTest {
             groups.get("vip"));
         assertEquals(new RewardEntry(1, "Steel", List.of(),
             List.of(new RewardEntry.Item("m.material.steel", 3))), groups.get("ascended"));
-        assertTrue(logged.isEmpty());
+        assertTrue(logged().isEmpty());
     }
     @Test
     void namedPoolsDoNotInheritPackagedRewardsAndReloadReplacesThem() throws Exception {
