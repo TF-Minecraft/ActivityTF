@@ -90,6 +90,9 @@ reset:
 #   however big the output stack is. An
 #   activity with both 'station' and 'craft'/'profession' is a config error:
 #   the extra 'station' is reported at load and ignored.
+#   station-actions: optional recipe aliases for a station activity. Each
+#   <station>/<recipe> key gives the number of actions credited by one craft.
+#   The primary station recipe still gives one action. Use this for bulk recipes.
 # click-commands: optional. Console commands run when the player clicks this
 #   activity's task in /activity AFTER it has already been revealed - the
 #   first click on a hidden task only reveals it, every later click runs
@@ -280,6 +283,8 @@ activities:
     points: 1
     daily-cap: 1
     station: ingot-station/coal
+    station-actions:
+      ingot-station/coal-64: 16
   # Tool station
   tool_iron_pickaxe:
     display: "#e6ca40&lForge Iron Pickaxes"

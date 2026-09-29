@@ -77,6 +77,19 @@ class ActivityConfigurationStationTest {
     }
 
     @Test
+    void bulkCoalRecipeCreditsSixteenActionsWhileSmallRecipeCreditsOne() {
+        ActivityConfiguration config = configFor(
+            "  coal:\n    points: 1\n    every: 16\n    station: ingot-station/coal\n"
+                + "    station-actions:\n      ingot-station/coal-64: 16\n");
+
+        assertEquals(Optional.of(new ActivityConfiguration.StationActionCredit("coal", 1)),
+            config.stationAction("ingot-station", "coal"));
+        assertEquals(Optional.of(new ActivityConfiguration.StationActionCredit("coal", 16)),
+            config.stationAction("ingot-station", "coal-64"));
+        assertEquals(Optional.empty(), config.stationAction("ingot-station", "coke"));
+    }
+
+    @Test
     void specificRecipeBeatsWholeStation() {
         ActivityConfiguration config = configFor(
             entry("smelt_anything", "forge") + entry("smelt_flint", "forge/flint"));

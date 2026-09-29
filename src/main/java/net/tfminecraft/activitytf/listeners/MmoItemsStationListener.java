@@ -36,7 +36,7 @@ public class MmoItemsStationListener implements Listener {
             return;
         }
 
-        manager.getConfiguration().stationActivity(station.getId(), recipe.getId())
-            .ifPresent(activityId -> manager.recordAction(player.getUniqueId(), activityId, 1));
+        manager.getConfiguration().stationAction(station.getId(), recipe.getId())
+            .ifPresent(credit -> manager.recordAction(player.getUniqueId(), credit.activityId(), credit.amount()));
     }
 }
