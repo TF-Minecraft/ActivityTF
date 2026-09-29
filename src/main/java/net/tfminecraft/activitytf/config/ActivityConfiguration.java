@@ -57,6 +57,7 @@ public class ActivityConfiguration {
     private volatile Map<String, String> professionActivities = Map.of();
 
     private volatile Map<String, String> stationActivities = Map.of();
+    private volatile Map<String, Integer> stationActionAmounts = Map.of();
 
     private volatile DayOfWeek resetDay;
     private volatile int resetHour;
@@ -257,6 +258,7 @@ public class ActivityConfiguration {
             craftPaths = List.of();
             professionActivities = Map.of();
             stationActivities = Map.of();
+            stationActionAmounts = Map.of();
             guaranteedActivities = List.of();
             return;
         }
@@ -266,6 +268,7 @@ public class ActivityConfiguration {
         List<Map.Entry<String, String>> paths = new ArrayList<>();
         Map<String, String> professions = new LinkedHashMap<>();
         Map<String, String> stations = new LinkedHashMap<>();
+        Map<String, Integer> stationAmounts = new LinkedHashMap<>();
         List<String> guaranteed = new ArrayList<>();
         for (String id : section.getKeys(false)) {
             ConfigurationSection entry = section.getConfigurationSection(id);
@@ -318,7 +321,7 @@ public class ActivityConfiguration {
                 }
             }
 
-            loadStation(stations, entry, id);
+            loadStation(stations, stationAmounts, entry, id);
 
             if (flag(entry, id, "daily-guaranteed", false)) {
                 guaranteed.add(id);
@@ -337,10 +340,12 @@ public class ActivityConfiguration {
         craftPaths = List.copyOf(paths);
         professionActivities = professions;
         stationActivities = stations;
+        stationActionAmounts = stationAmounts;
         guaranteedActivities = List.copyOf(guaranteed);
     }
 
-    private void loadStation(Map<String, String> stations, ConfigurationSection entry, String id) {
+    private void loadStation(Map<String, String> stations, Map<String, Integer> amounts,
+                             ConfigurationSection entry, String id) {
         String station = entry.getString("station");
         if (station == null) {
             return;
@@ -376,9 +381,34 @@ public class ActivityConfiguration {
         }
 
         String previous = stations.put(stationKey, id);
+        amounts.remove(stationKey);
         if (previous != null) {
             plugin.getLogger().warning("Activities '" + previous + "' and '" + id
                 + "' both track station '" + stationKey + "' - only '" + id + "' will be fed.");
+        }
+        ConfigurationSection alternatives = entry.getConfigurationSection("station-actions");
+        if (alternatives == null) {
+            return;
+        }
+        for (String recipe : alternatives.getKeys(false)) {
+            String key = stationKey(recipe);
+            Object raw = alternatives.get(recipe);
+            double value = raw instanceof Number number ? number.doubleValue() : Double.NaN;
+            if (key.isEmpty() || key.startsWith("/") || key.endsWith("/") || !key.contains("/")
+                    || key.equals(stationKey) || !Double.isFinite(value) || value < 1
+                    || value > Integer.MAX_VALUE || Math.rint(value) != value) {
+                plugin.getLogger().warning("Activity '" + id + "' has invalid station-actions entry '"
+                    + Utils.safeForLog(recipe) + "' - expected a different <station>/<recipe>"
+                    + " with a positive whole-number amount within the int range.");
+                continue;
+            }
+            int amount = (int) value;
+            String displaced = stations.put(key, id);
+            if (displaced != null) {
+                plugin.getLogger().warning("Activities '" + displaced + "' and '" + id
+                    + "' both track station '" + key + "' - only '" + id + "' will be fed.");
+            }
+            amounts.put(key, amount);
         }
     }
 
@@ -1094,17 +1124,25 @@ public class ActivityConfiguration {
     }
 
     public Optional<String> stationActivity(String stationId, String recipeId) {
+        return stationAction(stationId, recipeId).map(StationActionCredit::activityId);
+    }
+
+    public record StationActionCredit(String activityId, int amount) {}
+
+    public Optional<StationActionCredit> stationAction(String stationId, String recipeId) {
         if (stationId == null || stationId.isBlank()) {
             return Optional.empty();
         }
         String station = normalizeStationPart(stationId);
         if (recipeId != null && !recipeId.isBlank()) {
-            String specific = stationActivities.get(station + "/" + normalizeStationPart(recipeId));
+            String key = station + "/" + normalizeStationPart(recipeId);
+            String specific = stationActivities.get(key);
             if (specific != null) {
-                return Optional.of(specific);
+                return Optional.of(new StationActionCredit(specific, stationActionAmounts.getOrDefault(key, 1)));
             }
         }
-        return Optional.ofNullable(stationActivities.get(station));
+        return Optional.ofNullable(stationActivities.get(station))
+            .map(id -> new StationActionCredit(id, 1));
     }
 
     public String professionActivity(String professionId) {

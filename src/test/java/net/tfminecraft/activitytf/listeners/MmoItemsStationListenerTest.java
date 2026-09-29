@@ -252,4 +252,31 @@ class MmoItemsStationListenerTest {
         org.junit.jupiter.api.Assertions.assertEquals(1, manager.tasks(uuid).points());
     }
 
+    @Test
+    void bulkCoalCraftCompletesSixteenActionQuestInOneCraft() {
+        var def = new ActivityDef("ingot_coal", "Make Coal", Material.COAL, null, 16, 1, 1);
+        var manager = net.tfminecraft.activitytf.managers.TestManagers.manager(def);
+        net.tfminecraft.activitytf.managers.TestManagers.bukkit();
+        net.tfminecraft.activitytf.managers.TestManagers.storeLoaded(manager);
+        net.tfminecraft.activitytf.managers.TestManagers.guarantee(manager, def.id());
+        setField(manager.getConfiguration(), ActivityConfiguration.class, "stationActivities",
+            Map.of("ingot-station/coal", "ingot_coal", "ingot-station/coal-64", "ingot_coal"));
+        setField(manager.getConfiguration(), ActivityConfiguration.class, "stationActionAmounts",
+            Map.of("ingot-station/coal-64", 16));
+        UUID uuid = UUID.randomUUID();
+        UUID smallUuid = UUID.randomUUID();
+        manager.reveal(uuid, 0);
+        manager.reveal(smallUuid, 0);
+        var listener = new MmoItemsStationListener(manager);
+        var player = stubPlayer(uuid);
+
+        listener.onUseCraftingStation(event(stubPlayer(smallUuid), station("ingot-station"), recipe("coal"), null));
+        assertEquals(1, manager.tasks(smallUuid).count(def.id()));
+        assertEquals(0, manager.tasks(smallUuid).points());
+
+        listener.onUseCraftingStation(event(player, station("ingot-station"), recipe("coal-64"), null));
+        assertEquals(16, manager.tasks(uuid).count(def.id()));
+        assertEquals(1, manager.tasks(uuid).points());
+    }
+
 }
