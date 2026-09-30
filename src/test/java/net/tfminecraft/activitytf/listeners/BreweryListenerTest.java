@@ -87,4 +87,24 @@ class BreweryListenerTest {
 
         assertEquals(2, manager.tasks(uuid).count("brew_ingredient"));
     }
+
+    @Test
+    void aBottleWithoutAPlayerIsIgnored() {
+        BreweryListener listener = new BreweryListener(null);
+        assertDoesNotThrow(() -> listener.recordBottle(null, 5));
+    }
+
+    @Test
+    void onlyCookedBottlesAreCredited() {
+        ActivityManager manager = managerWith("brew_bottle");
+        UUID uuid = revealed(manager);
+        BreweryListener listener = new BreweryListener(manager);
+
+        listener.recordBottle(stubPlayer(uuid), 0);
+        assertEquals(0, manager.tasks(uuid).count("brew_bottle"));
+
+        listener.recordBottle(stubPlayer(uuid), 1);
+        listener.recordBottle(stubPlayer(uuid), 12);
+        assertEquals(2, manager.tasks(uuid).count("brew_bottle"));
+    }
 }
