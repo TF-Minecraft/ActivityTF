@@ -311,6 +311,20 @@ activities:
     every: 5
     points: 1
     daily-cap: 2
+  # BreweryX activities (brew_*). The shipped config.yml is only written on a fresh
+  # install, so an existing server must copy these entries into its own config.yml
+  # and run /activity reload; until then they are unknown ids and earn nothing.
+  # BreweryX: ingredients put into a brewing cauldron
+  brew_ingredient:
+    display: "#e6ca40&lGather Brewing Ingredients"
+    description:
+      - "&7Add &a%every% &7ingredients to a brewing cauldron."
+      - "&7Earn &a%points% &7activity points per completion."
+      - "&7"
+    material: CAULDRON
+    every: 10
+    points: 1
+    daily-cap: 1
   # RPCharacters: profession upgrades purchased
   profession_upgrade:
     display: "#e6ca40&lProfession Upgrade"

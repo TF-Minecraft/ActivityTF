@@ -16,6 +16,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <advancedcrafting.version>2.0.0</advancedcrafting.version>
         <archeology-plugin.version>2.0.0</archeology-plugin.version>
+        <breweryx.version>3.7.0</breweryx.version>
         <cooking.version>0.2.1</cooking.version>
         <games.version>0.2.0</games.version>
         <geiger_counter.version>2.0.0</geiger_counter.version>
@@ -248,6 +249,19 @@
                 </exclusion>
             </exclusions>
         </dependency>
+        <!-- BreweryX: provided plugin API, compiled against for its brewing events -->
+        <dependency>
+            <groupId>com.dre.brewery</groupId>
+            <artifactId>BreweryX</artifactId>
+            <version>${breweryx.version}</version>
+            <scope>provided</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>*</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
         <!-- Constructor-free test fixtures through Objenesis' supported API. -->
         <dependency>
             <groupId>org.objenesis</groupId>
@@ -272,6 +286,10 @@
         <repository>
             <id>placeholderapi</id>
             <url>https://repo.extendedclip.com/releases/</url>
+        </repository>
+        <repository>
+            <id>breweryx</id>
+            <url>https://repo.jsinco.dev/releases/</url>
         </repository>
     </repositories>
 

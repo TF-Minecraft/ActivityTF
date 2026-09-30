@@ -8,6 +8,7 @@ import net.tfminecraft.activitytf.hooks.PlaceholderHook;
 import net.tfminecraft.activitytf.listeners.AdvancedCraftListener;
 import net.tfminecraft.activitytf.listeners.ArchaeologyListener;
 import net.tfminecraft.activitytf.listeners.BattleListener;
+import net.tfminecraft.activitytf.listeners.BreweryListener;
 import net.tfminecraft.activitytf.listeners.CasinoWinListener;
 import net.tfminecraft.activitytf.listeners.CharacterChatListener;
 import net.tfminecraft.activitytf.listeners.CraftListener;
@@ -160,6 +161,12 @@ public class ActivityPlugin extends JavaPlugin {
             getServer().getPluginManager().registerEvents(
                 new DishCookedListener(ActivityManager.getInstance()), this);
             getLogger().info("Hooked into Cooking.");
+        }
+
+        if (Bukkit.getPluginManager().isPluginEnabled("BreweryX")) {
+            getServer().getPluginManager().registerEvents(
+                new BreweryListener(ActivityManager.getInstance()), this);
+            getLogger().info("Hooked into BreweryX.");
         }
 
         if (Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI")) {
