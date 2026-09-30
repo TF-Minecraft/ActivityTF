@@ -337,6 +337,21 @@ activities:
     every: 3
     points: 1
     daily-cap: 2
+  # BreweryX: distilled brews taken out of a brewing stand, each brew once. Where
+  # TFMCCore binds brewing stands to a station on right-click, only a shift-right-click
+  # with an empty hand opens the vanilla stand BreweryX distils in.
+  # Disabled for now: uncomment to offer distilling as an activity (the listener is in place).
+  #brew_distill:
+  #  display: "#e6ca40&lDistill Brews"
+  #  description:
+  #    - "&7Take &a%every% &7distilled brews out of a brewing stand"
+  #    - "&7(shift-right-click it with an empty hand)."
+  #    - "&7Earn &a%points% &7activity points per completion."
+  #    - "&7"
+  #  material: BREWING_STAND
+  #  every: 3
+  #  points: 1
+  #  daily-cap: 1
   # RPCharacters: profession upgrades purchased
   profession_upgrade:
     display: "#e6ca40&lProfession Upgrade"
