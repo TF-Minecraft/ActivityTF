@@ -30,6 +30,7 @@ import net.tfminecraft.activitytf.utils.Utils;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 
 public class ActivityGui implements Listener {
@@ -124,7 +125,7 @@ public class ActivityGui implements Listener {
         lore.add(Utils.colorize(bar));
         lore.add(" ");
         lore.addAll(weeklyRewardLore(messages, data, milestones, config.milestoneDrops(),
-            config.rewardMultiplier(), config::rewardPool));
+            config.rewardMultiplier(), config.multiplierPools(), config::rewardPool));
 
         return item(Material.EXPERIENCE_BOTTLE,
             messages.get("gui.bar-name", "%points%", data.points(), "%max%", config.barMax()),
@@ -132,7 +133,7 @@ public class ActivityGui implements Listener {
     }
 
     static List<String> weeklyRewardLore(Messages messages, PlayerData data, List<Integer> milestones,
-                                          Map<Integer, RewardEntry> drops, int multiplier,
+                                          Map<Integer, RewardEntry> drops, int multiplier, Set<String> multiplierPools,
                                           Function<String, List<RewardEntry>> pools) {
         List<String> lore = new ArrayList<>();
         int due = data.claimable(milestones);
@@ -142,14 +143,28 @@ public class ActivityGui implements Listener {
             return lore;
         }
 
+        RewardEntry drop = drops.get(next);
+        String pool = drop == null ? ActivityConfiguration.DEFAULT_POOL
+            : ActivityConfiguration.referencedPool(drop);
         List<String> rewards = nextRewardDisplays(next, drops, multiplier, pools);
-        if (rewards.size() == 1) {
+        if (pool == null && rewards.size() == 1) {
             lore.add(messages.get("gui.bar-lore-reward", "%points%", next, "%reward%",
                 Utils.colorize(rewards.get(0))));
         } else {
             lore.add(messages.get("gui.bar-lore-next-options", "%points%", next));
-            for (String reward : rewards) {
-                lore.add(Utils.colorize(reward));
+            if (rewards.isEmpty()) {
+                lore.add(messages.get("gui.reward-preview-unavailable"));
+            } else {
+                int draws = multiplierPools.contains(pool) ? multiplier : 1;
+                lore.add(messages.get(draws == 1 ? "gui.reward-preview-one" : "gui.reward-preview-many",
+                    "%count%", draws));
+                int shown = Math.min(4, rewards.size());
+                for (String reward : rewards.subList(0, shown)) {
+                    lore.add(Utils.colorize(reward));
+                }
+                if (shown < rewards.size()) {
+                    lore.add(messages.get("gui.reward-preview-more", "%count%", rewards.size() - shown));
+                }
             }
         }
         if (due > 0) {
@@ -171,13 +186,7 @@ public class ActivityGui implements Listener {
         if (entries == null || entries.isEmpty()) {
             return List.of();
         }
-        List<String> displays = new ArrayList<>();
-        for (RewardEntry entry : entries) {
-            if (entry.display() != null && !entry.display().isBlank()) {
-                displays.add(entry.display());
-            }
-        }
-        return displays;
+        return RewardPreview.summarize(entries);
     }
 
     private static Integer nextMilestone(PlayerData data, List<Integer> milestones) {
