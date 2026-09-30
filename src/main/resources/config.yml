@@ -363,6 +363,17 @@ activities:
     every: 3
     points: 1
     daily-cap: 1
+  # BreweryX: brews drunk that match a recipe (quality above zero)
+  brew_drink:
+    display: "#e6ca40&lDrink Brews"
+    description:
+      - "&7Drink &a%every% &7finished brews."
+      - "&7Earn &a%points% &7activity points per completion."
+      - "&7"
+    material: POTION
+    every: 3
+    points: 1
+    daily-cap: 1
   # RPCharacters: profession upgrades purchased
   profession_upgrade:
     display: "#e6ca40&lProfession Upgrade"
