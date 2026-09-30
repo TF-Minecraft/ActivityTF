@@ -269,7 +269,7 @@ class ActivityGuiTest {
             List.of(new RewardEntry.Item("m.material.steel", 3)));
 
         List<String> lore = ActivityGui.weeklyRewardLore(messages, data, List.of(10, 20),
-            Map.of(10, steel), 1, pool -> List.of());
+            Map.of(10, steel), 1, Set.of(), pool -> List.of());
 
         assertEquals(List.of(messages.get("gui.bar-lore-reward", "%points%", 10, "%reward%",
             Utils.colorize("#50d990x3 #b8906eSteel"))), lore);
@@ -277,20 +277,20 @@ class ActivityGuiTest {
     }
 
     @Test
-    void theWeeklyIconListsEachDrawInTheNextPool() {
+    void theWeeklyIconSummarizesTheNextPoolAsOneRandomRange() {
         Messages messages = shippedMessages();
         PlayerData data = new PlayerData(12, 0, "2026-W38", "2026-09-17", 10, java.util.Map.of());
         List<RewardEntry> pool = List.of(
-            new RewardEntry(65, "#50d990x2 #7f7d80Ignitium", List.of(), List.of()),
-            new RewardEntry(3, "#50d990x8 #7f7d80Ignitium", List.of(), List.of()));
+            material(65, 2, "ignitium", "#7f7d80Ignitium"),
+            material(3, 8, "ignitium", "#7f7d80Ignitium"));
 
         List<String> lore = ActivityGui.weeklyRewardLore(messages, data, List.of(10, 20),
-            Map.of(20, ActivityConfiguration.poolRef("pool_prologue")), 1, name -> pool);
+            Map.of(20, ActivityConfiguration.poolRef("pool_prologue")), 1, Set.of(), name -> pool);
 
         assertEquals(messages.get("gui.bar-lore-next-options", "%points%", 20), lore.get(0));
-        assertTrue(lore.get(1).contains("x2"), lore.toString());
-        assertTrue(lore.get(2).contains("x8"), lore.toString());
-        assertFalse(lore.get(1).contains("#50d990"), lore.toString());
+        assertEquals(messages.get("gui.reward-preview-one"), lore.get(1));
+        assertEquals(Utils.colorize("#50d990x2–8 &r#7f7d80Ignitium"), lore.get(2));
+        assertEquals(3, lore.size());
     }
 
     @Test
@@ -299,7 +299,7 @@ class ActivityGuiTest {
         PlayerData data = new PlayerData(40, 0, "2026-W38", "2026-09-17", 40, java.util.Map.of());
 
         List<String> lore = ActivityGui.weeklyRewardLore(messages, data, List.of(10, 20, 40),
-            Map.of(), 1, pool -> List.of());
+            Map.of(), 1, Set.of(), pool -> List.of());
 
         assertEquals(List.of(messages.get("gui.bar-lore-none")), lore);
         assertTrue(lore.get(0).toLowerCase(java.util.Locale.ROOT).contains("no more rewards this week"),
@@ -314,10 +314,93 @@ class ActivityGuiTest {
             List.of(new RewardEntry.Item("DIAMOND", 1)));
 
         List<String> lore = ActivityGui.weeklyRewardLore(messages, data, List.of(10),
-            Map.of(10, steel), 2, pool -> List.of());
+            Map.of(10, steel), 2, Set.of(), pool -> List.of());
 
         assertTrue(lore.get(0).contains("x2"), lore.toString());
         assertEquals(messages.get("gui.reward-click", "%count%", 1), lore.get(1));
+    }
+
+    private static RewardEntry material(int weight, int amount, String id, String label) {
+        return new RewardEntry(weight, "#50d990x" + amount + " " + label, List.of(),
+            List.of(new RewardEntry.Item("m.materials." + id, amount)));
+    }
+
+    @Test
+    void actOneShowsThreeMaterialRangesPerIndependentDraw() {
+        Messages messages = shippedMessages();
+        List<RewardEntry> pool = new ArrayList<>();
+        int[][] weights = {{35, 15, 15}, {13, 6, 6}, {3, 2, 2}, {1, 1, 1}};
+        for (int tier = 0; tier < 4; tier++) {
+            pool.add(material(weights[tier][0], (tier + 1) * 20, "ignitium", "#7f7d80Ignitium"));
+            pool.add(material(weights[tier][1], (tier + 1) * 2, "raw_tin", "#7f7d80Raw Tin"));
+            pool.add(material(weights[tier][2], (tier + 1) * 2, "abyssalite_fragment", "#3b4e60Abyssalite Fragment"));
+        }
+        PlayerData data = new PlayerData(10, 0, "2026-W38", "2026-09-17", 0, Map.of());
+        List<String> lore = ActivityGui.weeklyRewardLore(messages, data, List.of(10),
+            Map.of(10, ActivityConfiguration.poolRef("pool_act1")), 2, Set.of("pool_act1"), name -> pool);
+
+        assertEquals(messages.get("gui.reward-preview-many", "%count%", 2), lore.get(1));
+        assertEquals(Utils.colorize("#50d990x20–80 &r#7f7d80Ignitium"), lore.get(2));
+        assertEquals(Utils.colorize("#50d990x2–8 &r#7f7d80Raw Tin"), lore.get(3));
+        assertEquals(Utils.colorize("#50d990x2–8 &r#3b4e60Abyssalite Fragment"), lore.get(4));
+        assertEquals(messages.get("gui.reward-click", "%count%", 1), lore.get(5));
+    }
+
+    @Test
+    void unlistedSkinPoolStillPreviewsOnlyOneDraw() {
+        Messages messages = shippedMessages();
+        PlayerData data = new PlayerData(0, 0, "2026-W38", "2026-09-17", 0, Map.of());
+        List<String> lore = ActivityGui.weeklyRewardLore(messages, data, List.of(10),
+            Map.of(10, ActivityConfiguration.poolRef("pool_skin")), 2, Set.of("pool_act1"),
+            name -> List.of(material(65, 1, "common_item_skin_scroll", "&7Common Item Skin Scroll"),
+                material(3, 1, "legendary_item_skin_scroll", "&7Legendary Item Skin Scroll")));
+
+        assertEquals(messages.get("gui.reward-preview-one"), lore.get(1));
+        assertTrue(lore.get(2).contains("x1"));
+        assertTrue(lore.get(3).contains("x1"));
+    }
+
+    @Test
+    void previewBoundsUseItemsAndNeverMergeDifferentItemsWithTheSameName() {
+        List<String> options = RewardPreview.summarize(List.of(
+            new RewardEntry(65, "#50d990x999 &7Metal", List.of(),
+                List.of(new RewardEntry.Item("m.materials.ignitium", 2))),
+            material(3, 8, "ignitium", "&7Metal"),
+            material(25, 4, "raw_tin", "&7Metal"),
+            material(0, 1000, "ignitium", "&7Metal")));
+        assertEquals(List.of("#50d990x2–8 &r&7Metal", "#50d990x4 &r&7Metal"), options);
+    }
+
+    @Test
+    void commandAndBundleOutcomesKeepTheirDescriptions() {
+        RewardEntry command = new RewardEntry(1, "&7A title", List.of("title %player%"), List.of());
+        RewardEntry bundle = new RewardEntry(1, "&7Material bundle", List.of(),
+            List.of(new RewardEntry.Item("DIAMOND", 2), new RewardEntry.Item("IRON_INGOT", 3)));
+        assertEquals(List.of("&7A title", "&7Material bundle"),
+            RewardPreview.summarize(List.of(command, bundle, command)));
+    }
+
+    @Test
+    void largePoolsAreBoundedAndMentionTheRemainingPossibilities() {
+        Messages messages = shippedMessages();
+        PlayerData data = new PlayerData(0, 0, "2026-W38", "2026-09-17", 0, Map.of());
+        List<RewardEntry> pool = new ArrayList<>();
+        for (int i = 0; i < 12; i++) {
+            pool.add(material(1, 1, "item_" + i, "&7Item " + i));
+        }
+        List<String> lore = ActivityGui.weeklyRewardLore(messages, data, List.of(10), Map.of(),
+            1, Set.of(), name -> pool);
+        assertEquals(7, lore.size());
+        assertEquals(messages.get("gui.reward-preview-more", "%count%", 8), lore.get(6));
+    }
+
+    @Test
+    void anEmptyPoolReportsAnUnavailablePreview() {
+        Messages messages = shippedMessages();
+        PlayerData data = new PlayerData(0, 0, "2026-W38", "2026-09-17", 0, Map.of());
+        List<String> lore = ActivityGui.weeklyRewardLore(messages, data, List.of(10), Map.of(),
+            1, Set.of(), name -> List.of());
+        assertEquals(messages.get("gui.reward-preview-unavailable"), lore.get(1));
     }
 
     @Test
