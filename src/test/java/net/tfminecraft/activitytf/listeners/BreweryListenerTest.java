@@ -145,6 +145,14 @@ class BreweryListenerTest {
     }
 
     @Test
+    void distillingAndAgingAreTrackedSeparately() {
+        PersistentDataContainer data = stubData();
+        assertTrue(BreweryListener.markOnce(data, BreweryListener.DISTILLED, 1L));
+        assertTrue(BreweryListener.markOnce(data, BreweryListener.AGED, 2L));
+        assertFalse(BreweryListener.markOnce(data, BreweryListener.AGED, 3L));
+    }
+
+    @Test
     void onlyClicksThatTakeTheItemCount() {
         assertTrue(BreweryListener.TAKES.contains(InventoryAction.PICKUP_ALL));
         assertTrue(BreweryListener.TAKES.contains(InventoryAction.MOVE_TO_OTHER_INVENTORY));

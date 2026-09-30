@@ -1,6 +1,7 @@
 package net.tfminecraft.activitytf.listeners;
 
 import com.dre.brewery.BIngredients;
+import com.dre.brewery.Barrel;
 import com.dre.brewery.Brew;
 import com.dre.brewery.api.events.IngedientAddEvent;
 import com.dre.brewery.api.events.brew.BrewModifyEvent;
@@ -32,6 +33,10 @@ import java.util.concurrent.ThreadLocalRandom;
 public class BreweryListener implements Listener {
 
     static final NamespacedKey DISTILLED = new NamespacedKey("activity", "brew_distilled");
+    static final NamespacedKey AGED = new NamespacedKey("activity", "brew_aged");
+
+    // Brews younger than this many BreweryX years have not been aged on purpose.
+    static final float MIN_AGE_YEARS = 1.0f;
 
     // Clicks that take the clicked item out of its slot.
     static final Set<InventoryAction> TAKES = EnumSet.of(
@@ -79,9 +84,10 @@ public class BreweryListener implements Listener {
         return ingredients == null ? 0 : ingredients.getCookedTime();
     }
 
-    // BreweryX distils on a timer with no player attached, so the credit goes to whoever
-    // takes a distilled brew out of a brewing stand's bottle slots. The tag written onto
-    // the brew keeps it from counting again when it is put back and taken out.
+    // BreweryX distils and ages with no player attached, so the credit goes to whoever
+    // takes a distilled brew out of a brewing stand's bottle slots, or a brew aged for at
+    // least a year out of a barrel. The tag written onto the brew keeps it from counting
+    // again when it is put back and taken out.
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onContainerTake(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof Player player) || !TAKES.contains(event.getAction())) {
@@ -97,6 +103,11 @@ public class BreweryListener implements Listener {
             Brew brew = Brew.get(item);
             if (brew != null && brew.getDistillRuns() > 0) {
                 creditOnce(player, clicked, event.getSlot(), item, DISTILLED, "brew_distill");
+            }
+        } else if (clicked.getHolder(false) instanceof Barrel) {
+            Brew brew = Brew.get(item);
+            if (brew != null && brew.getAgeTime() >= MIN_AGE_YEARS) {
+                creditOnce(player, clicked, event.getSlot(), item, AGED, "brew_age");
             }
         }
     }
