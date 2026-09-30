@@ -6,17 +6,23 @@ import net.tfminecraft.activitytf.managers.TestManagers;
 import net.tfminecraft.activitytf.models.ActivityDef;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
+import org.bukkit.event.inventory.InventoryAction;
 import org.bukkit.event.player.PlayerEvent;
+import org.bukkit.persistence.PersistentDataContainer;
 import org.junit.jupiter.api.Test;
 import org.objenesis.ObjenesisStd;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Proxy;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class BreweryListenerTest {
 
@@ -106,5 +112,47 @@ class BreweryListenerTest {
         listener.recordBottle(stubPlayer(uuid), 1);
         listener.recordBottle(stubPlayer(uuid), 12);
         assertEquals(2, manager.tasks(uuid).count("brew_bottle"));
+    }
+
+    private static PersistentDataContainer stubData() {
+        Map<Object, Object> values = new HashMap<>();
+        InvocationHandler handler = (proxy, method, args) -> switch (method.getName()) {
+            case "has" -> values.containsKey(args[0]);
+            case "get" -> values.get(args[0]);
+            case "set" -> values.put(args[0], args[2]);
+            case "remove" -> values.remove(args[0]);
+            default -> throw new UnsupportedOperationException(
+                    "unexpected call to PersistentDataContainer#" + method.getName());
+        };
+        return (PersistentDataContainer) Proxy.newProxyInstance(
+                BreweryListenerTest.class.getClassLoader(), new Class<?>[]{PersistentDataContainer.class}, handler);
+    }
+
+    @Test
+    void aBrewIsOnlyMarkedTheFirstTime() {
+        PersistentDataContainer data = stubData();
+        assertTrue(BreweryListener.markOnce(data, BreweryListener.DISTILLED, 7L));
+        assertFalse(BreweryListener.markOnce(data, BreweryListener.DISTILLED, 8L));
+    }
+
+    @Test
+    void aBrewThatNeverLeftItsSlotLosesOnlyItsOwnTag() {
+        PersistentDataContainer data = stubData();
+        BreweryListener.markOnce(data, BreweryListener.DISTILLED, 7L);
+        assertFalse(BreweryListener.unmarkIfStill(data, BreweryListener.DISTILLED, 8L));
+        assertTrue(BreweryListener.unmarkIfStill(data, BreweryListener.DISTILLED, 7L));
+        assertTrue(BreweryListener.markOnce(data, BreweryListener.DISTILLED, 9L));
+    }
+
+    @Test
+    void onlyClicksThatTakeTheItemCount() {
+        assertTrue(BreweryListener.TAKES.contains(InventoryAction.PICKUP_ALL));
+        assertTrue(BreweryListener.TAKES.contains(InventoryAction.MOVE_TO_OTHER_INVENTORY));
+        assertTrue(BreweryListener.TAKES.contains(InventoryAction.HOTBAR_SWAP));
+        assertTrue(BreweryListener.TAKES.contains(InventoryAction.PICKUP_ALL_INTO_BUNDLE));
+        assertTrue(BreweryListener.TAKES.contains(InventoryAction.PICKUP_SOME_INTO_BUNDLE));
+        assertFalse(BreweryListener.TAKES.contains(InventoryAction.PLACE_ALL));
+        assertFalse(BreweryListener.TAKES.contains(InventoryAction.NOTHING));
+        assertFalse(BreweryListener.TAKES.contains(InventoryAction.CLONE_STACK));
     }
 }
