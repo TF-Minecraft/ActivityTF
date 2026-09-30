@@ -48,6 +48,26 @@ rewards:
         with self.assertRaisesRegex(ValueError, "No audited description"):
             lore.update("activities:\n  custom:\n    every: 1\n")
 
+    def test_accepts_supported_station_formats(self):
+        for station in [" TOOL-STATION / IRON-PICKAXE ", "tool-station"]:
+            with self.subTest(station=station):
+                source = "activities:\n  custom:\n    station: " + repr(station) + "\n    every: 2\n"
+                description = yaml.safe_load(lore.update(source))["activities"]["custom"]["description"]
+                self.assertIn("Crafting Table", " ".join(description))
+                self.assertIn("%every%", " ".join(description))
+
+    def test_replaces_complete_yaml_values_and_keeps_comments(self):
+        for value in ['"Old"', '\n    - "Old"\n    # Keep this comment\n    - "Another"',
+                      '|\n      Old multiline\n      explanation', '>\n      Old folded\n      explanation']:
+            with self.subTest(value=value):
+                source = 'activities:\n  vote:\n    display: Voting\n    description: ' + value + '\n    every: 2\n'
+                updated = lore.update(source)
+                parsed = yaml.safe_load(updated)["activities"]["vote"]
+                self.assertEqual(parsed["every"], 2)
+                self.assertNotIn("Old", updated)
+                if "# Keep this comment" in source:
+                    self.assertIn("# Keep this comment", updated)
+
 
 if __name__ == "__main__":
     unittest.main()

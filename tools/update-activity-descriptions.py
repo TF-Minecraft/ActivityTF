@@ -66,10 +66,17 @@ def description(activity_id, activity):
         name = activity["profession"].replace("_", " ").title()
         lines = [f"&7Earn &a%every% &7{name} profession XP."]
     elif activity.get("station"):
-        station, recipe = activity["station"].split("/", 1)
-        name = RECIPE_NAMES.get(recipe, recipe.replace("-", " ").title())
-        lines = [f"&7Complete the {name} recipe &a%every% &7times.",
-                 f"&7Use a {STATIONS[station]} and claim queued crafts."]
+        station, separator, recipe = activity["station"].strip().lower().partition("/")
+        station, recipe = station.strip(), recipe.strip()
+        if station not in STATIONS:
+            raise ValueError(f"No audited station location for {station}")
+        if separator:
+            name = RECIPE_NAMES.get(recipe, recipe.replace("-", " ").title())
+            lines = [f"&7Complete the {name} recipe &a%every% &7times.",
+                     f"&7Use a {STATIONS[station]} and claim queued crafts."]
+        else:
+            lines = [f"&7Complete &a%every% &7recipes at a {STATIONS[station]}.",
+                     "&7Claim queued crafts to receive credit."]
         if activity_id == "ingot_coal" and "ingot-station/coal-64" in activity.get("station-actions", {}):
             lines = ["&7Complete &a%every% &7standard Coal crafts at a Blast Furnace.",
                      "&7The bulk Coal recipe also counts toward this task."]
@@ -79,6 +86,25 @@ def description(activity_id, activity):
     else:
         raise ValueError(f"No audited description for {activity_id}")
     return [*lines, "&7Earn &a%points% &7activity points per completion.", "&7"]
+
+
+def remove_description(block):
+    node = yaml.compose(block)
+    for key, value in node.value:
+        if key.value != "description":
+            continue
+        start = block.rfind("\n", 0, key.start_mark.index) + 1
+        end = value.end_mark.index
+        last_start = block.rfind("\n", 0, end) + 1
+        if block[last_start:end].strip():
+            newline = block.find("\n", end)
+            end = len(block) if newline < 0 else newline + 1
+        else:
+            end = last_start
+        comments = "".join(line for line in block[start:end].splitlines(keepends=True)
+                           if line.lstrip().startswith("#"))
+        return block[:start] + comments + block[end:]
+    return block
 
 
 def update(source):
@@ -95,8 +121,8 @@ def update(source):
         header = headers[index]
         end = headers[index + 1].start() if index + 1 < len(headers) else len(body)
         block = body[header.end():end]
-        # Remove only the active description field and its active list lines.
-        block = re.sub(r"(?m)^    description:[^\n]*\n(?:^      -[^\n]*\n)*", "", block)
+        # Parsed node marks cover strings, block scalars and either list indent.
+        block = remove_description(block)
         lore = "    description:\n" + "".join(
             "      - " + json.dumps(line, ensure_ascii=False) + "\n"
             for line in description(header[1], activities[header[1]]))
