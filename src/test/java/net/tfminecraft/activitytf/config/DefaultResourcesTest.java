@@ -137,6 +137,16 @@ class DefaultResourcesTest {
     }
 
     @Test
+    void everyShippedActivityExplainsItsConfiguredAmountAndPoints() {
+        ConfigurationSection activities = load("config.yml").getConfigurationSection("activities");
+        for (String id : activities.getKeys(false)) {
+            String description = String.join(" ", activities.getStringList(id + ".description"));
+            assertTrue(description.contains("%every%"), id + " lacks its action amount");
+            assertTrue(description.contains("%points%"), id + " lacks its point award");
+        }
+    }
+
+    @Test
     void everyRewardPoolEntryIsUsable() {
         YamlConfiguration config = load("config.yml");
         List<Map<?, ?>> pool = config.getMapList(ActivityConfiguration.REWARDS_POOL_PATH);

@@ -19,6 +19,8 @@ Available activities depend on the gameplay plugins and activity definitions in 
 
 ## Documentation
 
+[Activity lore placeholders and config migration](ACTIVITY-LORE.md)
+
 [Project documentation](https://github.com/TF-Minecraft/Docs/blob/main/projects/ActivityTF/README.md)
 
 Technical documentation is maintained in [TF-Minecraft/Docs](https://github.com/TF-Minecraft/Docs).

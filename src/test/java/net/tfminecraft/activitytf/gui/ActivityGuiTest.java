@@ -216,6 +216,31 @@ class ActivityGuiTest {
     }
 
     @Test
+    void descriptionAmountsFollowTheCurrentActivityDefinition() {
+        List<String> description = List.of(
+            "&7Earn %points% points per %every% actions; %daily-cap% awards/day.",
+            "%every%/%every% %unknown%");
+        ActivityDef original = new ActivityDef("a", "A", Material.PAPER, null,
+            25, 1, 2, List.of(), description);
+        ActivityDef changed = new ActivityDef("a", "A", Material.PAPER, null,
+            60, 5, 3, List.of(), description);
+        assertEquals(Utils.colorize("&7Earn 1 points per 25 actions; 2 awards/day."),
+            ActivityGui.activityLore(shippedMessages(), original, 0).getFirst());
+        assertEquals(Utils.colorize("&7Earn 5 points per 60 actions; 3 awards/day."),
+            ActivityGui.activityLore(shippedMessages(), changed, 0).getFirst());
+        assertEquals("60/60 %unknown%",
+            ActivityGui.activityLore(shippedMessages(), changed, 0).get(1));
+        assertEquals(description, changed.description());
+    }
+
+    @Test
+    void uncappedDescriptionsShowTheConfiguredZeroCap() {
+        ActivityDef def = new ActivityDef("a", "A", Material.PAPER, null,
+            1, 1, 0, List.of(), List.of("%every% %points% %daily-cap%"));
+        assertEquals("1 1 0", ActivityGui.activityLore(shippedMessages(), def, 0).getFirst());
+    }
+
+    @Test
     void theDescriptionSitsAboveTheProgressAndTodayLines() {
         Messages messages = shippedMessages();
         ActivityDef def = described(List.of("&7first", "&7second"));

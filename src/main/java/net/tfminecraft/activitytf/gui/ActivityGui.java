@@ -232,7 +232,10 @@ public class ActivityGui implements Listener {
     static List<String> activityLore(Messages messages, ActivityDef def, int count) {
         List<String> lore = new ArrayList<>();
         for (String line : def.description()) {
-            lore.add(Utils.colorize(line));
+            lore.add(Utils.colorize(line
+                .replace("%every%", Integer.toString(def.every()))
+                .replace("%points%", Integer.toString(def.points()))
+                .replace("%daily-cap%", Integer.toString(def.dailyCap()))));
         }
         String progress = progressBar(def, count);
         if (progress != null) {
