@@ -123,9 +123,9 @@ activities:
   vote:
     display: "#e6ca40&lVoting"
     description:
-      - "&7Cast &a%every% &7votes for the server."
+      - "&7Cast &a%every% &7vote for the server."
       - "&7Links: &f/vote"
-      - "&7Earn &a%points% &7activity points per completion."
+      - "&7Earn &a%points% &7activity point per completion."
       - "&7"
     material: v.paper
     every: 1
@@ -138,7 +138,7 @@ activities:
     display: "#e6ca40&lRadioactive Sources"
     description:
       - "&7Collect &a%every% &7arcane sources with a Trace Detector."
-      - "&7Earn &a%points% &7activity points per completion."
+      - "&7Earn &a%points% &7activity point per completion."
       - "&7"
     material: SPYGLASS
     every: 3
@@ -148,7 +148,7 @@ activities:
     display: "#e6ca40&lArchaeology"
     description:
       - "&7Recover &a%every% &7archaeological finds."
-      - "&7Earn &a%points% &7activity points per completion."
+      - "&7Earn &a%points% &7activity point per completion."
       - "&7"
     material: BRUSH
     every: 3
@@ -158,7 +158,7 @@ activities:
     display: "#e6ca40&lMusical Instruments"
     description:
       - "&7Play &a%every% &7notes with an instrument."
-      - "&7Earn &a%points% &7activity points per completion."
+      - "&7Earn &a%points% &7activity point per completion."
       - "&7"
     material: NOTE_BLOCK
     every: 20
@@ -169,7 +169,7 @@ activities:
     description:
       - "&7Play actively for &a%every% &7minutes."
       - "&7Idle minutes do not count when AFK checks are enabled."
-      - "&7Earn &a%points% &7activity points per completion."
+      - "&7Earn &a%points% &7activity point per completion."
       - "&7"
     material: CLOCK
     every: 60          # 60 counted minutes => 1 point
@@ -180,7 +180,7 @@ activities:
     display: "#e6ca40&lMarket Sales"
     description:
       - "&7Earn &a%every% &7Denar selling to a Market Block."
-      - "&7Earn &a%points% &7activity points per completion."
+      - "&7Earn &a%points% &7activity point per completion."
       - "&7"
     material: EMERALD
     every: 25          # 25 denar earned => 1 point
@@ -192,7 +192,7 @@ activities:
     description:
       - "&7Win &a%every% &7Denar in card-game profit."
       - "&7Counts profit above your stake, before tax."
-      - "&7Earn &a%points% &7activity points per completion."
+      - "&7Earn &a%points% &7activity point per completion."
       - "&7"
     material: GOLD_NUGGET
     every: 25
@@ -202,7 +202,7 @@ activities:
     display: "#e6ca40&lCraft Diamond Blocks"
     description:
       - "&7Craft &a%every% &7Diamond Block items."
-      - "&7Earn &a%points% &7activity points per completion."
+      - "&7Earn &a%points% &7activity point per completion."
       - "&7"
     material: DIAMOND_BLOCK
     every: 3
@@ -213,7 +213,7 @@ activities:
     display: "#e6ca40&lCraft Golden Carrots"
     description:
       - "&7Craft &a%every% &7Golden Carrot items."
-      - "&7Earn &a%points% &7activity points per completion."
+      - "&7Earn &a%points% &7activity point per completion."
       - "&7"
     material: v.golden_carrot
     every: 16
@@ -223,8 +223,8 @@ activities:
   craft_anvil:
     display: "#e6ca40&lCraft Anvils"
     description:
-      - "&7Craft &a%every% &7Anvil items."
-      - "&7Earn &a%points% &7activity points per completion."
+      - "&7Craft &a%every% &7Anvil item."
+      - "&7Earn &a%points% &7activity point per completion."
       - "&7"
     material: ANVIL
     every: 1
@@ -237,7 +237,7 @@ activities:
     description:
       - "&7Send &a%every% &7substantial in-character messages."
       - "&7Short or repetitive messages do not count."
-      - "&7Earn &a%points% &7activity points per completion."
+      - "&7Earn &a%points% &7activity point per completion."
       - "&7"
     material: WRITABLE_BOOK
     every: 30
@@ -247,7 +247,7 @@ activities:
   injured:
     display: "#e6ca40&lInjure Yourself"
     description:
-      - "&7Receive &a%every% &7roleplay injuries."
+      - "&7Receive &a%every% &7roleplay injury."
       - "&7Earn &a%points% &7activity points per completion."
       - "&7"
     material: BONE
@@ -259,7 +259,7 @@ activities:
     display: "#e6ca40&lPlace Furniture"
     description:
       - "&7Place &a%every% &7pieces of furniture."
-      - "&7Earn &a%points% &7activity points per completion."
+      - "&7Earn &a%points% &7activity point per completion."
       - "&7"
     material: BARREL
     every: 5
@@ -269,8 +269,8 @@ activities:
   vehicle_build:
     display: "#e6ca40&lBuild Vehicles"
     description:
-      - "&7Finish &a%every% &7vehicles at a construction station."
-      - "&7Earn &a%points% &7activity points per completion."
+      - "&7Finish &a%every% &7vehicle at a construction station."
+      - "&7Earn &a%points% &7activity point per completion."
       - "&7"
     material: MINECART
     every: 1
@@ -280,9 +280,9 @@ activities:
   battle_joined:
     display: "#e6ca40&lFaction Battles"
     description:
-      - "&7Participate in &a%every% &7faction battles."
+      - "&7Participate in &a%every% &7faction battle."
       - "&7Credit is awarded when the battle ends."
-      - "&7Earn &a%points% &7activity points per completion."
+      - "&7Earn &a%points% &7activity point per completion."
       - "&7"
     material: IRON_SWORD
     every: 1
@@ -293,7 +293,7 @@ activities:
     display: "#e6ca40&lAdvanced Crafting"
     description:
       - "&7Complete &a%every% &7Advanced Crafting items or alloys."
-      - "&7Earn &a%points% &7activity points per completion."
+      - "&7Earn &a%points% &7activity point per completion."
       - "&7"
     material: SMITHING_TABLE
     every: 5
@@ -305,7 +305,7 @@ activities:
     description:
       - "&7Finish &a%every% &7dishes at cooking pots, stations or boards."
       - "&7Trough feed counts toward its own activity."
-      - "&7Earn &a%points% &7activity points per completion."
+      - "&7Earn &a%points% &7activity point per completion."
       - "&7"
     material: COOKED_BEEF
     every: 5
@@ -319,7 +319,7 @@ activities:
     display: "#e6ca40&lGather Brewing Ingredients"
     description:
       - "&7Add &a%every% &7ingredients to a brewing cauldron."
-      - "&7Earn &a%points% &7activity points per completion."
+      - "&7Earn &a%points% &7activity point per completion."
       - "&7"
     material: CAULDRON
     every: 10
@@ -331,7 +331,7 @@ activities:
     description:
       - "&7Fill &a%every% &7bottles from a brewing cauldron"
       - "&7after at least a minute of cooking."
-      - "&7Earn &a%points% &7activity points per completion."
+      - "&7Earn &a%points% &7activity point per completion."
       - "&7"
     material: GLASS_BOTTLE
     every: 3
@@ -357,7 +357,7 @@ activities:
     display: "#e6ca40&lAge Brews"
     description:
       - "&7Take &a%every% &7brews aged at least a year out of a barrel."
-      - "&7Earn &a%points% &7activity points per completion."
+      - "&7Earn &a%points% &7activity point per completion."
       - "&7"
     material: BARREL
     every: 3
@@ -367,8 +367,8 @@ activities:
   profession_upgrade:
     display: "#e6ca40&lProfession Upgrade"
     description:
-      - "&7Purchase &a%every% &7profession upgrades."
-      - "&7Earn &a%points% &7activity points per completion."
+      - "&7Purchase &a%every% &7profession upgrade."
+      - "&7Earn &a%points% &7activity point per completion."
       - "&7"
     material: EXPERIENCE_BOTTLE
     every: 1
@@ -380,7 +380,7 @@ activities:
     display: "#e6ca40&lCrafter XP"
     description:
       - "&7Earn &a%every% &7Crafter profession XP."
-      - "&7Earn &a%points% &7activity points per completion."
+      - "&7Earn &a%points% &7activity point per completion."
       - "&7"
     material: CRAFTING_TABLE
     every: 500       # 500 profession XP → 1 point
@@ -391,7 +391,7 @@ activities:
     display: "#e6ca40&lForager XP"
     description:
       - "&7Earn &a%every% &7Forager profession XP."
-      - "&7Earn &a%points% &7activity points per completion."
+      - "&7Earn &a%points% &7activity point per completion."
       - "&7"
     material: WHEAT
     every: 500
@@ -402,7 +402,7 @@ activities:
     display: "#e6ca40&lHerborist XP"
     description:
       - "&7Earn &a%every% &7Herborist profession XP."
-      - "&7Earn &a%points% &7activity points per completion."
+      - "&7Earn &a%points% &7activity point per completion."
       - "&7"
     material: FERN
     every: 500
@@ -415,7 +415,7 @@ activities:
     description:
       - "&7Complete the Flint recipe &a%every% &7times."
       - "&7Use a Blast Furnace and claim queued crafts."
-      - "&7Earn &a%points% &7activity points per completion."
+      - "&7Earn &a%points% &7activity point per completion."
       - "&7"
     material: FLINT
     every: 3
@@ -427,7 +427,7 @@ activities:
     description:
       - "&7Complete &a%every% &7standard Coal crafts at a Blast Furnace."
       - "&7The bulk Coal recipe also counts toward this task."
-      - "&7Earn &a%points% &7activity points per completion."
+      - "&7Earn &a%points% &7activity point per completion."
       - "&7"
     material: COAL
     every: 3
@@ -440,9 +440,9 @@ activities:
   tool_iron_pickaxe:
     display: "#e6ca40&lForge Iron Pickaxes"
     description:
-      - "&7Complete the Iron Pickaxe recipe &a%every% &7times."
+      - "&7Complete the Iron Pickaxe recipe &a%every% &7time."
       - "&7Use a Crafting Table and claim queued crafts."
-      - "&7Earn &a%points% &7activity points per completion."
+      - "&7Earn &a%points% &7activity point per completion."
       - "&7"
     material: IRON_PICKAXE
     every: 1
@@ -452,9 +452,9 @@ activities:
   tool_iron_axe:
     display: "#e6ca40&lForge Iron Axes"
     description:
-      - "&7Complete the Iron Hatchet recipe &a%every% &7times."
+      - "&7Complete the Iron Hatchet recipe &a%every% &7time."
       - "&7Use a Crafting Table and claim queued crafts."
-      - "&7Earn &a%points% &7activity points per completion."
+      - "&7Earn &a%points% &7activity point per completion."
       - "&7"
     material: IRON_AXE
     every: 1
@@ -467,7 +467,7 @@ activities:
     description:
       - "&7Complete the Andesite recipe &a%every% &7times."
       - "&7Use a Stonecutter and claim queued crafts."
-      - "&7Earn &a%points% &7activity points per completion."
+      - "&7Earn &a%points% &7activity point per completion."
       - "&7"
     material: ANDESITE
     every: 2
@@ -479,7 +479,7 @@ activities:
     description:
       - "&7Complete the Clay recipe &a%every% &7times."
       - "&7Use a Stonecutter and claim queued crafts."
-      - "&7Earn &a%points% &7activity points per completion."
+      - "&7Earn &a%points% &7activity point per completion."
       - "&7"
     material: CLAY
     every: 2
@@ -492,7 +492,7 @@ activities:
     description:
       - "&7Complete the Arrow recipe &a%every% &7times."
       - "&7Use a Fletching Table and claim queued crafts."
-      - "&7Earn &a%points% &7activity points per completion."
+      - "&7Earn &a%points% &7activity point per completion."
       - "&7"
     material: ARROW
     every: 2
@@ -504,7 +504,7 @@ activities:
     description:
       - "&7Complete the String recipe &a%every% &7times."
       - "&7Use a Fletching Table and claim queued crafts."
-      - "&7Earn &a%points% &7activity points per completion."
+      - "&7Earn &a%points% &7activity point per completion."
       - "&7"
     material: STRING
     every: 2
@@ -517,7 +517,7 @@ activities:
     description:
       - "&7Complete the Minor Health Potion recipe &a%every% &7times."
       - "&7Use a Brewing Stand and claim queued crafts."
-      - "&7Earn &a%points% &7activity points per completion."
+      - "&7Earn &a%points% &7activity point per completion."
       - "&7"
     material: POTION
     every: 2
@@ -529,7 +529,7 @@ activities:
     description:
       - "&7Complete the Alchemy Powder recipe &a%every% &7times."
       - "&7Use a Brewing Stand and claim queued crafts."
-      - "&7Earn &a%points% &7activity points per completion."
+      - "&7Earn &a%points% &7activity point per completion."
       - "&7"
     material: GLOWSTONE_DUST
     every: 2
@@ -540,9 +540,9 @@ activities:
   instrument_iron_lute:
     display: "#e6ca40&lBuild Iron Lutes"
     description:
-      - "&7Complete the Iron Lute recipe &a%every% &7times."
+      - "&7Complete the Iron Lute recipe &a%every% &7time."
       - "&7Use a Jukebox and claim queued crafts."
-      - "&7Earn &a%points% &7activity points per completion."
+      - "&7Earn &a%points% &7activity point per completion."
       - "&7"
     material: NOTE_BLOCK
     every: 1
@@ -552,9 +552,9 @@ activities:
   instrument_steel_lute:
     display: "#e6ca40&lBuild Steel Lutes"
     description:
-      - "&7Complete the Steel Lute recipe &a%every% &7times."
+      - "&7Complete the Steel Lute recipe &a%every% &7time."
       - "&7Use a Jukebox and claim queued crafts."
-      - "&7Earn &a%points% &7activity points per completion."
+      - "&7Earn &a%points% &7activity point per completion."
       - "&7"
     material: JUKEBOX
     every: 1
@@ -567,7 +567,7 @@ activities:
     description:
       - "&7Complete the Scribe Paper recipe &a%every% &7times."
       - "&7Use a Cartography Table and claim queued crafts."
-      - "&7Earn &a%points% &7activity points per completion."
+      - "&7Earn &a%points% &7activity point per completion."
       - "&7"
     material: PAPER
     every: 2
@@ -577,9 +577,9 @@ activities:
   research_bronze:
     display: "#e6ca40&lResearch Bronze"
     description:
-      - "&7Complete the Research Bronze recipe &a%every% &7times."
+      - "&7Complete the Research Bronze recipe &a%every% &7time."
       - "&7Use a Cartography Table and claim queued crafts."
-      - "&7Earn &a%points% &7activity points per completion."
+      - "&7Earn &a%points% &7activity point per completion."
       - "&7"
     material: COPPER_INGOT
     every: 1
@@ -592,7 +592,7 @@ activities:
     description:
       - "&7Complete the Herb Mixture recipe &a%every% &7times."
       - "&7Use a Medicine Station and claim queued crafts."
-      - "&7Earn &a%points% &7activity points per completion."
+      - "&7Earn &a%points% &7activity point per completion."
       - "&7"
     material: FERN
     every: 2
@@ -602,9 +602,9 @@ activities:
   medicine_splint:
     display: "#e6ca40&lMake Splints"
     description:
-      - "&7Complete the Splint recipe &a%every% &7times."
+      - "&7Complete the Splint recipe &a%every% &7time."
       - "&7Use a Medicine Station and claim queued crafts."
-      - "&7Earn &a%points% &7activity points per completion."
+      - "&7Earn &a%points% &7activity point per completion."
       - "&7"
     material: STICK
     every: 1
@@ -615,9 +615,9 @@ activities:
   engineer_bullet_box:
     display: "#e6ca40&lPack Bullet Boxes"
     description:
-      - "&7Complete the Bullet Box recipe &a%every% &7times."
-      - "&7Use a Engineer Station and claim queued crafts."
-      - "&7Earn &a%points% &7activity points per completion."
+      - "&7Complete the Bullet Box recipe &a%every% &7time."
+      - "&7Use an Engineer Station and claim queued crafts."
+      - "&7Earn &a%points% &7activity point per completion."
       - "&7"
     material: IRON_NUGGET
     every: 1
@@ -628,8 +628,8 @@ activities:
     display: "#e6ca40&lRefine Fuel"
     description:
       - "&7Complete the Arcane Fuel recipe &a%every% &7times."
-      - "&7Use a Engineer Station and claim queued crafts."
-      - "&7Earn &a%points% &7activity points per completion."
+      - "&7Use an Engineer Station and claim queued crafts."
+      - "&7Earn &a%points% &7activity point per completion."
       - "&7"
     material: COAL_BLOCK
     every: 2
@@ -640,9 +640,9 @@ activities:
   fishing_rod:
     display: "#e6ca40&lMake Fishing Rods"
     description:
-      - "&7Complete the Basic Fishing Rod recipe &a%every% &7times."
+      - "&7Complete the Basic Fishing Rod recipe &a%every% &7time."
       - "&7Use a Fishing Station and claim queued crafts."
-      - "&7Earn &a%points% &7activity points per completion."
+      - "&7Earn &a%points% &7activity point per completion."
       - "&7"
     material: FISHING_ROD
     every: 1
@@ -654,7 +654,7 @@ activities:
     description:
       - "&7Complete the Iron Hook recipe &a%every% &7times."
       - "&7Use a Fishing Station and claim queued crafts."
-      - "&7Earn &a%points% &7activity points per completion."
+      - "&7Earn &a%points% &7activity point per completion."
       - "&7"
     material: TRIPWIRE_HOOK
     every: 2
@@ -665,9 +665,9 @@ activities:
   magic_basic_handle:
     display: "#e6ca40&lCarve Basic Handles"
     description:
-      - "&7Complete the Basic Handle recipe &a%every% &7times."
+      - "&7Complete the Basic Handle recipe &a%every% &7time."
       - "&7Use a Magic Station and claim queued crafts."
-      - "&7Earn &a%points% &7activity points per completion."
+      - "&7Earn &a%points% &7activity point per completion."
       - "&7"
     material: STICK
     every: 1
@@ -677,9 +677,9 @@ activities:
   magic_iron_core:
     display: "#e6ca40&lCast Iron Cores"
     description:
-      - "&7Complete the Iron Core recipe &a%every% &7times."
+      - "&7Complete the Iron Core recipe &a%every% &7time."
       - "&7Use a Magic Station and claim queued crafts."
-      - "&7Earn &a%points% &7activity points per completion."
+      - "&7Earn &a%points% &7activity point per completion."
       - "&7"
     material: IRON_INGOT
     every: 1
@@ -692,7 +692,7 @@ activities:
     description:
       - "&7Fill a trough with wheat or vegetables."
       - "&7Collect feed &a%every% &7times with an empty-hand right click."
-      - "&7Earn &a%points% &7activity points per completion."
+      - "&7Earn &a%points% &7activity point per completion."
       - "&7"
     material: WHEAT
     every: 2
@@ -702,9 +702,9 @@ activities:
   animal_whistle:
     display: "#e6ca40&lCraft Animal Whistles"
     description:
-      - "&7Complete the Animal Whistle recipe &a%every% &7times."
-      - "&7Use a Animal Station and claim queued crafts."
-      - "&7Earn &a%points% &7activity points per completion."
+      - "&7Complete the Animal Whistle recipe &a%every% &7time."
+      - "&7Use an Animal Station and claim queued crafts."
+      - "&7Earn &a%points% &7activity point per completion."
       - "&7"
     material: GOAT_HORN
     every: 1
