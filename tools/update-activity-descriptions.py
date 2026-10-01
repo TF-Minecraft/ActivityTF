@@ -11,23 +11,28 @@ from pathlib import Path
 import yaml
 
 
+# {one|many} picks the singular form when the amount it follows is exactly 1.
 ACTIONS = {
-    "vote": ["&7Cast &a%every% &7votes for the server.", "&7Links: &f/vote"],
-    "playtime": ["&7Play actively for &a%every% &7minutes.", "&7Idle minutes do not count when AFK checks are enabled."],
-    "geiger": ["&7Collect &a%every% &7arcane sources with a Trace Detector."],
-    "archaeology_find": ["&7Recover &a%every% &7archaeological finds."],
-    "instrument": ["&7Play &a%every% &7notes with an instrument."],
+    "vote": ["&7Cast &a%every% &7{vote|votes} for the server.", "&7Links: &f/vote"],
+    "playtime": ["&7Play actively for &a%every% &7{minute|minutes}.", "&7Idle minutes do not count when AFK checks are enabled."],
+    "geiger": ["&7Collect &a%every% &7arcane {source|sources} with a Trace Detector."],
+    "archaeology_find": ["&7Recover &a%every% &7archaeological {find|finds}."],
+    "instrument": ["&7Play &a%every% &7{note|notes} with an instrument."],
     "market_sale": ["&7Earn &a%every% &7Denar selling to a Market Block."],
     "casino_win": ["&7Win &a%every% &7Denar in card-game profit.", "&7Counts profit above your stake, before tax."],
-    "ic_chat": ["&7Send &a%every% &7substantial in-character messages.", "&7Short or repetitive messages do not count."],
-    "injured": ["&7Receive &a%every% &7roleplay injuries."],
-    "furniture_place": ["&7Place &a%every% &7pieces of furniture."],
-    "vehicle_build": ["&7Finish &a%every% &7vehicles at a construction station."],
-    "battle_joined": ["&7Participate in &a%every% &7faction battles.", "&7Credit is awarded when the battle ends."],
-    "advcraft_item": ["&7Complete &a%every% &7Advanced Crafting items or alloys."],
-    "cook_dish": ["&7Finish &a%every% &7dishes at cooking pots, stations or boards.", "&7Trough feed counts toward its own activity."],
-    "profession_upgrade": ["&7Purchase &a%every% &7profession upgrades."],
-    "animal_universal_feed": ["&7Fill a trough with wheat or vegetables.", "&7Collect feed &a%every% &7times with an empty-hand right click."],
+    "ic_chat": ["&7Send &a%every% &7substantial in-character {message|messages}.", "&7Short or repetitive messages do not count."],
+    "injured": ["&7Receive &a%every% &7roleplay {injury|injuries}."],
+    "furniture_place": ["&7Place &a%every% &7{piece|pieces} of furniture."],
+    "vehicle_build": ["&7Finish &a%every% &7{vehicle|vehicles} at a construction station."],
+    "battle_joined": ["&7Participate in &a%every% &7faction {battle|battles}.", "&7Credit is awarded when the battle ends."],
+    "advcraft_item": ["&7Complete &a%every% &7Advanced Crafting {item or alloy|items or alloys}."],
+    "cook_dish": ["&7Finish &a%every% &7{dish|dishes} at cooking pots, stations or boards.", "&7Trough feed counts toward its own activity."],
+    "profession_upgrade": ["&7Purchase &a%every% &7profession {upgrade|upgrades}."],
+    "brew_ingredient": ["&7Add &a%every% &7{ingredient|ingredients} to a brewing cauldron."],
+    "brew_bottle": ["&7Fill &a%every% &7{bottle|bottles} from a brewing cauldron", "&7after at least a minute of cooking."],
+    "brew_age": ["&7Take &a%every% &7{brew|brews} aged at least a year out of a barrel."],
+    "brew_drink": ["&7Drink &a%every% &7finished {brew|brews}."],
+    "animal_universal_feed": ["&7Fill a trough with wheat or vegetables.", "&7Collect feed &a%every% &7{time|times} with an empty-hand right click."],
 }
 
 # Recipe names and station locations, checked against Main's active recipes.
@@ -59,6 +64,14 @@ RECIPE_NAMES = {
 }
 
 
+def counted(line, amount):
+    return re.sub(r"\{([^|{}]*)\|([^|{}]*)\}", lambda m: m[1] if amount == 1 else m[2], line)
+
+
+def article(name):
+    return "an" if name[:1].lower() in "aeiou" else "a"
+
+
 def description(activity_id, activity):
     if activity_id in ACTIONS:
         lines = ACTIONS[activity_id]
@@ -72,20 +85,23 @@ def description(activity_id, activity):
             raise ValueError(f"No audited station location for {station}")
         if separator:
             name = RECIPE_NAMES.get(recipe, recipe.replace("-", " ").title())
-            lines = [f"&7Complete the {name} recipe &a%every% &7times.",
-                     f"&7Use a {STATIONS[station]} and claim queued crafts."]
+            lines = [f"&7Complete the {name} recipe &a%every% &7{{time|times}}.",
+                     f"&7Use {article(STATIONS[station])} {STATIONS[station]} and claim queued crafts."]
         else:
-            lines = [f"&7Complete &a%every% &7recipes at a {STATIONS[station]}.",
+            lines = [f"&7Complete &a%every% &7{{recipe|recipes}} at {article(STATIONS[station])} {STATIONS[station]}.",
                      "&7Claim queued crafts to receive credit."]
         if activity_id == "ingot_coal" and "ingot-station/coal-64" in activity.get("station-actions", {}):
-            lines = ["&7Complete &a%every% &7standard Coal crafts at a Blast Furnace.",
+            lines = ["&7Complete &a%every% &7standard Coal {craft|crafts} at a Blast Furnace.",
                      "&7The bulk Coal recipe also counts toward this task."]
     elif activity.get("craft"):
         name = activity["craft"].removeprefix("v.").replace("_", " ").title()
-        lines = [f"&7Craft &a%every% &7{name} items."]
+        lines = [f"&7Craft &a%every% &7{name} {{item|items}}."]
     else:
         raise ValueError(f"No audited description for {activity_id}")
-    return [*lines, "&7Earn &a%points% &7activity points per completion.", "&7"]
+    # Defaults match ActivityConfiguration: every 1, points 0.
+    lines = [counted(line, activity.get("every", 1)) for line in lines]
+    points = counted("&7Earn &a%points% &7activity {point|points} per completion.", activity.get("points", 0))
+    return [*lines, points, "&7"]
 
 
 def remove_description(block):

@@ -56,6 +56,27 @@ rewards:
                 self.assertIn("Crafting Table", " ".join(description))
                 self.assertIn("%every%", " ".join(description))
 
+    def test_matches_wording_to_amounts(self):
+        source = '''activities:
+  vote:
+    every: 1
+    points: 1
+  injured:
+    every: 2
+    points: 5
+  engineer:
+    station: engineer-station/fuel
+    every: 1
+'''
+        parsed = yaml.safe_load(lore.update(source))["activities"]
+        self.assertEqual(parsed["vote"]["description"][0], "&7Cast &a%every% &7vote for the server.")
+        self.assertEqual(parsed["vote"]["description"][2], "&7Earn &a%points% &7activity point per completion.")
+        self.assertEqual(parsed["injured"]["description"][0], "&7Receive &a%every% &7roleplay injuries.")
+        self.assertEqual(parsed["injured"]["description"][1], "&7Earn &a%points% &7activity points per completion.")
+        self.assertEqual(parsed["engineer"]["description"][:2], [
+            "&7Complete the Arcane Fuel recipe &a%every% &7time.",
+            "&7Use an Engineer Station and claim queued crafts."])
+
     def test_replaces_complete_yaml_values_and_keeps_comments(self):
         for value in ['"Old"', '\n    - "Old"\n    # Keep this comment\n    - "Another"',
                       '|\n      Old multiline\n      explanation', '>\n      Old folded\n      explanation']:
