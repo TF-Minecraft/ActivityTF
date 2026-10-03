@@ -19,11 +19,31 @@ Available activities depend on the gameplay plugins and activity definitions in 
 
 ## Documentation
 
-[Activity lore placeholders and config migration](ACTIVITY-LORE.md)
-
 [Project documentation](https://github.com/TF-Minecraft/Docs/blob/main/projects/ActivityTF/README.md)
 
 Technical documentation is maintained in [TF-Minecraft/Docs](https://github.com/TF-Minecraft/Docs).
+
+[Activity descriptions and placeholders](https://github.com/TF-Minecraft/Docs/blob/main/projects/ActivityTF/ACTIVITY-LORE.md)
+
+## Tests
+
+With Java 21 and the pinned plugin dependencies installed (see the build workflow), run:
+
+```sh
+mvn -B --no-transfer-progress clean verify
+```
+
+JUnit 5 tests cover configuration loading, commands, the GUI, plugin hooks,
+listeners and activity progress, using proxy and Objenesis fixtures for server
+and plugin APIs. CI runs the same command on every push and pull request to `main` and
+uploads the Surefire reports; no coverage gate is enforced. The suite does not
+start a live Paper server.
+
+The description update tool has its own Python tests, which CI does not run:
+
+```sh
+python3 -m unittest discover -s tools -p 'test_*.py'
+```
 
 ## License
 
