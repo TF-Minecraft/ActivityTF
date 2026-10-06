@@ -4,6 +4,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 import net.tfminecraft.activitytf.hooks.TLibsItems;
@@ -16,7 +17,10 @@ import net.tfminecraft.activitytf.utils.ItemPath;
 import net.tfminecraft.activitytf.utils.Utils;
 import net.tfminecraft.activitytf.utils.Weeks;
 
+import java.io.File;
+import java.io.IOException;
 import java.time.DayOfWeek;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -30,6 +34,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.Predicate;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class ActivityConfiguration {
 
@@ -71,6 +77,27 @@ public class ActivityConfiguration {
     private volatile Map<Integer, RewardEntry> milestoneDrops = Map.of();
 
     private volatile Map<String, RewardEntry> dailyRewards = Map.of();
+
+    // Rewards are locked per week: a reload only stages config.yml's rewards, and they replace the
+    // locked ones at the next weekly reset (or on /activity rewards apply).
+    public static final String REWARD_LOCK_FILE = "reward-lock.yml";
+
+    private static final Logger QUIET = quietLogger();
+
+    public record RewardTable(Map<String, List<RewardEntry>> pools, int multiplier, Set<String> multiplierPools,
+                              List<Integer> milestones, Map<Integer, RewardEntry> drops,
+                              Map<String, RewardEntry> daily) {
+    }
+
+    private volatile String rewardWeek;
+
+    private volatile boolean rewardsPending;
+
+    private RewardTable stagedRewards;
+
+    private YamlConfiguration stagedSnapshot;
+
+    private boolean quiet;
 
     public static final String DEFAULT_POOL = "pool";
     public static final RewardEntry DAILY_POOL = new RewardEntry(0, DEFAULT_POOL, List.of(), List.of());
@@ -141,31 +168,25 @@ public class ActivityConfiguration {
         itemsAdderPathConfigured = false;
         loadActivities(config.getConfigurationSection("activities"));
 
-        rewardPools = loadRewardPools(config);
-        rewardMultiplier = rewardMultiplier(config);
-        multiplierPools = loadMultiplierPools(config);
-
         barMax = Math.max(1, config.getInt("bar.max", 50));
         dailyMax = Math.max(1, config.getInt("bar.daily-max", 10));
         voteShare = parseVoteShare(config);
         warnIfVoteShareMisfits();
-        milestones = loadMilestones(config.getIntegerList("bar.milestones"));
-        milestoneDrops = loadMilestoneDrops(config);
-        if (poolNeededButEmpty(rewardPool(), milestoneDrops, milestones)) {
-            plugin.getLogger().warning("rewards.pool is empty or every entry in it was dropped - a milestone"
-                + " can be reached but nothing can ever be claimed.");
+
+        synchronized (this) {
+            stageRewards(config);
+            lockRewards(lockFile(), currentKeys().week(), false);
         }
-        dailyRewards = loadDailyRewards(config);
 
         String itemPathProblem = itemPathWarning(pluginPathConfigured || !craftPaths.isEmpty(),
             itemPathsUsable, missingItemPathPlugins);
         if (itemPathProblem != null) {
-            plugin.getLogger().warning(itemPathProblem);
+            log().warning(itemPathProblem);
         }
 
         String itemsAdderProblem = itemsAdderWarning(itemsAdderPathConfigured, itemsAdderUsable);
         if (itemsAdderProblem != null) {
-            plugin.getLogger().warning(itemsAdderProblem);
+            log().warning(itemsAdderProblem);
         }
 
         guiTitle = config.getString("gui.title", "&8Weekly Activity");
@@ -190,11 +211,192 @@ public class ActivityConfiguration {
         afkMinutes = Math.max(0, config.getInt("playtime.afk-minutes", 5));
 
         if (config.contains("playtime.afk-minutes") && !activities.containsKey("playtime")) {
-            plugin.getLogger().warning("playtime.afk-minutes is set but there is no 'playtime' activity"
+            log().warning("playtime.afk-minutes is set but there is no 'playtime' activity"
                 + " - no minute will ever be credited.");
         }
 
         warnIfBarUnreachable();
+    }
+
+    private Logger log() {
+        return quiet ? QUIET : plugin.getLogger();
+    }
+
+    private static Logger quietLogger() {
+        Logger logger = Logger.getAnonymousLogger();
+        logger.setUseParentHandlers(false);
+        logger.setLevel(Level.OFF);
+        return logger;
+    }
+
+    private File lockFile() {
+        return new File(plugin.getDataFolder(), REWARD_LOCK_FILE);
+    }
+
+    // Parses config.yml's rewards, with warnings, and keeps them as the staged table.
+    void stageRewards(ConfigurationSection config) {
+        stagedSnapshot = rewardSnapshot(config);
+        stagedRewards = parseRewards(stagedSnapshot);
+    }
+
+    /**
+     * Picks the rewards this week pays. A lock for the same week wins over the staged table unless
+     * {@code applyNow}; any other case locks the staged table for {@code week}.
+     */
+    synchronized boolean lockRewards(File file, String week, boolean applyNow) {
+        String staged = stagedSnapshot.saveToString();
+        YamlConfiguration lock = applyNow ? null : readLock(file, week);
+        if (lock != null) {
+            rewardWeek = week;
+            if (lock.saveToString().equals(staged)) {
+                useRewards(stagedRewards);
+                rewardsPending = false;
+                return true;
+            }
+            quiet = true;
+            try {
+                parseRewards(lock);
+            } finally {
+                quiet = false;
+            }
+            rewardsPending = true;
+            log().info("The rewards in config.yml differ from the ones locked for the week of " + week
+                + " - this week keeps the locked rewards, and config.yml's apply from the reset on "
+                + nextReset(week) + ". Run /activity rewards apply to use them now.");
+            return true;
+        }
+
+        boolean saved = writeLock(file, week, stagedSnapshot);
+        if (!saved && applyNow) {
+            return false;
+        }
+        boolean newWeek = rewardWeek != null && !rewardWeek.equals(week);
+        useRewards(stagedRewards);
+        rewardWeek = week;
+        rewardsPending = false;
+        if (newWeek) {
+            log().info("New activity week " + week + " - config.yml's rewards are now locked for it.");
+        }
+        return saved;
+    }
+
+    /** Called with each player-week roll; locks the staged rewards once the week has changed. */
+    public void rollRewardWeek(String week) {
+        String locked = rewardWeek;
+        if (locked != null && !locked.equals(week)) {
+            synchronized (this) {
+                if (!week.equals(rewardWeek)) {
+                    lockRewards(lockFile(), week, false);
+                }
+            }
+        }
+    }
+
+    /** Makes config.yml's (staged) rewards apply to the current week straight away. */
+    public boolean applyRewardsNow() {
+        return lockRewards(lockFile(), currentKeys().week(), true);
+    }
+
+    private YamlConfiguration readLock(File file, String week) {
+        if (!file.isFile()) {
+            return null;
+        }
+        YamlConfiguration lock = YamlConfiguration.loadConfiguration(file);
+        String lockedWeek = lock.getString("week");
+        ConfigurationSection locked = lock.getConfigurationSection("rewards-config");
+        if (lockedWeek == null || locked == null) {
+            log().warning(REWARD_LOCK_FILE + " has no week or rewards-config - locking config.yml's rewards"
+                + " for this week instead.");
+            return null;
+        }
+        return lockedWeek.equals(week) ? rewardSnapshot(locked) : null;
+    }
+
+    private boolean writeLock(File file, String week, YamlConfiguration snapshot) {
+        YamlConfiguration lock = new YamlConfiguration();
+        lock.options().setHeader(List.of(
+            "The activity rewards locked for one week. Written by the plugin - do not edit.",
+            "Edit config.yml instead: its rewards replace these at the next weekly reset,",
+            "or right away with /activity rewards apply."));
+        lock.set("week", week);
+        lock.createSection("rewards-config", plainSection(snapshot));
+        try {
+            lock.save(file);
+            return true;
+        } catch (IOException e) {
+            log().severe("Could not save " + REWARD_LOCK_FILE + " (" + e.getMessage() + ") - config.yml's"
+                + " rewards are used, but a restart this week may not keep them.");
+            return false;
+        }
+    }
+
+    // Everything that decides what a claim pays. bar.milestones is copied as read (jar default included),
+    // the rest only where config.yml sets it, so a lock never picks up the jar's example rewards.
+    static YamlConfiguration rewardSnapshot(ConfigurationSection config) {
+        YamlConfiguration snapshot = new YamlConfiguration();
+        snapshot.set("bar.milestones", config.getIntegerList("bar.milestones"));
+        for (String path : List.of(REWARDS_PATH, DAILY_REWARD_GROUPS_PATH)) {
+            if (!set(config, path)) {
+                continue;
+            }
+            Object value = config.get(path);
+            if (value instanceof ConfigurationSection section) {
+                snapshot.createSection(path, plainSection(section));
+            } else {
+                snapshot.set(path, value);
+            }
+        }
+        return snapshot;
+    }
+
+    private static Map<String, Object> plainSection(ConfigurationSection section) {
+        Map<String, Object> values = new LinkedHashMap<>();
+        for (String key : keys(section)) {
+            Object value = section.get(key);
+            values.put(key, value instanceof ConfigurationSection child ? plainSection(child) : value);
+        }
+        return values;
+    }
+
+    private RewardTable parseRewards(ConfigurationSection source) {
+        rewardPools = loadRewardPools(source);
+        rewardMultiplier = rewardMultiplier(source);
+        multiplierPools = loadMultiplierPools(source);
+        milestones = loadMilestones(source.getIntegerList("bar.milestones"));
+        milestoneDrops = loadMilestoneDrops(source);
+        if (poolNeededButEmpty(rewardPool(), milestoneDrops, milestones)) {
+            log().warning("rewards.pool is empty or every entry in it was dropped - a milestone"
+                + " can be reached but nothing can ever be claimed.");
+        }
+        dailyRewards = loadDailyRewards(source);
+        return activeRewards();
+    }
+
+    private void useRewards(RewardTable table) {
+        rewardPools = table.pools();
+        rewardMultiplier = table.multiplier();
+        multiplierPools = table.multiplierPools();
+        milestones = table.milestones();
+        milestoneDrops = table.drops();
+        dailyRewards = table.daily();
+    }
+
+    public RewardTable activeRewards() {
+        return new RewardTable(rewardPools, rewardMultiplier, multiplierPools, milestones, milestoneDrops,
+            dailyRewards);
+    }
+
+    public String rewardWeek() {
+        return rewardWeek;
+    }
+
+    /** True when config.yml's rewards differ from the locked ones and wait for the next reset. */
+    public boolean rewardsPending() {
+        return rewardsPending;
+    }
+
+    public String nextReset(String week) {
+        return LocalDate.parse(week).plusWeeks(1) + String.format(Locale.ROOT, " %02d:00", resetHour);
     }
 
     static final String REROLLS_PER_DAY_PATH = "reroll.per-day";
@@ -223,14 +425,14 @@ public class ActivityConfiguration {
             return fallback;
         }
         if (!(raw instanceof Number number)) {
-            plugin.getLogger().warning(path + " is not a number ('"
+            log().warning(path + " is not a number ('"
                 + Utils.safeForLog(String.valueOf(raw)) + "') - using " + fallback + ".");
             return fallback;
         }
         long value = number.longValue();
         if (value < min || value > max) {
             long clamp = Math.max(min, Math.min(max, value));
-            plugin.getLogger().warning(path + " " + value
+            log().warning(path + " " + value
                 + " is outside " + min + "-" + max + " - using " + clamp + ".");
             return (int) clamp;
         }
@@ -247,7 +449,7 @@ public class ActivityConfiguration {
 
     private void loadActivities(ConfigurationSection section) {
         if (section == null) {
-            plugin.getLogger().warning("config.yml has no 'activities' section - the bar can never fill.");
+            log().warning("config.yml has no 'activities' section - the bar can never fill.");
             activities = new LinkedHashMap<>();
             craftActivities = new HashMap<>();
             craftPaths = List.of();
@@ -268,14 +470,14 @@ public class ActivityConfiguration {
         for (String id : section.getKeys(false)) {
             ConfigurationSection entry = section.getConfigurationSection(id);
             if (entry == null) {
-                plugin.getLogger().warning("Activity '" + id + "' is not a configuration section - it is"
+                log().warning("Activity '" + id + "' is not a configuration section - it is"
                     + " dropped entirely and nothing will ever be credited to it.");
                 continue;
             }
 
             int points = wholeNumber(entry, id, "points", 0);
             if (points <= 0) {
-                plugin.getLogger().warning("Activity '" + id + "' is worth " + points
+                log().warning("Activity '" + id + "' is worth " + points
                     + " points - skipping it, since meeting its goal could never move the bar.");
                 continue;
             }
@@ -306,11 +508,11 @@ public class ActivityConfiguration {
                 String key = normalizeProfessionId(profession);
                 String previous = professions.put(key, id);
                 if (previous != null) {
-                    plugin.getLogger().warning("Activities '" + previous + "' and '" + id
+                    log().warning("Activities '" + previous + "' and '" + id
                         + "' both track profession '" + key + "' - only '" + id + "' will be fed.");
                 }
                 if (dailyCap <= 0) {
-                    plugin.getLogger().warning("Activity '" + id + "' tracks profession '" + key
+                    log().warning("Activity '" + id + "' tracks profession '" + key
                         + "' with no daily-cap - profession XP is unbounded, so this activity can"
                         + " fill the bar on its own.");
                 }
@@ -324,7 +526,7 @@ public class ActivityConfiguration {
         }
 
         if (guaranteed.size() > PlayerData.TASKS_PER_DAY) {
-            plugin.getLogger().warning(guaranteed.size() + " activities are marked daily-guaranteed but only "
+            log().warning(guaranteed.size() + " activities are marked daily-guaranteed but only "
                 + PlayerData.TASKS_PER_DAY + " tasks are handed out a day - every draw is "
                 + PlayerData.TASKS_PER_DAY + " of them picked at random and no other activity can"
                 + " ever be drawn.");
@@ -346,7 +548,7 @@ public class ActivityConfiguration {
             return;
         }
         if (station.isBlank()) {
-            plugin.getLogger().warning("Activity '" + id + "' has a malformed 'station': "
+            log().warning("Activity '" + id + "' has a malformed 'station': "
                 + Utils.safeForLog(station) + " - expected <station> or <station>/<recipe> - nothing will"
                 + " ever feed that activity.");
             return;
@@ -361,7 +563,7 @@ public class ActivityConfiguration {
             }
         }
         if (other != null) {
-            plugin.getLogger().warning("Activity '" + id + "' has both '" + other + "' and 'station' - an"
+            log().warning("Activity '" + id + "' has both '" + other + "' and 'station' - an"
                 + " activity can only be fed by one source, so 'station' is ignored and '" + other
                 + "' is kept.");
             return;
@@ -369,7 +571,7 @@ public class ActivityConfiguration {
 
         String stationKey = stationKey(station);
         if (stationKey.isEmpty() || stationKey.startsWith("/") || stationKey.endsWith("/")) {
-            plugin.getLogger().warning("Activity '" + id + "' has a malformed 'station': "
+            log().warning("Activity '" + id + "' has a malformed 'station': "
                 + Utils.safeForLog(station) + " - expected <station> or <station>/<recipe> - nothing will"
                 + " ever feed that activity.");
             return;
@@ -378,7 +580,7 @@ public class ActivityConfiguration {
         String previous = stations.put(stationKey, id);
         amounts.remove(stationKey);
         if (previous != null) {
-            plugin.getLogger().warning("Activities '" + previous + "' and '" + id
+            log().warning("Activities '" + previous + "' and '" + id
                 + "' both track station '" + stationKey + "' - only '" + id + "' will be fed.");
         }
         ConfigurationSection alternatives = entry.getConfigurationSection("station-actions");
@@ -392,7 +594,7 @@ public class ActivityConfiguration {
             if (key.isEmpty() || key.startsWith("/") || key.endsWith("/") || !key.contains("/")
                     || key.equals(stationKey) || !Double.isFinite(value) || value < 1
                     || value > Integer.MAX_VALUE || Math.rint(value) != value) {
-                plugin.getLogger().warning("Activity '" + id + "' has invalid station-actions entry '"
+                log().warning("Activity '" + id + "' has invalid station-actions entry '"
                     + Utils.safeForLog(recipe) + "' - expected a different <station>/<recipe>"
                     + " with a positive whole-number amount within the int range.");
                 continue;
@@ -400,7 +602,7 @@ public class ActivityConfiguration {
             int amount = (int) value;
             String displaced = stations.put(key, id);
             if (displaced != null) {
-                plugin.getLogger().warning("Activities '" + displaced + "' and '" + id
+                log().warning("Activities '" + displaced + "' and '" + id
                     + "' both track station '" + key + "' - only '" + id + "' will be fed.");
             }
             amounts.put(key, amount);
@@ -427,7 +629,7 @@ public class ActivityConfiguration {
                            String name, String id) {
         String problem = registerCraft(crafts, paths, name, id, ActivityConfiguration::craftableItem);
         if (problem != null) {
-            plugin.getLogger().warning(problem);
+            log().warning(problem);
         }
     }
 
@@ -497,7 +699,7 @@ public class ActivityConfiguration {
 
     private int wholeNumber(ConfigurationSection entry, String id, String key, int fallback) {
         if (entry.contains(key) && !entry.isInt(key)) {
-            plugin.getLogger().warning("activities." + id + "." + key + " is not a whole number ('"
+            log().warning("activities." + id + "." + key + " is not a whole number ('"
                 + entry.get(key) + "') - using " + fallback + ".");
             return fallback;
         }
@@ -506,7 +708,7 @@ public class ActivityConfiguration {
 
     private boolean flag(ConfigurationSection entry, String id, String key, boolean fallback) {
         if (entry.contains(key) && !entry.isBoolean(key)) {
-            plugin.getLogger().warning("activities." + id + "." + key + " is not true or false ('"
+            log().warning("activities." + id + "." + key + " is not true or false ('"
                 + entry.get(key) + "') - using " + fallback + ".");
             return fallback;
         }
@@ -519,7 +721,7 @@ public class ActivityConfiguration {
             return List.of();
         }
         if (!(raw instanceof List<?> list)) {
-            plugin.getLogger().warning("activities." + id + "." + CLICK_COMMANDS_KEY + " is not a list of"
+            log().warning("activities." + id + "." + CLICK_COMMANDS_KEY + " is not a list of"
                 + " commands ('" + Utils.safeForLog(String.valueOf(raw)) + "') - no command will ever be run"
                 + " for this activity.");
             return List.of();
@@ -538,7 +740,7 @@ public class ActivityConfiguration {
         if (raw instanceof String text) {
             return text.isBlank() ? List.of() : List.of(text);
         }
-        plugin.getLogger().warning("activities." + id + "." + DESCRIPTION_KEY + " is neither a string nor a"
+        log().warning("activities." + id + "." + DESCRIPTION_KEY + " is neither a string nor a"
             + " list of lines ('" + Utils.safeForLog(String.valueOf(raw)) + "') - this activity shows no"
             + " description.");
         return List.of();
@@ -557,7 +759,7 @@ public class ActivityConfiguration {
     private int barLength(int length) {
         if (length < 1 || length > 100) {
             int clamped = Math.max(1, Math.min(100, length));
-            plugin.getLogger().warning("bar.length " + length + " is outside 1-100 - using " + clamped + ".");
+            log().warning("bar.length " + length + " is outside 1-100 - using " + clamped + ".");
             return clamped;
         }
         return length;
@@ -596,7 +798,7 @@ public class ActivityConfiguration {
         if (named != null) {
             for (String key : keys(named)) {
                 if (!isPoolName(key) || poolName(key).equals(DEFAULT_POOL)) {
-                    plugin.getLogger().warning("rewards.pools." + Utils.safeForLog(key)
+                    log().warning("rewards.pools." + Utils.safeForLog(key)
                         + " must use a pool_<name> name - ignored.");
                     continue;
                 }
@@ -617,7 +819,7 @@ public class ActivityConfiguration {
 
             int weight = entry.get("weight") instanceof Number number ? number.intValue() : 1;
             if (weight <= 0) {
-                plugin.getLogger().warning(where + " has weight " + weight + " - a weight must be above 0,"
+                log().warning(where + " has weight " + weight + " - a weight must be above 0,"
                     + " so this reward is skipped and can never be drawn.");
                 continue;
             }
@@ -633,7 +835,7 @@ public class ActivityConfiguration {
             List<RewardEntry.Item> items = loadRewardItems(entry.get("items"), where);
 
             if (commands.isEmpty() && items.isEmpty()) {
-                plugin.getLogger().warning(where + " has no commands and no items - skipped, since drawing it"
+                log().warning(where + " has no commands and no items - skipped, since drawing it"
                     + " would pay the player nothing.");
                 continue;
             }
@@ -651,7 +853,7 @@ public class ActivityConfiguration {
             return items;
         }
         if (!(raw instanceof List<?> list)) {
-            plugin.getLogger().warning(where + ".items is not a list of 'item:'/'amount:' blocks ('"
+            log().warning(where + ".items is not a list of 'item:'/'amount:' blocks ('"
                 + Utils.safeForLog(String.valueOf(raw)) + "') - no item is handed over for this entry.");
             return items;
         }
@@ -659,12 +861,12 @@ public class ActivityConfiguration {
         for (Object element : list) {
             String at = where + ".items[" + index++ + "]";
             if (!(element instanceof Map<?, ?> map)) {
-                plugin.getLogger().warning(at + " is not an 'item:'/'amount:' block - ignored.");
+                log().warning(at + " is not an 'item:'/'amount:' block - ignored.");
                 continue;
             }
             Object path = map.get("item");
             if (path == null || String.valueOf(path).isBlank()) {
-                plugin.getLogger().warning(at + " has no 'item:' path - ignored.");
+                log().warning(at + " has no 'item:' path - ignored.");
                 continue;
             }
             String value = String.valueOf(path).strip();
@@ -678,14 +880,14 @@ public class ActivityConfiguration {
 
     private boolean validItemPath(String value, String at) {
         if (ItemPath.isUnsupportedPath(value)) {
-            plugin.getLogger().warning("Unsupported item path '" + Utils.safeForLog(value) + "' at " + at
+            log().warning("Unsupported item path '" + Utils.safeForLog(value) + "' at " + at
                 + " - only bare Material names, v.<material>, m.<type>.<id> and ia.<namespace:id>"
                 + " are supported - ignored.");
             return false;
         }
         if (ItemPath.isItemsAdderPath(value)) {
             if (ItemPath.itemsAdderId(value) == null) {
-                plugin.getLogger().warning("Malformed item path '" + Utils.safeForLog(value) + "' at " + at
+                log().warning("Malformed item path '" + Utils.safeForLog(value) + "' at " + at
                     + " - expected ia.<namespace:id> - ignored.");
                 return false;
             }
@@ -694,7 +896,7 @@ public class ActivityConfiguration {
         }
         if (ItemPath.isPluginPath(value)) {
             if (ItemPath.pluginPath(value) == null) {
-                plugin.getLogger().warning("Malformed item path '" + Utils.safeForLog(value) + "' at " + at
+                log().warning("Malformed item path '" + Utils.safeForLog(value) + "' at " + at
                     + " - expected m.<type>.<id> - ignored.");
                 return false;
             }
@@ -702,7 +904,7 @@ public class ActivityConfiguration {
             return true;
         }
         if (ItemPath.material(value) == null) {
-            plugin.getLogger().warning("Unknown material '" + Utils.safeForLog(value) + "' at " + at
+            log().warning("Unknown material '" + Utils.safeForLog(value) + "' at " + at
                 + " - ignored.");
             return false;
         }
@@ -714,19 +916,19 @@ public class ActivityConfiguration {
             return 1;
         }
         if (!(raw instanceof Number number)) {
-            plugin.getLogger().warning(at + " has a non-numeric amount '" + Utils.safeForLog(String.valueOf(raw))
+            log().warning(at + " has a non-numeric amount '" + Utils.safeForLog(String.valueOf(raw))
                 + "' - using 1.");
             return 1;
         }
         long amount = number.longValue();
         if (number.doubleValue() != amount) {
-            plugin.getLogger().warning(at + " amount '" + Utils.safeForLog(String.valueOf(raw))
+            log().warning(at + " amount '" + Utils.safeForLog(String.valueOf(raw))
                 + "' is not a whole number - using 1.");
             return 1;
         }
         if (amount < 1 || amount > 64) {
             long clamped = Math.max(1, Math.min(64, amount));
-            plugin.getLogger().warning(at + " amount " + amount + " is outside 1-64 - using " + clamped + ".");
+            log().warning(at + " amount " + amount + " is outside 1-64 - using " + clamped + ".");
             return (int) clamped;
         }
         return (int) amount;
@@ -739,13 +941,13 @@ public class ActivityConfiguration {
             return Set.of();
         }
         if (!(raw instanceof List<?> entries)) {
-            plugin.getLogger().warning(path + " must be a list of pool names - no pools are multiplied.");
+            log().warning(path + " must be a list of pool names - no pools are multiplied.");
             return Set.of();
         }
         Set<String> names = new HashSet<>();
         for (Object entry : entries) {
             if (!(entry instanceof String name) || !isPoolName(name)) {
-                plugin.getLogger().warning(path + " contains an invalid pool name - ignored.");
+                log().warning(path + " contains an invalid pool name - ignored.");
                 continue;
             }
             names.add(poolName(name));
@@ -763,19 +965,19 @@ public class ActivityConfiguration {
             return 1;
         }
         if (!(raw instanceof Number number)) {
-            plugin.getLogger().warning(REWARDS_MULTIPLIER_PATH + " is not a number ('"
+            log().warning(REWARDS_MULTIPLIER_PATH + " is not a number ('"
                 + Utils.safeForLog(String.valueOf(raw)) + "') - using 1.");
             return 1;
         }
         long value = number.longValue();
         if (number.doubleValue() != value) {
-            plugin.getLogger().warning(REWARDS_MULTIPLIER_PATH + " '" + Utils.safeForLog(String.valueOf(raw))
+            log().warning(REWARDS_MULTIPLIER_PATH + " '" + Utils.safeForLog(String.valueOf(raw))
                 + "' is not a whole number - using 1.");
             return 1;
         }
         if (value < 1 || value > 64) {
             long clamped = Math.max(1, Math.min(64, value));
-            plugin.getLogger().warning(REWARDS_MULTIPLIER_PATH + " " + value + " is outside 1-64 - using "
+            log().warning(REWARDS_MULTIPLIER_PATH + " " + value + " is outside 1-64 - using "
                 + clamped + ".");
             return (int) clamped;
         }
@@ -786,7 +988,7 @@ public class ActivityConfiguration {
         ConfigurationSection section = section(config, REWARDS_DROPS_PATH);
         if (section == null) {
             if (set(config, REWARDS_DROPS_PATH)) {
-                plugin.getLogger().warning(REWARDS_DROPS_PATH + " is not a section of drop_<N> keys - ignored,"
+                log().warning(REWARDS_DROPS_PATH + " is not a section of drop_<N> keys - ignored,"
                     + " every milestone draws from the pool.");
             }
             return Map.of();
@@ -796,11 +998,11 @@ public class ActivityConfiguration {
             String at = REWARDS_DROPS_PATH + "." + key;
             String number = key.startsWith("drop_") ? key.substring(5) : "";
             if (!number.matches("[1-9][0-9]*")) {
-                plugin.getLogger().warning(at + " is not a drop_<N> key (N = 1, 2, ...) - ignored.");
+                log().warning(at + " is not a drop_<N> key (N = 1, 2, ...) - ignored.");
                 continue;
             }
             if (number.length() > 9 || Integer.parseInt(number) > milestones.size()) {
-                plugin.getLogger().warning(at + " is past the last of the " + milestones.size()
+                log().warning(at + " is past the last of the " + milestones.size()
                     + " bar.milestones - ignored.");
                 continue;
             }
@@ -826,7 +1028,7 @@ public class ActivityConfiguration {
     private RewardEntry warnedPoolRef(String at, String value, String otherwise) {
         String pool = poolName(value);
         if (rewardPool(pool).isEmpty()) {
-            plugin.getLogger().warning(at + " draws from '" + Utils.safeForLog(pool) + "', which is not a pool"
+            log().warning(at + " draws from '" + Utils.safeForLog(pool) + "', which is not a pool"
                 + " under rewards.pools or rewards, or has no usable entry - " + otherwise + ".");
         }
         return poolRef(pool);
@@ -844,12 +1046,12 @@ public class ActivityConfiguration {
         int amount = parts.length == 1 ? 1
             : parts.length == 2 && parts[1].matches("[0-9]{1,2}") ? Integer.parseInt(parts[1]) : 0;
         if (amount < 1 || amount > 64) {
-            plugin.getLogger().warning(at + " '" + Utils.safeForLog(value) + "' is not '<item path>' or"
+            log().warning(at + " '" + Utils.safeForLog(value) + "' is not '<item path>' or"
                 + " '<item path> <amount 1-64>' - " + otherwise + ".");
             return null;
         }
         if (!validItemPath(parts[0], at)) {
-            plugin.getLogger().warning(at + " has no usable item path - " + otherwise + ".");
+            log().warning(at + " has no usable item path - " + otherwise + ".");
             return null;
         }
         return new RewardEntry(1, itemName(parts[0]), List.of(), List.of(new RewardEntry.Item(parts[0], amount)));
@@ -858,7 +1060,7 @@ public class ActivityConfiguration {
     private RewardEntry fixedItemBlock(String at, ConfigurationSection block, String otherwise) {
         String path = block.getString("item");
         if (path == null || path.isBlank()) {
-            plugin.getLogger().warning(at + " has no 'item:' path - " + otherwise + ".");
+            log().warning(at + " has no 'item:' path - " + otherwise + ".");
             return null;
         }
         path = path.strip();
@@ -867,13 +1069,13 @@ public class ActivityConfiguration {
         String amountText = amountRaw == null ? "" : String.valueOf(amountRaw).strip();
         int amount = amountRaw == null ? 1 : amountText.matches("[0-9]{1,2}") ? Integer.parseInt(amountText) : 0;
         if (amount < 1 || amount > 64) {
-            plugin.getLogger().warning(at + ".amount '" + Utils.safeForLog(amountText) + "' is not 1-64 - "
+            log().warning(at + ".amount '" + Utils.safeForLog(amountText) + "' is not 1-64 - "
                 + otherwise + ".");
             return null;
         }
 
         if (!validItemPath(path, at)) {
-            plugin.getLogger().warning(at + " has no usable item path - " + otherwise + ".");
+            log().warning(at + " has no usable item path - " + otherwise + ".");
             return null;
         }
 
@@ -884,7 +1086,7 @@ public class ActivityConfiguration {
             }
         }
         if (!unknown.isEmpty()) {
-            plugin.getLogger().warning(at + " has unknown key(s) " + Utils.safeForLog(String.join(", ", unknown))
+            log().warning(at + " has unknown key(s) " + Utils.safeForLog(String.join(", ", unknown))
                 + " - ignored.");
         }
 
@@ -895,7 +1097,7 @@ public class ActivityConfiguration {
         ConfigurationSection section = section(config, DAILY_REWARD_GROUPS_PATH);
         if (section == null) {
             if (set(config, DAILY_REWARD_GROUPS_PATH)) {
-                plugin.getLogger().warning(DAILY_REWARD_GROUPS_PATH + " is not a section of <group>: <item>"
+                log().warning(DAILY_REWARD_GROUPS_PATH + " is not a section of <group>: <item>"
                     + " lines - ignored, no daily reward is paid.");
             }
             return Map.of();
@@ -918,7 +1120,7 @@ public class ActivityConfiguration {
             }
         }
         if (rewardPool().isEmpty() && groups.containsValue(DAILY_POOL)) {
-            plugin.getLogger().warning("rewards.pool is empty or every entry in it was dropped - a "
+            log().warning("rewards.pool is empty or every entry in it was dropped - a "
                 + DAILY_REWARD_GROUPS_PATH + " group set to 'pool' can never be paid its daily reward.");
         }
         return Collections.unmodifiableMap(groups);
@@ -945,7 +1147,7 @@ public class ActivityConfiguration {
         TreeSet<Integer> milestones = new TreeSet<>();
         for (Integer milestone : raw) {
             if (milestone == null || milestone < 1 || milestone > barMax) {
-                plugin.getLogger().warning("bar.milestones value " + milestone + " is outside 1-" + barMax
+                log().warning("bar.milestones value " + milestone + " is outside 1-" + barMax
                     + " - ignored.");
                 continue;
             }
@@ -953,7 +1155,7 @@ public class ActivityConfiguration {
         }
 
         if (milestones.isEmpty()) {
-            plugin.getLogger().warning("bar.milestones is missing or has no usable value - falling back to"
+            log().warning("bar.milestones is missing or has no usable value - falling back to"
                 + " 10 and 20, clipped to bar.max (" + barMax + ").");
             for (int fallback : new int[] {10, 20}) {
                 if (fallback <= barMax) {
@@ -973,17 +1175,17 @@ public class ActivityConfiguration {
         }
         ActivityDef vote = activities.get("vote");
         if (vote == null) {
-            plugin.getLogger().warning("bar.vote-share is " + voteShare + " but there is no 'vote' activity"
+            log().warning("bar.vote-share is " + voteShare + " but there is no 'vote' activity"
                 + " - the share is not applied.");
             return;
         }
         if (!guaranteedActivities.contains("vote")) {
-            plugin.getLogger().warning("bar.vote-share is " + voteShare + " but 'vote' is not daily-guaranteed"
+            log().warning("bar.vote-share is " + voteShare + " but 'vote' is not daily-guaranteed"
                 + " - on a day it is not drawn, the reserved share cannot be earned.");
         }
         int reserved = dailyMax - nonVoteDailyMax();
         if (vote.dailyCap() > 0 && vote.capPoints() < reserved) {
-            plugin.getLogger().warning("activities.vote.daily-cap " + vote.dailyCap() + " (" + vote.capPoints()
+            log().warning("activities.vote.daily-cap " + vote.dailyCap() + " (" + vote.capPoints()
                 + " points) is below the "
                 + reserved + " points bar.vote-share keeps for voting - the rest of that share is never earned.");
         }
@@ -1001,7 +1203,7 @@ public class ActivityConfiguration {
         String warning = unreachableWarning(caps, activities.size(), shared ? nonVoteDailyMax() : dailyMax,
             milestones.get(0));
         if (warning != null) {
-            plugin.getLogger().warning(shared ? warning + " This is without voting: bar.vote-share keeps "
+            log().warning(shared ? warning + " This is without voting: bar.vote-share keeps "
                 + (dailyMax - nonVoteDailyMax()) + " of bar.daily-max for it." : warning);
         }
     }
@@ -1043,7 +1245,7 @@ public class ActivityConfiguration {
         if (ItemPath.isItemsAdderPath(name)) {
             String id = ItemPath.itemsAdderId(name);
             if (id == null) {
-                plugin.getLogger().warning("Malformed item path '" + Utils.safeForLog(name) + "' at " + path
+                log().warning("Malformed item path '" + Utils.safeForLog(name) + "' at " + path
                     + " - expected ia.<namespace:id> - using PAPER.");
                 return null;
             }
@@ -1055,7 +1257,7 @@ public class ActivityConfiguration {
         }
         String resolved = ItemPath.pluginPath(name);
         if (resolved == null) {
-            plugin.getLogger().warning("Malformed item path '" + Utils.safeForLog(name) + "' at " + path
+            log().warning("Malformed item path '" + Utils.safeForLog(name) + "' at " + path
                 + " - expected m.<type>.<id> - using PAPER.");
             return null;
         }
@@ -1065,14 +1267,14 @@ public class ActivityConfiguration {
 
     private Material material(String name, String path) {
         if (ItemPath.isUnsupportedPath(name)) {
-            plugin.getLogger().warning("Unsupported item path '" + Utils.safeForLog(name) + "' at " + path
+            log().warning("Unsupported item path '" + Utils.safeForLog(name) + "' at " + path
                 + " - only bare Material names, v.<material>, m.<type>.<id> and ia.<namespace:id>"
                 + " are supported - using PAPER.");
             return Material.PAPER;
         }
         Material material = ItemPath.material(name);
         if (material == null) {
-            plugin.getLogger().warning("Unknown material '" + name + "' at " + path + " - using PAPER.");
+            log().warning("Unknown material '" + name + "' at " + path + " - using PAPER.");
             return Material.PAPER;
         }
         return material;
@@ -1082,7 +1284,7 @@ public class ActivityConfiguration {
         try {
             return DayOfWeek.valueOf(name.trim().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
-            plugin.getLogger().warning("Unknown reset.day '" + name + "' - using MONDAY.");
+            log().warning("Unknown reset.day '" + name + "' - using MONDAY.");
             return DayOfWeek.MONDAY;
         }
     }

@@ -171,6 +171,7 @@ public class PlayerStore {
         }
 
         ActivityConfiguration.Keys keys = config.currentKeys();
+        config.rollRewardWeek(keys.week());
         data = new PlayerData(keys.week(), keys.day());
         players.put(uuid, data);
         dirty = true;
@@ -184,6 +185,7 @@ public class PlayerStore {
         }
 
         ActivityConfiguration.Keys keys = config.currentKeys();
+        config.rollRewardWeek(keys.week());
         if (data.roll(keys.week(), keys.day()) | data.clamp(config.barMax())) {
             dirty = true;
         }

@@ -911,14 +911,79 @@ class ActivityAdminCommandTest {
         ActivityManager manager = manager();
         ActivityCommand command = command(manager, UUID.randomUUID(), "Steve");
 
-        assertEquals(List.of("reload", "check", "reset", "givereroll", "add", "addpoints"),
+        assertEquals(List.of("reload", "rewards", "check", "reset", "givereroll", "add", "addpoints"),
             command.onTabComplete(admin().bukkit, null, "activity", new String[] {""}));
+        assertEquals(List.of("apply"),
+            command.onTabComplete(admin().bukkit, null, "activity", new String[] {"rewards", ""}));
         assertEquals(List.of("Steve"),
             command.onTabComplete(admin().bukkit, null, "activity", new String[] {"addpoints", "Ste"}));
         assertEquals(List.of(),
             command.onTabComplete(admin().bukkit, null, "activity", new String[] {"addpoints", "Steve", ""}));
         assertEquals(List.of("Steve"),
             command.onTabComplete(admin().bukkit, null, "activity", new String[] {"givereroll", "Ste"}));
+    }
+
+    private static void lockedWeek(ActivityManager manager, String week, boolean pending) {
+        try {
+            Field field = manager.getConfiguration().getClass().getDeclaredField("rewardWeek");
+            field.setAccessible(true);
+            field.set(manager.getConfiguration(), week);
+            field = manager.getConfiguration().getClass().getDeclaredField("rewardsPending");
+            field.setAccessible(true);
+            field.setBoolean(manager.getConfiguration(), pending);
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    @Test
+    void rewardsShowsTheLockedWeek() {
+        ActivityManager manager = manager();
+        lockedWeek(manager, "2026-10-05", false);
+
+        Sender sender = admin();
+        command(manager, UUID.randomUUID(), "Steve").onCommand(
+            sender.bukkit, null, "activity", new String[] {"rewards"});
+
+        assertEquals("Weekly rewards are locked for the week of 2026-10-05.\n"
+            + "config.yml has the same rewards - nothing is waiting for the reset.", sender.all());
+    }
+
+    @Test
+    void rewardsSaysWhenConfigChangesWaitForTheReset() {
+        ActivityManager manager = manager();
+        lockedWeek(manager, "2026-10-05", true);
+
+        Sender sender = admin();
+        command(manager, UUID.randomUUID(), "Steve").onCommand(
+            sender.bukkit, null, "activity", new String[] {"rewards"});
+
+        assertTrue(sender.all().endsWith("config.yml has different rewards: they apply at the weekly reset"
+            + " (2026-10-12 00:00). Use /activity rewards apply to use them now."), sender.all());
+    }
+
+    @Test
+    void rewardsWithAnUnknownArgumentShowsUsage() {
+        ActivityManager manager = manager();
+        lockedWeek(manager, "2026-10-05", true);
+
+        Sender sender = admin();
+        List<String> lines = audit(() -> command(manager, UUID.randomUUID(), "Steve").onCommand(
+            sender.bukkit, null, "activity", new String[] {"rewards", "now"}));
+
+        assertTrue(sender.all().startsWith("Usage: /activity <reload|rewards [apply]|"), sender.all());
+        assertEquals(List.of("ACTIVITY-AUDIT sender=\"Justin\" action=rewards-apply result=usage"), lines);
+    }
+
+    @Test
+    void rewardsNeedsTheAdminPermission() {
+        ActivityManager manager = manager();
+
+        Sender sender = checkOnly();
+        command(manager, UUID.randomUUID(), "Steve").onCommand(
+            sender.bukkit, null, "activity", new String[] {"rewards", "apply"});
+
+        assertEquals("No permission.", sender.all());
     }
 
     @Test

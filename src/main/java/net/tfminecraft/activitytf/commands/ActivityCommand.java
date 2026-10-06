@@ -28,7 +28,9 @@ import java.util.UUID;
 public class ActivityCommand implements CommandExecutor, TabCompleter {
 
     private static final List<String> SUBCOMMANDS =
-        Arrays.asList("reload", "check", "reset", "givereroll", "add", "addpoints");
+        Arrays.asList("reload", "rewards", "check", "reset", "givereroll", "add", "addpoints");
+
+    private static final String APPLY = "apply";
 
     private static final List<String> READ_ONLY_SUBCOMMANDS = List.of("check");
 
@@ -80,7 +82,11 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
             case "reload":
                 manager.reload();
                 sender.sendMessage(messages().get("admin.reloaded"));
+                rewardStatus(sender);
                 audit(sender, "action=reload result=done");
+                return true;
+            case "rewards":
+                handleRewards(sender, args);
                 return true;
             case "check":
                 handleCheck(sender, args);
@@ -101,6 +107,40 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
                 usage(sender);
                 return true;
         }
+    }
+
+    private void handleRewards(CommandSender sender, String[] args) {
+        if (args.length == 1) {
+            rewardStatus(sender);
+            return;
+        }
+        if (args.length != 2 || !args[1].equalsIgnoreCase(APPLY)) {
+            usage(sender);
+            audit(sender, "action=rewards-apply result=usage");
+            return;
+        }
+
+        manager.reload();
+        ActivityConfiguration config = manager.getConfiguration();
+        if (!config.applyRewardsNow()) {
+            sender.sendMessage(messages().get("admin.rewards-apply-failed"));
+            audit(sender, "action=rewards-apply week=" + config.rewardWeek() + " result=save-failed");
+            return;
+        }
+        sender.sendMessage(messages().get("admin.rewards-applied", "%week%", config.rewardWeek()));
+        audit(sender, "action=rewards-apply week=" + config.rewardWeek() + " result=done");
+    }
+
+    private void rewardStatus(CommandSender sender) {
+        ActivityConfiguration config = manager.getConfiguration();
+        String week = config.rewardWeek();
+        if (week == null) {
+            return;
+        }
+        sender.sendMessage(messages().get("admin.rewards-locked", "%week%", week));
+        sender.sendMessage(config.rewardsPending()
+            ? messages().get("admin.rewards-pending", "%reset%", config.nextReset(week))
+            : messages().get("admin.rewards-in-sync"));
     }
 
     private void usage(CommandSender sender) {
@@ -426,6 +466,10 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
             && (sub.equals("reset") || sub.equals("add") || sub.equals("addpoints") || sub.equals("check")
                 || sub.equals("givereroll"))) {
             return filter(onlineNames(), args[1]);
+        }
+
+        if (args.length == 2 && sub.equals("rewards")) {
+            return filter(List.of(APPLY), args[1]);
         }
 
         if (args.length == 5 && sub.equals("add")) {
