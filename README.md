@@ -10,6 +10,7 @@ Tasks only start earning activity credit once revealed, giving players a reason 
 
 - **Personal daily task menus** — a fresh selection of activities, with progress displays and descriptions for revealed tasks.
 - **Weekly reward milestones** — activity points unlock claimable rewards from weighted reward pools.
+- **Week-locked rewards** — each week pays from the reward pools it started with; reward edits apply at the next weekly reset, or right away with `/activity rewards apply`.
 - **Daily reveal rewards** — players can claim a separate reward after revealing all of their daily tasks.
 - **Activities across the server** — supported integrations track actions such as voting, cooking, archaeology, instrument playing, market sales, and vehicle building.
 - **Varied progression limits** — daily caps and a voting share of the daily allowance shape how points are earned.

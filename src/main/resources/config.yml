@@ -732,13 +732,21 @@ activities:
 # commands below still pays it out. The same goes for an empty pool. To reward
 # Bedrock/Floodgate or other unsafe names, write reward commands using only
 # %uuid% (e.g. via a plugin that can look a player up by UUID).
+# Rewards are locked per week. The first load of each week copies this
+# rewards section, bar.milestones and daily-reward.groups to
+# reward-lock.yml, and the whole week pays from that copy. A reload or
+# restart only stages new values here; they apply at the next weekly
+# reset, so an act change can be set up mid-week without changing what
+# this week's milestones pay. /activity rewards shows the locked week and
+# whether changes are waiting; /activity rewards apply reloads and uses
+# them right away.
 rewards:
   # Spins per whitelisted pool milestone: at 2, it draws from the pool
   # twice, independently - the same entry can come up both times - and
   # pays each draw's items and commands at the amounts written, with one chat
   # line per draw. A fixed drop has nothing to spin and hands over its amount
-  # times this instead. Read at payout, so a reload changes what the next
-  # claim pays. 1-64; anything outside that is clamped, and 0 or a negative
+  # times this instead. Locked with the week's rewards, so a change applies
+  # from the next weekly reset. 1-64; anything outside that is clamped, and 0 or a negative
   # reads as 1 rather than as "pay nothing". A total above one stack is
   # handed over as whole stacks of the item's own maximum size.
   multiplier: 1

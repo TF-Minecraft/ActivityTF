@@ -34,11 +34,16 @@ gui:
   filler-name: "&8 "
 placeholder: { done: "&a✔", not-done: "&c✘" }
 admin:
-  usage: "&eUsage: /activity <reload|check <player>|reset <player>|givereroll <player>|add <player> <activity> <count> [--force]>"
+  usage: "&eUsage: /activity <reload|rewards [apply]|check <player>|reset <player>|givereroll <player>|add <player> <activity> <count> [--force]>"
   usage-addpoints: "&eUsage: /activity addpoints <player> <points>"
   no-permission: "&cNo permission."
   players-only: "&cPlayers only."
   reloaded: "&aactivity reloaded."
+  rewards-locked: "&eWeekly rewards are locked for the week of &f%week%&e."
+  rewards-in-sync: "&aconfig.yml has the same rewards - nothing is waiting for the reset."
+  rewards-pending: "&econfig.yml has different rewards: they apply at the weekly reset (&f%reset%&e). Use &f/activity rewards apply&e to use them now."
+  rewards-applied: "&aconfig.yml's rewards now apply to the week of &f%week%&a."
+  rewards-apply-failed: "&cCould not save reward-lock.yml - this week keeps its locked rewards. See the console."
   unknown-player: "&cUnknown player: %player%"
   unknown-activity: "&cUnknown activity: %activity%"
   invalid-number: "&cNot a number: %value%"
