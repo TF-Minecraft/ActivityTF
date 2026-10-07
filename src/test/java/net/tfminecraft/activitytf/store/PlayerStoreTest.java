@@ -520,10 +520,12 @@ class PlayerStoreTest {
         Fixture f = fixture();
         String original = "players: lost-data\n";
         Files.writeString(f.file(), original);
+        org.junit.jupiter.api.Assumptions.assumeTrue(Files.getFileStore(f.folder).supportsFileAttributeView("posix"));
         Set<PosixFilePermission> permissions = Files.getPosixFilePermissions(f.folder);
         try {
             Files.setPosixFilePermissions(f.folder, Set.of(PosixFilePermission.OWNER_READ,
                 PosixFilePermission.OWNER_EXECUTE));
+            org.junit.jupiter.api.Assumptions.assumeFalse(Files.isWritable(f.folder));
             f.store.load();
             assertFalse(f.store.isLoaded());
             assertTrue(f.backups().isEmpty());

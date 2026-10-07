@@ -371,10 +371,12 @@ class ActivityCommandTest {
             String original = Files.readString(f.rewardLock());
             f.settings.set("rewards.pool", List.of(Map.of("display", "Uncommitted", "commands", List.of("say new"))));
             f.saveSettings();
+            org.junit.jupiter.api.Assumptions.assumeTrue(Files.getFileStore(f.rewardLock()).supportsFileAttributeView("posix"));
             Set<PosixFilePermission> permissions = Files.getPosixFilePermissions(f.rewardLock());
             Sender admin = f.admin();
             try {
                 Files.setPosixFilePermissions(f.rewardLock(), Set.of(PosixFilePermission.OWNER_READ));
+                org.junit.jupiter.api.Assumptions.assumeFalse(Files.isWritable(f.rewardLock()));
 
                 f.run(admin, "rewards", "apply");
 

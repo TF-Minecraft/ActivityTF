@@ -1295,6 +1295,10 @@ public class ActivityConfiguration {
             return null;
         }
         String value = name.trim();
+        if (org.bukkit.NamespacedKey.fromString(value.toLowerCase(Locale.ROOT)) == null) {
+            log().warning("Invalid sound '" + value + "' - disabling it.");
+            return null;
+        }
         if (value.indexOf('.') >= 0 || value.indexOf(':') >= 0) {
             return value.toLowerCase(Locale.ROOT);
         }

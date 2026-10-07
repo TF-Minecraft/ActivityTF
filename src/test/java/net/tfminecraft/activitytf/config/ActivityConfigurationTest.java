@@ -553,6 +553,24 @@ class ActivityConfigurationTest {
             assertEquals("custom_theme_win", config.goalCompleteSound());
         }
 
+        @org.junit.jupiter.params.ParameterizedTest
+        @org.junit.jupiter.params.provider.ValueSource(strings = {"level up", "!", "é", "custom:bad key"})
+        void malformedSoundNamesDoNotAbortTheRestOfTheReload(String value) throws Exception {
+            // Paper converts the key in UnsafeValues.get, which rejects a null NamespacedKey.
+            UnsafeValues unsafe = mock(UnsafeValues.class);
+            when(unsafe.get(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.isNull(org.bukkit.NamespacedKey.class)))
+                .thenThrow(new NullPointerException("Paper cannot convert a null sound key"));
+            bukkit.when(Bukkit::getUnsafe).thenReturn(unsafe);
+            settings.set("sounds.goal-complete", value);
+            settings.set("sounds.bar-complete", value);
+            settings.set("bar.max", 123);
+            load();
+            assertNull(config.goalCompleteSound());
+            assertNull(config.barCompleteSound());
+            assertEquals(123, config.barMax());
+            warned("Invalid sound");
+        }
+
         @Test
         void duplicateFeedMappingsHaveAnExplicitLastOwnerAndResetActionAmounts() throws Exception {
             activity("miner_old");

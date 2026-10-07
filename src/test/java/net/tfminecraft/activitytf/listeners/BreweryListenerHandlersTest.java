@@ -133,16 +133,18 @@ class BreweryListenerHandlersTest {
         }
 
         @AfterEach
-        void stopServer() throws Exception {
-            try {
-                if (providers != null) providers.close();
-                if (brews != null) brews.close();
-                if (breweryConfigs != null) breweryConfigs.close();
-                if (breweryPlugins != null) breweryPlugins.close();
-                MockBukkit.unmock();
-            } finally {
-                serverField().set(null, previousServer);
+        void stopServer() throws Throwable {
+            Throwable failure = null;
+            for (AutoCloseable resource : new AutoCloseable[] {providers, brews, breweryConfigs,
+                    breweryPlugins, MockBukkit::unmock, () -> serverField().set(null, previousServer)}) {
+                try {
+                    if (resource != null) resource.close();
+                } catch (Throwable next) {
+                    if (failure == null) failure = next;
+                    else failure.addSuppressed(next);
+                }
             }
+            if (failure != null) throw failure;
         }
 
         void reveal(PlayerMock who) {
