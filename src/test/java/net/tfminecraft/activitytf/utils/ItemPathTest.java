@@ -123,4 +123,9 @@ class ItemPathTest {
         assertNull(ItemPath.itemsAdderId("m.material.steel"));
         assertNull(ItemPath.itemsAdderId("IRON_INGOT"));
     }
+    @Test void missingOrNonAlphabeticPrefixesAreNotClassifiedAsUnsupportedPlugins() {
+        assertFalse(ItemPath.isUnsupportedPath(null));
+        assertFalse(ItemPath.isUnsupportedPath("123.example"));
+    }
+
 }

@@ -79,34 +79,20 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
         }
 
         switch (sub) {
-            case "reload":
+            case "reload" -> {
                 manager.reload();
                 sender.sendMessage(messages().get("admin.reloaded"));
                 rewardStatus(sender);
                 audit(sender, "action=reload result=done");
-                return true;
-            case "rewards":
-                handleRewards(sender, args);
-                return true;
-            case "check":
-                handleCheck(sender, args);
-                return true;
-            case "reset":
-                handleReset(sender, args);
-                return true;
-            case "givereroll":
-                handleGiveReroll(sender, args);
-                return true;
-            case "add":
-                handleAdd(sender, args);
-                return true;
-            case "addpoints":
-                handleAddPoints(sender, args);
-                return true;
-            default:
-                usage(sender);
-                return true;
+            }
+            case "rewards" -> handleRewards(sender, args);
+            case "check" -> handleCheck(sender, args);
+            case "reset" -> handleReset(sender, args);
+            case "givereroll" -> handleGiveReroll(sender, args);
+            case "add" -> handleAdd(sender, args);
+            case "addpoints" -> handleAddPoints(sender, args);
         }
+        return true;
     }
 
     private void handleRewards(CommandSender sender, String[] args) {

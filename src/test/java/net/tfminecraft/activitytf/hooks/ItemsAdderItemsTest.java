@@ -251,4 +251,59 @@ class ItemsAdderItemsTest {
             ItemsAdderItems.reset();
         }
     }
+    @Test
+    void reflectedProviderReturnsDetachedItemsAndRetriesMissingOrUnexpectedResults() {
+        TestManagers.bukkit();
+        var provider = org.mockito.Mockito.mock(dev.lone.itemsadder.api.CustomStack.class);
+        ItemStack original = new TestStack(Material.DIAMOND, 64);
+        try (var stacks = org.mockito.Mockito.mockStatic(dev.lone.itemsadder.api.CustomStack.class)) {
+            ItemsAdderItems.reset();
+            assertNull(ItemsAdderItems.item("tfmc:missing"));
+            stacks.when(() -> dev.lone.itemsadder.api.CustomStack.getInstance("tfmc:missing")).thenReturn(provider);
+            org.mockito.Mockito.when(provider.getItemStack()).thenReturn("invalid provider result", original);
+            assertNull(ItemsAdderItems.item("tfmc:missing"));
+            ItemStack resolved = ItemsAdderItems.item("tfmc:missing");
+            assertNotSame(original, resolved);
+            assertEquals(Material.DIAMOND, resolved.getType());
+            assertEquals(1, resolved.getAmount());
+            assertEquals(64, original.getAmount());
+        } finally {
+            ItemsAdderItems.reset();
+        }
+    }
+
+    @Test
+    void absentOptionalProviderFailsClosedAndLogsOnce() throws Exception {
+        TestManagers.bukkit();
+        Logger logger = org.mockito.Mockito.mock(Logger.class);
+        ClassLoader parent = ItemsAdderItems.class.getClassLoader();
+        ClassLoader withoutProvider = new ClassLoader(parent) {
+            @Override protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
+                synchronized (getClassLoadingLock(name)) {
+                    if (name.equals("dev.lone.itemsadder.api.CustomStack")) throw new ClassNotFoundException(name);
+                    if (!name.startsWith(ItemsAdderItems.class.getName())) return super.loadClass(name, resolve);
+                    Class<?> result = findLoadedClass(name);
+                    if (result == null) {
+                        try (var stream = parent.getResourceAsStream(name.replace('.', '/') + ".class")) {
+                            byte[] bytes = stream.readAllBytes();
+                            result = defineClass(name, bytes, 0, bytes.length, ItemsAdderItems.class.getProtectionDomain());
+                        } catch (java.io.IOException e) {
+                            throw new ClassNotFoundException(name, e);
+                        }
+                    }
+                    if (resolve) resolveClass(result);
+                    return result;
+                }
+            }
+        };
+        try (var bukkit = org.mockito.Mockito.mockStatic(org.bukkit.Bukkit.class)) {
+            bukkit.when(org.bukkit.Bukkit::getLogger).thenReturn(logger);
+            Class<?> isolated = withoutProvider.loadClass(ItemsAdderItems.class.getName());
+            var item = isolated.getMethod("item", String.class);
+            assertNull(item.invoke(null, "tfmc:optional"));
+            assertNull(item.invoke(null, "tfmc:optional"));
+            org.mockito.Mockito.verify(logger).warning(org.mockito.ArgumentMatchers.contains("IllegalStateException"));
+        }
+    }
+
 }

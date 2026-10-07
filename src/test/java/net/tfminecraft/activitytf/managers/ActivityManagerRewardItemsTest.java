@@ -399,9 +399,18 @@ class ActivityManagerRewardItemsTest {
     }
 
     @Test
-    void theBlockOnlyGuardPassesAnythingThroughWithoutARegistry() {
+    void theBlockOnlyGuardUsesTheRealRegistryWhenAvailable() {
         assertTrue(ActivityManager.isItem(new TestStack(Material.DIAMOND, 1)));
-        assertTrue(ActivityManager.isItem(new TestStack(Material.CARROTS, 1)));
+        assertFalse(ActivityManager.isItem(new TestStack(Material.CARROTS, 1)));
+    }
+
+    @Test
+    void theBlockOnlyGuardRetainsCompatibilityWhenTheRegistryIsUnavailable() {
+        Material unresolved = org.mockito.Mockito.mock(Material.class);
+        org.mockito.Mockito.when(unresolved.isItem()).thenThrow(new IllegalStateException("Registry unavailable"));
+        ItemStack stack = org.mockito.Mockito.mock(ItemStack.class);
+        org.mockito.Mockito.when(stack.getType()).thenReturn(unresolved);
+        assertTrue(ActivityManager.isItem(stack));
     }
 
     @Test

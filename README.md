@@ -35,10 +35,11 @@ mvn -B --no-transfer-progress clean verify
 ```
 
 JUnit 5 tests cover configuration loading, commands, the GUI, plugin hooks,
-listeners and activity progress, using proxy and Objenesis fixtures for server
-and plugin APIs. CI runs the same command on every push and pull request to `main` and
-uploads the Surefire reports; no coverage gate is enforced. The suite does not
-start a live Paper server.
+listeners and activity progress, using MockBukkit, real file fixtures, and scoped
+server/provider boundaries. Verification requires 100% production line coverage
+with no excluded classes, plus the JaCoCo execution data and XML report. CI runs
+the same command on every push and pull request to `main` and uploads the Surefire
+and coverage reports. The suite does not start a live Paper server.
 
 The description update tool has its own Python tests, which CI does not run:
 

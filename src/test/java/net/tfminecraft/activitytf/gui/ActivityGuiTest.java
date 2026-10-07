@@ -1,11 +1,44 @@
 package net.tfminecraft.activitytf.gui;
 
 import org.bukkit.Material;
+import org.bukkit.Bukkit;
+import org.bukkit.Server;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandSender;
+import org.bukkit.entity.HumanEntity;
 import org.bukkit.entity.Player;
+import org.bukkit.event.inventory.ClickType;
+import org.bukkit.event.inventory.InventoryAction;
+import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
+import org.bukkit.event.inventory.InventoryType;
+import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.InventoryView;
+import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.permissions.PermissionAttachment;
+import org.bukkit.plugin.java.JavaPlugin;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.api.extension.ExtensionContext;
+import org.junit.jupiter.api.extension.LifecycleMethodExecutionExceptionHandler;
+import org.junit.jupiter.api.extension.TestExecutionExceptionHandler;
+import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.mockbukkit.mockbukkit.MockBukkit;
+import org.mockbukkit.mockbukkit.ServerMock;
+import org.mockbukkit.mockbukkit.entity.PlayerMock;
+import org.mockbukkit.mockbukkit.exception.UnimplementedOperationException;
+import org.mockito.MockedStatic;
 import net.tfminecraft.activitytf.config.ActivityConfiguration;
 import net.tfminecraft.activitytf.config.Messages;
+import net.tfminecraft.activitytf.hooks.ItemsAdderItems;
+import net.tfminecraft.activitytf.hooks.TLibsItems;
 import net.tfminecraft.activitytf.managers.ActivityManager;
 import net.tfminecraft.activitytf.managers.TestManagers;
 import net.tfminecraft.activitytf.models.ActivityDef;
@@ -14,6 +47,7 @@ import net.tfminecraft.activitytf.models.RewardEntry;
 import net.tfminecraft.activitytf.utils.Bar;
 import net.tfminecraft.activitytf.utils.Utils;
 
+import java.io.File;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -26,7 +60,12 @@ import java.util.function.Function;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.when;
 
 class ActivityGuiTest {
 
@@ -498,5 +537,401 @@ class ActivityGuiTest {
 
         gui.revealTask(player, 1);
         assertTrue(chat.stream().anyMatch(line -> line.contains("could not be handed over")), chat.toString());
+    }
+
+    @Test
+    void rewardPreviewsNameOutcomesWhoseLabelsAreMissing() {
+        assertEquals(List.of("#50d990x2 &r&7DIAMOND", "&7Other reward"), RewardPreview.summarize(List.of(
+            new RewardEntry(1, null, List.of(), List.of(new RewardEntry.Item("DIAMOND", 2))),
+            new RewardEntry(1, " ", List.of("reward %uuid%"), List.of()))));
+    }
+
+    @Nested
+    @ExtendWith(FailUnimplemented.class)
+    class MenuInteraction {
+        @TempDir
+        File directory;
+
+        Server previousServer;
+        ServerMock server;
+        JavaPlugin plugin;
+        PlayerMock player;
+        PermissionAttachment permissions;
+        ActivityManager manager;
+        ActivityGui gui;
+
+        @BeforeEach
+        void startServer() throws ReflectiveOperationException {
+            previousServer = Bukkit.getServer();
+            set(Bukkit.class, null, "server", null);
+            server = MockBukkit.mock();
+            plugin = MockBukkit.createMockPlugin("ActivityGuiTest");
+            player = server.addPlayer("Steve");
+            permissions = player.addAttachment(plugin);
+            permissions.setPermission("activity.use", true);
+            permissions.setPermission("activity.reroll", true);
+            configure(activity("a", 1, 1, 0), activity("b", 1, 1, 0), activity("c", 1, 1, 0));
+        }
+
+        @AfterEach
+        void stopServer() throws ReflectiveOperationException {
+            try {
+                MockBukkit.unmock();
+            } finally {
+                set(Bukkit.class, null, "server", previousServer);
+            }
+        }
+
+        void configure(ActivityDef... definitions) throws ReflectiveOperationException {
+            manager = TestManagers.manager(definitions);
+            TestManagers.messages(manager);
+            TestManagers.storeLoaded(manager);
+            TestManagers.storeFile(manager, new File(directory, "players.yml"));
+            TestManagers.rerollsPerDay(manager, 1);
+            set(ActivityManager.class, manager, "plugin", plugin);
+            set(net.tfminecraft.activitytf.store.PlayerStore.class, manager.getStore(), "plugin", plugin);
+            set(ActivityConfiguration.class, manager.getConfiguration(), "guiTitle", "&8Activities");
+            set(ActivityConfiguration.class, manager.getConfiguration(), "barLength", 10);
+            gui = new ActivityGui(manager);
+        }
+
+        Inventory open() {
+            Inventory inventory = gui.build(player);
+            player.openInventory(inventory);
+            return inventory;
+        }
+
+        PlayerData data() {
+            return manager.tasks(player.getUniqueId());
+        }
+
+        InventoryClickEvent click(int rawSlot) {
+            InventoryClickEvent event = new InventoryClickEvent(player.getOpenInventory(),
+                InventoryType.SlotType.CONTAINER, rawSlot, ClickType.LEFT, InventoryAction.PICKUP_ALL);
+            gui.onClick(event);
+            return event;
+        }
+
+        String message(String key) {
+            var legacy = net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer.legacySection();
+            return legacy.serialize(legacy.deserialize(manager.getConfiguration().messages().get(key)));
+        }
+
+        String rerollLore() {
+            return gui.build(player).getItem(4).getItemMeta().getLore().get(0);
+        }
+
+        @Test
+        void rendersACompleteMenuWithHiddenTasksAndMetadata() {
+            Inventory inventory = open();
+            assertEquals(27, inventory.getSize());
+            assertSame(inventory, inventory.getHolder().getInventory());
+            assertEquals("\u00a78Activities", player.getOpenInventory().getTitle());
+            for (int index = 0; index < inventory.getSize(); index++) {
+                assertNotNull(inventory.getItem(index), "Empty slot " + index);
+            }
+            assertEquals(Material.EXPERIENCE_BOTTLE, inventory.getItem(3).getType());
+            assertEquals(Material.NETHER_STAR, inventory.getItem(4).getType());
+            assertEquals(Material.EXPERIENCE_BOTTLE, inventory.getItem(5).getType());
+            assertEquals(Material.GRAY_DYE, inventory.getItem(10).getType());
+            assertEquals(message("gui.hidden-task-name"), inventory.getItem(10).getItemMeta().getDisplayName());
+            assertEquals(Material.GRAY_STAINED_GLASS_PANE, inventory.getItem(13).getType());
+            assertEquals(message("gui.filler-name"), inventory.getItem(0).getItemMeta().getDisplayName());
+            assertTrue(inventory.getItem(10).getItemMeta().getItemFlags().containsAll(Set.of(
+                ItemFlag.HIDE_ENCHANTS, ItemFlag.HIDE_ATTRIBUTES, ItemFlag.HIDE_STORED_ENCHANTS)));
+            var attributes = inventory.getItem(10).getItemMeta().getAttributeModifiers();
+            assertTrue(attributes == null || attributes.isEmpty());
+        }
+
+        @Test
+        void revealReplacesTheHiddenItemAndPlaysFeedbackOnlyOnce() {
+            Inventory inventory = open();
+            String id = data().tasks().get(0);
+            assertTrue(click(10).isCancelled());
+            assertTrue(data().isRevealed(id));
+            assertEquals(Material.PAPER, inventory.getItem(10).getType());
+            assertEquals(id, inventory.getItem(10).getItemMeta().getDisplayName());
+            assertFalse(inventory.getItem(10).getItemMeta().getLore().isEmpty());
+            assertEquals(2, player.getHeardSounds().size());
+            assertTrue(click(10).isCancelled());
+            assertEquals(2, player.getHeardSounds().size());
+            assertSame(inventory, player.getOpenInventory().getTopInventory());
+        }
+
+        @Test
+        void revealingEveryTaskPaysTheDailyRewardOnce() {
+            permissions.setPermission("group.vip", true);
+            TestManagers.dailyRewards(manager, Map.of("vip", new RewardEntry(1, "Diamond", List.of(),
+                List.of(new RewardEntry.Item("DIAMOND", 3)))));
+            open();
+            click(10);
+            click(11);
+            assertFalse(data().dailyRewardClaimed());
+            assertFalse(player.getInventory().contains(Material.DIAMOND));
+
+            click(12);
+            assertTrue(data().dailyRewardClaimed());
+            assertTrue(player.getInventory().contains(Material.DIAMOND, 3));
+            assertNotNull(player.nextMessage());
+            click(12);
+            assertEquals(3, player.getInventory().all(Material.DIAMOND).values().stream()
+                .mapToInt(ItemStack::getAmount).sum());
+        }
+
+        @Test
+        void staleDailyDrawRepaintsBarsAndEveryTask() {
+            open();
+            click(10);
+            String revealed = data().tasks().get(0);
+            manager.recordAction(player.getUniqueId(), revealed, 1);
+            Inventory inventory = open();
+            assertEquals(1, data().dailyPoints());
+            data().reset(manager.getConfiguration().currentKeys().week(), "2000-01-01");
+
+            click(11);
+
+            assertEquals(Material.EXPERIENCE_BOTTLE, inventory.getItem(3).getType());
+            assertEquals(manager.getConfiguration().messages().get("gui.daily-bar-name", "%points%", 0, "%max%", 10),
+                inventory.getItem(3).getItemMeta().getDisplayName());
+            assertEquals(Material.NETHER_STAR, inventory.getItem(4).getType());
+            assertEquals(Material.EXPERIENCE_BOTTLE, inventory.getItem(5).getType());
+            assertEquals(Material.GRAY_DYE, inventory.getItem(10).getType());
+            assertEquals(Material.PAPER, inventory.getItem(11).getType());
+            assertEquals(Material.GRAY_STAINED_GLASS_PANE, inventory.getItem(13).getType());
+            assertEquals(0, data().dailyPoints());
+        }
+
+        @Test
+        void removedClickedTaskRepaintsTheDrawWithoutRevealingAnotherTask() {
+            Inventory inventory = open();
+            String removed = data().tasks().get(0);
+            TestManagers.unload(manager, removed);
+
+            assertTrue(click(10).isCancelled());
+
+            assertFalse(data().tasks().contains(removed));
+            assertTrue(data().revealed().isEmpty());
+            assertEquals(Material.GRAY_DYE, inventory.getItem(10).getType());
+            assertEquals(Material.GRAY_STAINED_GLASS_PANE, inventory.getItem(12).getType());
+            assertTrue(player.getHeardSounds().isEmpty());
+        }
+
+        @Test
+        void cancelsBottomOutsideAndFillerClicksWithoutChangingTasks() {
+            open();
+            assertTrue(click(27).isCancelled());
+            assertTrue(click(-999).isCancelled());
+            assertTrue(click(0).isCancelled());
+            assertTrue(data().revealed().isEmpty());
+            assertTrue(player.getHeardSounds().isEmpty());
+        }
+
+        @Test
+        void ignoresOtherInventoriesAndPlayersWithoutUsePermission() {
+            player.openInventory(server.createInventory(null, 27));
+            assertFalse(click(10).isCancelled());
+            open();
+            permissions.setPermission("activity.use", false);
+            assertTrue(click(10).isCancelled());
+            assertTrue(data().revealed().isEmpty());
+            assertTrue(player.getHeardSounds().isEmpty());
+        }
+
+        @Test
+        void ignoresANonPlayerViewingTheMenu() {
+            Inventory inventory = open();
+            InventoryView view = mock(InventoryView.class);
+            when(view.getTopInventory()).thenReturn(inventory);
+            when(view.getInventory(10)).thenReturn(inventory);
+            when(view.getPlayer()).thenReturn(mock(HumanEntity.class));
+            InventoryClickEvent event = new InventoryClickEvent(view, InventoryType.SlotType.CONTAINER,
+                10, ClickType.LEFT, InventoryAction.PICKUP_ALL);
+
+            gui.onClick(event);
+
+            assertTrue(event.isCancelled());
+            assertTrue(data().revealed().isEmpty());
+        }
+
+        @ParameterizedTest
+        @CsvSource({"true,0,true", "true,30,false", "false,0,false"})
+        void dragProtectsOnlyTheActivityTopInventory(boolean activityMenu, int rawSlot, boolean cancelled) {
+            if (activityMenu) {
+                open();
+            } else {
+                player.openInventory(server.createInventory(null, 27));
+            }
+            ItemStack item = new ItemStack(Material.STONE);
+            InventoryDragEvent event = new InventoryDragEvent(player.getOpenInventory(), item, item, false,
+                Map.of(rawSlot, item));
+
+            gui.onDrag(event);
+
+            assertEquals(cancelled, event.isCancelled());
+        }
+
+        @Test
+        void rerollLoreExplainsDisabledLockedLateAndAvailableStates() {
+            TestManagers.rerollsPerDay(manager, 0);
+            assertEquals(message("gui.reroll-lore-disabled"), rerollLore());
+            TestManagers.rerollsPerDay(manager, 1);
+            permissions.setPermission("activity.reroll", false);
+            assertEquals(message("gui.reroll-lore-locked"), rerollLore());
+            permissions.setPermission("activity.reroll", true);
+            data().record(2, activity("a", 1, 1, 0), 50, 10, List.of());
+            assertEquals(manager.getConfiguration().messages().get("gui.reroll-lore-too-late", "%points%", 1),
+                rerollLore());
+            data().reset(manager.getConfiguration().currentKeys().week(), manager.getConfiguration().currentKeys().day());
+            assertEquals(manager.getConfiguration().messages().get("gui.reroll-lore-left", "%left%", 1, "%max%", 1),
+                rerollLore());
+        }
+
+        @Test
+        void rerollRejectsDisabledLockedUnavailableAndTooLateRequests() throws ReflectiveOperationException {
+            open();
+            TestManagers.rerollsPerDay(manager, 0);
+            click(4);
+            assertEquals(message("reroll-disabled"), player.nextMessage());
+            TestManagers.rerollsPerDay(manager, 1);
+            permissions.setPermission("activity.reroll", false);
+            click(4);
+            assertEquals(message("reroll-locked"), player.nextMessage());
+            permissions.setPermission("activity.reroll", true);
+            set(net.tfminecraft.activitytf.store.PlayerStore.class, manager.getStore(), "loaded", false);
+            click(4);
+            assertEquals(message("reroll-failed"), player.nextMessage());
+            TestManagers.storeLoaded(manager);
+            data().record(2, activity("a", 1, 1, 0), 50, 10, List.of());
+            click(4);
+            assertEquals(manager.getConfiguration().messages().get("reroll-too-late", "%points%", 1), player.nextMessage());
+            assertEquals(0, data().rerolls());
+        }
+
+        @Test
+        void successfulRerollHidesTasksAndRefreshesTheRemainingAllowance() {
+            Inventory inventory = open();
+            click(10);
+            click(4);
+
+            assertEquals(message("reroll-done"), player.nextMessage());
+            assertEquals(1, data().rerolls());
+            assertTrue(data().revealed().isEmpty());
+            assertEquals(Material.GRAY_DYE, inventory.getItem(10).getType());
+            assertEquals(manager.getConfiguration().messages().get("gui.reroll-lore-left", "%left%", 0, "%max%", 1),
+                inventory.getItem(4).getItemMeta().getLore().get(0));
+
+            click(4);
+            assertEquals(message("reroll-none-left"), player.nextMessage());
+            assertEquals(1, data().rerolls());
+        }
+
+        @Test
+        void weeklyClaimHandsOverRewardsAndRefreshesTheBar() throws ReflectiveOperationException {
+            set(ActivityConfiguration.class, manager.getConfiguration(), "milestoneDrops", Map.of(
+                10, new RewardEntry(1, "Diamond", List.of(), List.of(new RewardEntry.Item("DIAMOND", 2))),
+                20, new RewardEntry(1, "Iron", List.of(), List.of(new RewardEntry.Item("IRON_INGOT", 3)))));
+            data().addPoints(20, 50);
+            Inventory inventory = open();
+
+            assertTrue(click(5).isCancelled());
+
+            assertEquals(20, data().claimedPoints());
+            assertTrue(player.getInventory().contains(Material.DIAMOND, 2));
+            assertTrue(player.getInventory().contains(Material.IRON_INGOT, 3));
+            assertTrue(inventory.getItem(5).getItemMeta().getLore().contains(message("gui.bar-lore-none")));
+            assertNotNull(player.nextMessage());
+            assertNotNull(player.nextMessage());
+            click(5);
+            assertNull(player.nextMessage());
+            assertEquals(2, player.getInventory().all(Material.DIAMOND).values().stream()
+                .mapToInt(ItemStack::getAmount).sum());
+        }
+
+        @Test
+        void clickingAnEmptyWeeklyBarPaysNothing() {
+            Inventory inventory = open();
+            ItemStack before = inventory.getItem(5).clone();
+            click(5);
+            assertEquals(before, inventory.getItem(5));
+            assertEquals(0, data().claimedPoints());
+            assertNull(player.nextMessage());
+        }
+
+        @Test
+        void revealedTaskCommandsCloseTheMenuAndQuitClearsTheirCooldown() throws ReflectiveOperationException {
+            configure(new ActivityDef("a", "a", Material.PAPER, null, 1, 1, 0,
+                List.of("taskclick %player%"), List.of("&eClick for an action")));
+            List<String> dispatched = new ArrayList<>();
+            server.getCommandMap().register("activitytest", new Command("taskclick") {
+                @Override
+                public boolean execute(CommandSender sender, String label, String[] args) {
+                    Inventory top = player.getOpenInventory().getTopInventory();
+                    assertTrue(top == null || !(top.getHolder() instanceof ActivityGui.Marker));
+                    dispatched.add(String.join(" ", args));
+                    return true;
+                }
+            });
+            open();
+            click(10);
+            click(10);
+            assertEquals(3, player.getHeardSounds().size());
+            assertTrue(dispatched.isEmpty());
+            server.getScheduler().performOneTick();
+            assertEquals(List.of("Steve"), dispatched);
+
+            gui.onQuit(new PlayerQuitEvent(player, (net.kyori.adventure.text.Component) null,
+                PlayerQuitEvent.QuitReason.DISCONNECTED));
+            open();
+            click(10);
+            server.getScheduler().performOneTick();
+            assertEquals(List.of("Steve", "Steve"), dispatched);
+        }
+
+        @Test
+        void customIconsResolveThroughTheirAvailableProvidersAndFallbackWhenMissing()
+            throws ReflectiveOperationException {
+            configure(new ActivityDef("a", "Custom", Material.PAPER, "m.material.icon", 1, 1, 0));
+            manager.reveal(player.getUniqueId(), 0);
+            set(ActivityConfiguration.class, manager.getConfiguration(), "itemPathsUsable", true);
+            try (MockedStatic<TLibsItems> items = mockStatic(TLibsItems.class)) {
+                items.when(() -> TLibsItems.item("m.material.icon")).thenReturn(new ItemStack(Material.EMERALD));
+                assertEquals(Material.EMERALD, gui.build(player).getItem(10).getType());
+                items.when(() -> TLibsItems.item("m.material.icon")).thenReturn(new ItemStack(Material.AIR));
+                assertEquals(Material.PAPER, gui.build(player).getItem(10).getType());
+            }
+
+            configure(new ActivityDef("a", "Custom", Material.PAPER, "ia.test:icon", 1, 1, 0));
+            manager.reveal(player.getUniqueId(), 0);
+            set(ActivityConfiguration.class, manager.getConfiguration(), "itemsAdderUsable", true);
+            try (MockedStatic<ItemsAdderItems> items = mockStatic(ItemsAdderItems.class)) {
+                items.when(() -> ItemsAdderItems.item("test:icon")).thenReturn(new ItemStack(Material.DIAMOND));
+                assertEquals(Material.DIAMOND, gui.build(player).getItem(10).getType());
+                items.when(() -> ItemsAdderItems.item("test:icon")).thenReturn(null);
+                assertEquals(Material.PAPER, gui.build(player).getItem(10).getType());
+            }
+        }
+    }
+
+    static final class FailUnimplemented implements TestExecutionExceptionHandler, LifecycleMethodExecutionExceptionHandler {
+        @Override
+        public void handleTestExecutionException(ExtensionContext context, Throwable thrown) throws Throwable {
+            throw failed(thrown);
+        }
+
+        @Override
+        public void handleBeforeEachMethodExecutionException(ExtensionContext context, Throwable thrown) throws Throwable {
+            throw failed(thrown);
+        }
+
+        private static Throwable failed(Throwable thrown) {
+            return thrown instanceof UnimplementedOperationException
+                ? new AssertionError("MockBukkit does not implement a call this GUI test needs", thrown) : thrown;
+        }
+    }
+
+    private static void set(Class<?> owner, Object target, String name, Object value) throws ReflectiveOperationException {
+        Field field = owner.getDeclaredField(name);
+        field.setAccessible(true);
+        field.set(target, value);
     }
 }

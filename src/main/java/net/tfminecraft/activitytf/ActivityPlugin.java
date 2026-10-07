@@ -68,7 +68,11 @@ public class ActivityPlugin extends JavaPlugin {
 
         if (placeholderHook != null) {
             try {
-                placeholderHook.unregister();
+                // PlaceholderAPI removes by identifier; only remove the instance we registered.
+                if (placeholderHook.getPlaceholderAPI().getLocalExpansionManager()
+                    .getExpansion(placeholderHook.getIdentifier()) == placeholderHook) {
+                    placeholderHook.unregister();
+                }
             } catch (Throwable t) {
                 getLogger().warning("Failed to unregister the PlaceholderAPI expansion: " + t.getMessage());
             }
@@ -170,9 +174,13 @@ public class ActivityPlugin extends JavaPlugin {
         }
 
         if (Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI")) {
-            placeholderHook = new PlaceholderHook(ActivityManager.getInstance());
-            placeholderHook.register();
-            getLogger().info("Hooked into PlaceholderAPI.");
+            PlaceholderHook hook = new PlaceholderHook(ActivityManager.getInstance());
+            if (hook.register()) {
+                placeholderHook = hook;
+                getLogger().info("Hooked into PlaceholderAPI.");
+            } else {
+                getLogger().warning("Failed to register the PlaceholderAPI expansion.");
+            }
         }
     }
 }

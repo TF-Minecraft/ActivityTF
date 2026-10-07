@@ -51,6 +51,12 @@ public final class TLibsItems<T> {
             || type == Material.VOID_AIR || type == Material.DIRT;
     }
 
+    /** Retry unresolved paths after administrators reload item definitions. */
+    public static void reset() {
+        Default.INSTANCE.unresolvedPaths.clear();
+        Default.INSTANCE.reportedPaths.clear();
+    }
+
     public static ItemStack item(String path) {
         return Default.INSTANCE.resolve(path);
     }

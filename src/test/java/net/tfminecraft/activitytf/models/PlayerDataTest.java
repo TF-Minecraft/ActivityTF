@@ -1104,4 +1104,11 @@ class PlayerDataTest {
         assertTrue(data.allRevealed());
         assertFalse(new PlayerData("w", "d").allRevealed());
     }
+    @Test void moreGuaranteedTasksThanAvailableSlotsLeaveTheExistingGuaranteedDrawStable() {
+        List<String> selected=ids(PlayerData.TASKS_PER_DAY);
+        PlayerData data=new PlayerData(0,0,WEEK,DAY,0,Map.of(),selected,List.of());
+        assertFalse(data.ensureTasks(ids(30),ids(9),new Random(1)));
+        assertEquals(selected,data.tasks());
+    }
+
 }

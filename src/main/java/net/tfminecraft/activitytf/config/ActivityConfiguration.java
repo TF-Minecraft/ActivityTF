@@ -2,6 +2,7 @@ package net.tfminecraft.activitytf.config;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
+import org.bukkit.Sound;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -1293,7 +1294,15 @@ public class ActivityConfiguration {
         if (name == null || name.isBlank()) {
             return null;
         }
-        return name.trim().toLowerCase(Locale.ROOT).replace('_', '.');
+        String value = name.trim();
+        if (value.indexOf('.') >= 0 || value.indexOf(':') >= 0) {
+            return value.toLowerCase(Locale.ROOT);
+        }
+        try {
+            return Sound.valueOf(value.toUpperCase(Locale.ROOT)).getKey().getKey();
+        } catch (IllegalArgumentException ignored) {
+            return value.toLowerCase(Locale.ROOT);
+        }
     }
 
     public Messages messages() {
@@ -1414,7 +1423,7 @@ public class ActivityConfiguration {
     }
 
     static int nonVoteDailyMax(int dailyMax, int voteShare) {
-        return dailyMax * (100 - voteShare) / 100;
+        return (int) ((long) dailyMax * (100 - voteShare) / 100);
     }
 
     int parseVoteShare(ConfigurationSection config) {
