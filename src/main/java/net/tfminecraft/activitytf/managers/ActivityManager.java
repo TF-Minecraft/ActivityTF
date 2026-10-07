@@ -803,9 +803,6 @@ public class ActivityManager {
     }
 
     static List<String> runnableClickCommands(ActivityDef def, String name, int max, Logger logger) {
-        if (def == null) {
-            return List.of();
-        }
         List<String> runnable = new ArrayList<>();
         for (String command : def.clickCommands()) {
             if (!canRunCommand(command, name)) {
@@ -884,6 +881,7 @@ public class ActivityManager {
         warnedEmptyPools.clear();
         reportedItemPaths.clear();
         ItemsAdderItems.reset();
+        TLibsItems.reset();
         reportedBrokenCommands.clear();
     }
 

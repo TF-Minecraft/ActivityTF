@@ -380,12 +380,9 @@ public class ActivityGui implements Listener {
         ActivityConfiguration config = manager.getConfiguration();
         Messages messages = config.messages();
 
-        if (config.rerollsPerDay() <= 0) {
-            player.sendMessage(messages.get("reroll-disabled"));
-            return;
-        }
-
-        if (!player.hasPermission("activity.reroll")) {
+        // Disabled rerolls still report DISABLED before the permission check.
+        // The manager returns it before reading or changing player data.
+        if (config.rerollsPerDay() > 0 && !player.hasPermission("activity.reroll")) {
             player.sendMessage(messages.get("reroll-locked"));
             return;
         }

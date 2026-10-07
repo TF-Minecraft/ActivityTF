@@ -20,10 +20,6 @@ public class BattleListener implements Listener {
     @EventHandler(priority = EventPriority.MONITOR)
     public void onBattleEnded(BattleEndedEvent event) {
         Set<UUID> participants = event.getParticipantIds();
-        if (participants == null) {
-            return;
-        }
-
         for (UUID participant : participants) {
             if (participant != null) {
                 manager.recordAction(participant, "battle_joined", 1);

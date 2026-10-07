@@ -71,6 +71,9 @@ public class PlayerStore {
 
         ConfigurationSection root = yaml.getConfigurationSection("players");
         if (root == null) {
+            if (yaml.contains("players")) {
+                return quarantine("has a 'players' value that is not a section");
+            }
             Set<String> stray = yaml.getKeys(false);
             stray.remove("players");
             if (!stray.isEmpty()) {

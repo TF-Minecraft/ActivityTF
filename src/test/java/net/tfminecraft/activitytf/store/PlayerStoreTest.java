@@ -1,20 +1,48 @@
 package net.tfminecraft.activitytf.store;
 
 import org.bukkit.Material;
+import org.bukkit.Server;
+import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.scheduler.BukkitScheduler;
+import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import net.tfminecraft.activitytf.config.ActivityConfiguration;
+import net.tfminecraft.activitytf.managers.ActivityManager;
+import net.tfminecraft.activitytf.managers.TestManagers;
 import net.tfminecraft.activitytf.models.ActivityDef;
 import net.tfminecraft.activitytf.models.PlayerData;
 
+import java.nio.file.Files;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermission;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.logging.Handler;
+import java.util.logging.LogRecord;
+import java.util.logging.Logger;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Predicate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.CALLS_REAL_METHODS;
+import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -405,5 +433,387 @@ class PlayerStoreTest {
 
         ConfigurationSection root = PlayerStore.snapshot(Map.of(id, data)).getConfigurationSection("players");
         assertTrue(PlayerStore.readEntry(root, id.toString(), BAR_MAX, DAILY_MAX, KNOWN).dailyRewardClaimed());
+    }
+
+    @TempDir
+    Path directory;
+
+    private static final ActivityDef VOTE = new ActivityDef("vote", "Vote", Material.PAPER, null, 1, 1, 5);
+
+    @ParameterizedTest
+    @ValueSource(strings = {"players: erased\n", "players: [alice, bob]\n", "players: 42\n"})
+    void malformedPlayersValuesAreBackedUpBeforeAnEmptyStoreCanReplaceThem(String original) throws Exception {
+        Fixture f = fixture();
+        Files.writeString(f.file(), original);
+
+        f.store.load();
+
+        assertTrue(f.store.isLoaded());
+        List<Path> backups = f.backups();
+        assertEquals(1, backups.size(), "a non-section players value must never be silently discarded");
+        assertEquals(original, Files.readString(backups.getFirst()));
+        UUID id = UUID.randomUUID();
+        f.store.get(id).recordForced(3, VOTE, BAR_MAX, List.of());
+        assertTrue(f.store.saveNow());
+        assertEquals(3, f.savedPoints(id));
+        assertEquals(original, Files.readString(backups.getFirst()));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"players: [\n", "unexpected: valuable-data\n"})
+    void invalidYamlAndUnknownRootDataArePreservedInBackups(String original) throws Exception {
+        Fixture f = fixture();
+        Files.writeString(f.file(), original);
+
+        f.store.load();
+
+        assertTrue(f.store.isLoaded());
+        assertEquals(1, f.backups().size());
+        assertEquals(original, Files.readString(f.backups().getFirst()));
+        assertEquals(original, Files.readString(f.file()));
+        assertTrue(f.logs.stream().anyMatch(line -> line.contains("kept a copy")));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", "players: {}\n"})
+    void emptyAndExplicitlyEmptyStoresAreAcceptedWithoutQuarantine(String original) throws Exception {
+        Fixture f = fixture();
+        Files.writeString(f.file(), original);
+
+        f.store.load();
+
+        assertTrue(f.store.isLoaded());
+        assertTrue(f.backups().isEmpty());
+        assertNull(f.store.peek(UUID.randomUUID()));
+    }
+
+    @Test
+    void loadReadsValidEntriesAndSkipsScalarEntriesAndMalformedUuids() throws Exception {
+        Fixture f = fixture();
+        UUID id = UUID.randomUUID();
+        UUID scalarId = UUID.randomUUID();
+        YamlConfiguration yaml = PlayerStore.snapshot(Map.of(id,
+            new PlayerData(7, 2, "old-week", "old-day", 3, Map.of("vote", 2),
+                List.of("vote", "gone"), List.of("vote", "gone"), 1)));
+        yaml.set("players.not-a-uuid.points", 8);
+        yaml.set("players." + scalarId, "not-an-entry");
+        yaml.save(f.file().toFile());
+
+        f.store.load();
+
+        PlayerData data = f.store.peek(id);
+        assertEquals(7, data.points());
+        assertEquals(3, data.claimedPoints());
+        assertEquals(2, data.count("vote"));
+        assertEquals(List.of("vote"), data.tasks());
+        assertTrue(data.isRevealed("vote"));
+        assertFalse(data.isRevealed("gone"));
+        assertEquals(1, data.rerolls());
+        assertEquals("old-week", data.weekKey(), "peek must not roll stored data");
+        assertNull(f.store.peek(scalarId));
+        assertTrue(f.logs.stream().anyMatch(line -> line.contains("Skipping malformed UUID 'not-a-uuid'")));
+        assertTrue(f.backups().isEmpty());
+    }
+
+    @Test
+    void failedQuarantineDisablesEveryWriteAndPreservesTheOriginalFile() throws Exception {
+        Fixture f = fixture();
+        String original = "players: lost-data\n";
+        Files.writeString(f.file(), original);
+        org.junit.jupiter.api.Assumptions.assumeTrue(Files.getFileStore(f.folder).supportsFileAttributeView("posix"));
+        Set<PosixFilePermission> permissions = Files.getPosixFilePermissions(f.folder);
+        try {
+            Files.setPosixFilePermissions(f.folder, Set.of(PosixFilePermission.OWNER_READ,
+                PosixFilePermission.OWNER_EXECUTE));
+            org.junit.jupiter.api.Assumptions.assumeFalse(Files.isWritable(f.folder));
+            f.store.load();
+            assertFalse(f.store.isLoaded());
+            assertTrue(f.backups().isEmpty());
+        } finally {
+            Files.setPosixFilePermissions(f.folder, permissions);
+        }
+
+        f.store.get(UUID.randomUUID()).recordForced(4, VOTE, BAR_MAX, List.of());
+        assertFalse(f.store.saveNow());
+        f.store.saveSoon();
+        f.store.shutdown();
+        assertEquals(original, Files.readString(f.file()));
+        assertTrue(f.logs.stream().anyMatch(line -> line.contains("copying it aside failed")));
+        assertTrue(f.logs.stream().anyMatch(line -> line.contains("Saving is disabled")));
+        assertTrue(f.logs.stream().anyMatch(line -> line.contains("Not writing")));
+        assertTrue(f.logs.stream().anyMatch(line -> line.contains("Not saving")));
+    }
+
+    @Test
+    void aMissingStoreStartsEmptyAndDisabledPluginsSaveSynchronously() throws Exception {
+        Fixture f = fixture();
+        UUID id = UUID.randomUUID();
+        assertFalse(f.store.isLoaded());
+        assertNull(f.store.rolled(id));
+        f.store.load();
+        assertTrue(f.store.isLoaded());
+        assertFalse(Files.exists(f.file()));
+        PlayerData first = f.store.get(id);
+        assertSame(first, f.store.get(id));
+        assertEquals(f.config.currentKeys().week(), first.weekKey());
+        first.recordForced(4, VOTE, BAR_MAX, List.of());
+
+        f.store.saveSoon();
+
+        assertEquals(4, f.savedPoints(id));
+        assertTrue(f.pending.isEmpty());
+        assertFalse(Files.exists(f.folder.resolve("players.yml.tmp")));
+        PlayerStore reloaded = new PlayerStore(f.plugin, f.config);
+        reloaded.load();
+        assertEquals(4, reloaded.peek(id).points());
+        assertEquals(first.daily(), reloaded.peek(id).daily());
+    }
+
+    @Test
+    void autoSaveUsesTheConfiguredIntervalAndCapturesOnlyDirtySnapshots() throws Exception {
+        Fixture f = fixture();
+        when(f.plugin.isEnabled()).thenReturn(true);
+        f.store.load();
+        f.store.startAutoSave();
+        verify(f.scheduler).runTaskTimer(eq(f.plugin), any(Runnable.class), eq(2400L), eq(2400L));
+        f.tick.run();
+        assertTrue(f.pending.isEmpty());
+        UUID id = UUID.randomUUID();
+        PlayerData data = f.store.get(id);
+        data.recordForced(2, VOTE, BAR_MAX, List.of());
+        f.tick.run();
+        assertEquals(1, f.pending.size());
+        data.recordForced(3, VOTE, BAR_MAX, List.of());
+        assertFalse(Files.exists(f.file()));
+        f.pending.getFirst().run();
+        assertEquals(2, f.savedPoints(id), "queued save must retain its original snapshot");
+        f.tick.run();
+        assertEquals(1, f.pending.size());
+
+        f.store.markDirty();
+        f.tick.run();
+        assertEquals(2, f.pending.size());
+        f.pending.get(1).run();
+        assertEquals(5, f.savedPoints(id));
+    }
+
+    @Test
+    void olderAsyncSnapshotsCannotOverwriteANewerCompletedSave() throws Exception {
+        Fixture f = fixture();
+        when(f.plugin.isEnabled()).thenReturn(true);
+        f.store.load();
+        UUID id = UUID.randomUUID();
+        PlayerData data = f.store.get(id);
+        data.recordForced(2, VOTE, BAR_MAX, List.of());
+        f.store.saveSoon();
+        data.recordForced(3, VOTE, BAR_MAX, List.of());
+        f.store.saveSoon();
+
+        f.pending.get(1).run();
+        f.pending.getFirst().run();
+
+        assertEquals(5, f.savedPoints(id));
+        data.recordForced(1, VOTE, BAR_MAX, List.of());
+        f.store.saveSoon();
+        data.recordForced(1, VOTE, BAR_MAX, List.of());
+        assertTrue(f.store.saveNow());
+        f.pending.get(2).run();
+        assertEquals(7, f.savedPoints(id));
+    }
+
+    @Test
+    void shutdownCancelsAutoSaveWritesLatestStateAndRejectsLateSaves() throws Exception {
+        Fixture f = fixture();
+        when(f.plugin.isEnabled()).thenReturn(true);
+        f.store.load();
+        f.store.startAutoSave();
+        UUID id = UUID.randomUUID();
+        PlayerData data = f.store.get(id);
+        data.recordForced(2, VOTE, BAR_MAX, List.of());
+        f.store.saveSoon();
+        data.recordForced(3, VOTE, BAR_MAX, List.of());
+
+        f.store.shutdown();
+
+        verify(f.timer).cancel();
+        assertEquals(5, f.savedPoints(id));
+        f.pending.getFirst().run();
+        data.recordForced(1, VOTE, BAR_MAX, List.of());
+        f.store.saveSoon();
+        assertEquals(1, f.pending.size());
+        assertEquals(5, f.savedPoints(id));
+    }
+
+    @Test
+    void failedWritesKeepTheLastGoodFileAndRetryOnTheNextAutoSave() throws Exception {
+        Fixture f = fixture();
+        when(f.plugin.isEnabled()).thenReturn(true);
+        f.store.load();
+        UUID id = UUID.randomUUID();
+        PlayerData data = f.store.get(id);
+        data.recordForced(3, VOTE, BAR_MAX, List.of());
+        assertTrue(f.store.saveNow());
+        String original = Files.readString(f.file());
+        data.recordForced(2, VOTE, BAR_MAX, List.of());
+        Path temp = Files.createDirectory(f.folder.resolve("players.yml.tmp"));
+        Path blocker = Files.writeString(temp.resolve("keep"), "occupied");
+        assertFalse(f.store.saveNow());
+        f.store.saveSoon();
+        f.pending.getFirst().run();
+        assertEquals(original, Files.readString(f.file()));
+        assertTrue(f.logs.stream().anyMatch(line -> line.contains("Failed to write players.yml")));
+        f.store.startAutoSave();
+        f.tick.run();
+        assertEquals(2, f.pending.size(), "a failed async write must restore the dirty flag");
+
+        Files.delete(blocker);
+        Files.delete(temp);
+        f.pending.get(1).run();
+
+        assertEquals(5, f.savedPoints(id));
+        f.tick.run();
+        assertEquals(2, f.pending.size());
+    }
+
+    @Test
+    void aBlockedDestinationIsPreservedAndCanBeSavedAfterItIsRepaired() throws Exception {
+        Fixture f = fixture();
+        f.store.load();
+        UUID id = UUID.randomUUID();
+        f.store.get(id).recordForced(3, VOTE, BAR_MAX, List.of());
+        Files.createDirectory(f.file());
+        Path blocker = Files.writeString(f.file().resolve("keep"), "preserved");
+
+        assertFalse(f.store.saveNow());
+        assertEquals("preserved", Files.readString(blocker));
+        Files.delete(blocker);
+        Files.delete(f.file());
+        assertTrue(f.store.saveNow());
+        assertEquals(3, f.savedPoints(id));
+    }
+
+    @Test
+    void anUnsupportedAtomicMoveFallsBackToReplacingTheRealFile() throws Exception {
+        Fixture f = fixture();
+        f.store.load();
+        UUID id = UUID.randomUUID();
+        PlayerData data = f.store.get(id);
+        data.recordForced(2, VOTE, BAR_MAX, List.of());
+        assertTrue(f.store.saveNow());
+        data.recordForced(3, VOTE, BAR_MAX, List.of());
+        Path temp = f.folder.resolve("players.yml.tmp");
+        Path destination = f.file();
+
+        // This filesystem supports atomic moves. Simulate only that capability rejection;
+        // serialization, the fallback move, and the reloaded file all use the real filesystem.
+        try (var files = mockStatic(Files.class, CALLS_REAL_METHODS)) {
+            files.when(() -> Files.move(temp, destination,
+                StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE))
+                .thenThrow(new AtomicMoveNotSupportedException(temp.toString(), destination.toString(),
+                    "atomic rename unsupported"));
+
+            assertTrue(f.store.saveNow());
+
+            files.verify(() -> Files.move(temp, destination, StandardCopyOption.REPLACE_EXISTING));
+        }
+        assertEquals(5, f.savedPoints(id));
+        assertFalse(Files.exists(temp));
+        assertTrue(f.logs.isEmpty());
+    }
+
+    @Test
+    void rollingAndClampingLoadedPlayersMakesAutoSavePersistTheUpdatedState() throws Exception {
+        Fixture f = fixture();
+        when(f.plugin.isEnabled()).thenReturn(true);
+        UUID old = UUID.randomUUID();
+        UUID current = UUID.randomUUID();
+        ActivityConfiguration.Keys keys = f.config.currentKeys();
+        PlayerStore.snapshot(Map.of(
+            old, new PlayerData(8, 2, "old-week", "old-day", 3, Map.of("vote", 2)),
+            current, new PlayerData(8, 2, keys.week(), keys.day(), 3, Map.of("vote", 2))))
+            .save(f.file().toFile());
+        f.store.load();
+        f.store.startAutoSave();
+        f.tick.run();
+        assertTrue(f.pending.isEmpty());
+        assertEquals(8, f.store.peek(old).points());
+        PlayerData rolled = f.store.rolled(old);
+        assertEquals(0, rolled.points());
+        assertEquals(keys.week(), rolled.weekKey());
+        assertEquals(keys.day(), rolled.dayKey());
+        TestManagers.limits(f.manager, 4, DAILY_MAX);
+        assertEquals(4, f.store.rolled(current).points());
+
+        f.tick.run();
+        f.pending.getFirst().run();
+
+        assertEquals(0, f.savedPoints(old));
+        assertEquals(4, f.savedPoints(current));
+        assertSame(rolled, f.store.rolled(old));
+        f.tick.run();
+        assertEquals(1, f.pending.size());
+    }
+
+    private Fixture fixture() throws Exception {
+        return new Fixture(Files.createDirectories(directory.resolve("plugin")));
+    }
+
+    private static final class Fixture {
+        final Path folder;
+        final JavaPlugin plugin = mock(JavaPlugin.class);
+        final BukkitScheduler scheduler = mock(BukkitScheduler.class);
+        final BukkitTask timer = mock(BukkitTask.class);
+        final ActivityManager manager = TestManagers.manager(VOTE);
+        final ActivityConfiguration config = manager.getConfiguration();
+        final PlayerStore store;
+        final List<Runnable> pending = new ArrayList<>();
+        final List<String> logs = new ArrayList<>();
+        Runnable tick;
+
+        Fixture(Path folder) throws Exception {
+            this.folder = folder;
+            TestManagers.limits(manager, BAR_MAX, DAILY_MAX);
+            var interval = ActivityConfiguration.class.getDeclaredField("saveIntervalMinutes");
+            interval.setAccessible(true);
+            interval.set(config, 2);
+            Logger logger = Logger.getAnonymousLogger();
+            logger.setUseParentHandlers(false);
+            logger.addHandler(new Handler() {
+                @Override public void publish(LogRecord record) { logs.add(record.getMessage()); }
+                @Override public void flush() { }
+                @Override public void close() { }
+            });
+            Server server = mock(Server.class);
+            when(plugin.getDataFolder()).thenReturn(folder.toFile());
+            when(plugin.getLogger()).thenReturn(logger);
+            when(plugin.getServer()).thenReturn(server);
+            when(server.getScheduler()).thenReturn(scheduler);
+            when(scheduler.runTaskTimer(eq(plugin), any(Runnable.class), anyLong(), anyLong()))
+                .thenAnswer(call -> {
+                    tick = call.getArgument(1);
+                    return timer;
+                });
+            when(scheduler.runTaskAsynchronously(eq(plugin), any(Runnable.class)))
+                .thenAnswer(call -> {
+                    pending.add(call.getArgument(1));
+                    return mock(BukkitTask.class);
+                });
+            store = new PlayerStore(plugin, config);
+        }
+
+        Path file() { return folder.resolve(PlayerStore.FILE); }
+
+        List<Path> backups() throws Exception {
+            try (var paths = Files.list(folder)) {
+                return paths.filter(path -> path.getFileName().toString().startsWith("players.yml.corrupt-"))
+                    .toList();
+            }
+        }
+
+        int savedPoints(UUID id) throws Exception {
+            YamlConfiguration yaml = new YamlConfiguration();
+            yaml.load(file().toFile());
+            return yaml.getInt("players." + id + ".points");
+        }
     }
 }

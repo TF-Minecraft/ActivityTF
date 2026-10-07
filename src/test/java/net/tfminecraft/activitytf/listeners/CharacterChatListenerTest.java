@@ -245,4 +245,9 @@ class CharacterChatListenerTest {
         assertTrue(say("I walk into the tavern and sit down"));
         assertTrue(listener.process(UUID.randomUUID(), "I walk into the tavern and sit down"));
     }
+    @Test void emptyTextHasNoPeriodAndMatchesAnotherEmptyText() {
+        assertFalse(CharacterChatListener.isPeriodic(""));
+        assertTrue(CharacterChatListener.similar("", ""));
+    }
+
 }

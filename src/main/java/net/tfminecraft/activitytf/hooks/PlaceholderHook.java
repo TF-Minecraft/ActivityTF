@@ -60,7 +60,7 @@ public class PlaceholderHook extends PlaceholderExpansion {
             case "max":
                 return String.valueOf(config.barMax());
             case "percent":
-                return String.valueOf(points * 100 / config.barMax());
+                return String.valueOf(points * 100L / config.barMax());
             case "claimable":
                 return String.valueOf(currentWeek ? data.claimable(config.milestones()) : 0);
             case "daily_points":

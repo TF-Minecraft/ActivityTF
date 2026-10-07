@@ -22,10 +22,6 @@ public class ProfessionXpListener implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onExperienceGain(PlayerExperienceGainEvent event) {
-        if (!event.hasProfession()) {
-            return;
-        }
-
         Profession profession = event.getProfession();
         if (profession == null) {
             return;

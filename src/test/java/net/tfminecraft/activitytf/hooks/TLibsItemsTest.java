@@ -177,4 +177,38 @@ class TLibsItemsTest {
 
         assertEquals(3, calls[0]);
     }
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings={"missing","placeholder","exception"})
+    void configurationReloadRetriesItemProvidersThatHaveRecovered(String failure) throws ReflectiveOperationException {
+        org.bukkit.Server previousServer=org.bukkit.Bukkit.getServer();
+        var serverField=org.bukkit.Bukkit.class.getDeclaredField("server"); serverField.setAccessible(true);
+        serverField.set(null,null);
+        java.util.concurrent.atomic.AtomicBoolean ready=new java.util.concurrent.atomic.AtomicBoolean();
+        String path="m.reload."+failure;
+        net.tfminecraft.activitytf.managers.ActivityManager manager=null;
+        try {
+            org.mockbukkit.mockbukkit.MockBukkit.mock();
+            try (var api=org.mockito.Mockito.mockStatic(net.tfminecraft.tlibs.TLibs.class,org.mockito.Mockito.RETURNS_DEEP_STUBS);
+             var configs=org.mockito.Mockito.mockConstruction(net.tfminecraft.activitytf.config.ActivityConfiguration.class);
+             var stores=org.mockito.Mockito.mockConstruction(net.tfminecraft.activitytf.store.PlayerStore.class)) {
+            org.mockito.Mockito.when(net.tfminecraft.tlibs.TLibs.getItemAPI().getCreator().getItemFromPath(path)).thenAnswer(call->{
+                if(ready.get()) return new org.bukkit.inventory.ItemStack(Material.DIAMOND);
+                if(failure.equals("exception")) throw new IllegalStateException("provider not ready");
+                return failure.equals("placeholder") ? new org.bukkit.inventory.ItemStack(Material.DIRT) : null;
+            });
+            manager=net.tfminecraft.activitytf.managers.ActivityManager.getInstance(org.mockito.Mockito.mock(org.bukkit.plugin.java.JavaPlugin.class));
+            assertNull(TLibsItems.item(path));
+            ready.set(true); manager.reload();
+            assertEquals(Material.DIAMOND,TLibsItems.item(path).getType());
+            org.mockito.Mockito.when(net.tfminecraft.tlibs.TLibs.getItemAPI().getChecker().checkItemWithPath(org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.eq(path))).thenReturn(true);
+            assertEquals("recovered",TLibsItems.match(new org.bukkit.inventory.ItemStack(Material.DIAMOND),paths(path,"recovered")));
+            }
+        } finally {
+            try {
+                if(manager!=null)manager.shutdown();
+                org.mockbukkit.mockbukkit.MockBukkit.unmock();
+            } finally { serverField.set(null,previousServer); }
+        }
+    }
+
 }
