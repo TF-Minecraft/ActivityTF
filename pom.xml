@@ -24,8 +24,8 @@
         <marketblock.version>0.1.0</marketblock.version>
         <musicalinstruments.version>3.0.0</musicalinstruments.version>
         <rpcharacters.version>2.0.1</rpcharacters.version>
-        <simplefactions.version>3.0.1</simplefactions.version>
-        <tlibs.version>2.0.0</tlibs.version>
+        <simplefactions.version>4.0.0</simplefactions.version>
+        <tlibs.version>2.4.1</tlibs.version>
         <vehicleframework.version>2.0.1</vehicleframework.version>
         <vfbuilders.version>2.0.0</vfbuilders.version>
     </properties>
