@@ -534,6 +534,7 @@ class ActivityCommandTest {
             when(neverPlayed.getName()).thenReturn("NeverPlayed");
             f.bukkit.when(Bukkit::getOfflinePlayers).thenReturn(new OfflinePlayer[] {offline, unnamed, neverPlayed});
             f.command.loadKnownPlayers();
+            f.bukkit.when(() -> Bukkit.getOfflinePlayerIfCached("OldName")).thenReturn(offline);
             Player online = f.online("Online");
             f.bukkit.when(Bukkit::getOnlinePlayers).thenReturn(List.of(online));
             for (String action : List.of("check", "reset", "givereroll", "add", "addpoints")) {
@@ -541,8 +542,11 @@ class ActivityCommandTest {
                 assertEquals(List.of("OldName"), f.complete(f.admin(), action.toUpperCase(), "oLd"));
                 assertEquals(List.of(), f.complete(f.admin(), action, "absent"));
             }
+            f.bukkit.when(() -> Bukkit.getOfflinePlayerIfCached("OldName")).thenReturn(null);
+            assertEquals(List.of(), f.complete(f.admin(), "check", "old"));
             Player renamed = f.online("NewName");
             when(renamed.getUniqueId()).thenReturn(id);
+            f.bukkit.when(() -> Bukkit.getOfflinePlayerIfCached("NewName")).thenReturn(renamed);
             f.command.onJoin(new org.bukkit.event.player.PlayerJoinEvent(renamed,
                 (net.kyori.adventure.text.Component) null));
             f.command.onJoin(new org.bukkit.event.player.PlayerJoinEvent(online,
@@ -550,7 +554,7 @@ class ActivityCommandTest {
             assertEquals(List.of("Online", "NewName"), f.complete(f.admin(), "check", ""));
             assertEquals(List.of(), f.complete(f.admin(), "check", "old"));
             f.bukkit.verify(Bukkit::getOfflinePlayers, org.mockito.Mockito.times(1));
-            f.bukkit.verify(() -> Bukkit.getOfflinePlayerIfCached(org.mockito.ArgumentMatchers.anyString()),
+            f.bukkit.verify(() -> Bukkit.getOfflinePlayer(org.mockito.ArgumentMatchers.anyString()),
                 org.mockito.Mockito.never());
             assertTrue(f.audit().isEmpty());
             assertNull(f.manager.getStore().peek(id));

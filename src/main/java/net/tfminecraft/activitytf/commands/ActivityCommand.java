@@ -461,7 +461,10 @@ public class ActivityCommand implements CommandExecutor, TabCompleter, Listener 
                 names.put(name.toLowerCase(Locale.ROOT), name);
             }
             for (String name : knownPlayers.values()) {
-                names.putIfAbsent(name.toLowerCase(Locale.ROOT), name);
+                String key = name.toLowerCase(Locale.ROOT);
+                if (!names.containsKey(key) && Bukkit.getOfflinePlayerIfCached(name) != null) {
+                    names.put(key, name);
+                }
             }
             return filter(new ArrayList<>(names.values()), args[1]);
         }
