@@ -520,6 +520,58 @@ class ActivityCommandTest {
         }
     }
 
+    @Test
+    void cachedOfflineTargetsAndJoinedRenamesCompleteWithoutProfileLookups() throws Exception {
+        try (CommandFixture f = new CommandFixture(directory)) {
+            OfflinePlayer offline = mock(OfflinePlayer.class);
+            UUID id = UUID.randomUUID();
+            when(offline.getUniqueId()).thenReturn(id);
+            when(offline.getName()).thenReturn("OldName");
+            when(offline.hasPlayedBefore()).thenReturn(true);
+            OfflinePlayer unnamed = mock(OfflinePlayer.class);
+            when(unnamed.hasPlayedBefore()).thenReturn(true);
+            OfflinePlayer neverPlayed = mock(OfflinePlayer.class);
+            when(neverPlayed.getName()).thenReturn("NeverPlayed");
+            f.bukkit.when(Bukkit::getOfflinePlayers).thenReturn(new OfflinePlayer[] {offline, unnamed, neverPlayed});
+            f.command.loadKnownPlayers();
+            f.bukkit.when(() -> Bukkit.getOfflinePlayerIfCached("OldName")).thenReturn(offline);
+            Player online = f.online("Online");
+            f.bukkit.when(Bukkit::getOnlinePlayers).thenReturn(List.of(online));
+            for (String action : List.of("check", "reset", "givereroll", "add", "addpoints")) {
+                assertEquals(List.of("Online", "OldName"), f.complete(f.admin(), action, ""));
+                assertEquals(List.of("OldName"), f.complete(f.admin(), action.toUpperCase(), "oLd"));
+                assertEquals(List.of(), f.complete(f.admin(), action, "absent"));
+            }
+            f.bukkit.when(() -> Bukkit.getOfflinePlayerIfCached("OldName")).thenReturn(null);
+            assertEquals(List.of(), f.complete(f.admin(), "check", "old"));
+            Player renamed = f.online("NewName");
+            when(renamed.getUniqueId()).thenReturn(id);
+            f.bukkit.when(() -> Bukkit.getOfflinePlayerIfCached("NewName")).thenReturn(renamed);
+            f.command.onJoin(new org.bukkit.event.player.PlayerJoinEvent(renamed,
+                (net.kyori.adventure.text.Component) null));
+            f.command.onJoin(new org.bukkit.event.player.PlayerJoinEvent(online,
+                (net.kyori.adventure.text.Component) null));
+            assertEquals(List.of("Online", "NewName"), f.complete(f.admin(), "check", ""));
+            assertEquals(List.of(), f.complete(f.admin(), "check", "old"));
+            f.bukkit.verify(Bukkit::getOfflinePlayers, org.mockito.Mockito.times(1));
+            f.bukkit.verify(() -> Bukkit.getOfflinePlayer(org.mockito.ArgumentMatchers.anyString()),
+                org.mockito.Mockito.never());
+            assertTrue(f.audit().isEmpty());
+            assertNull(f.manager.getStore().peek(id));
+        }
+    }
+
+    @Test
+    void explicitlyNegatedCheckIsHiddenForAdminsAtEveryDepth() throws Exception {
+        try (CommandFixture f = new CommandFixture(directory)) {
+            Sender adminWithoutCheck = new Sender(Set.of("activity.admin"));
+            assertEquals(List.of("reload", "rewards", "reset", "givereroll", "add", "addpoints"),
+                f.complete(adminWithoutCheck, ""));
+            assertEquals(List.of(), f.complete(adminWithoutCheck, "C"));
+            assertEquals(List.of(), f.complete(adminWithoutCheck, "check", ""));
+        }
+    }
+
     private static final class Sender {
         final CommandSender bukkit = mock(CommandSender.class);
         final List<String> sent = new ArrayList<>();

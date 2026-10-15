@@ -111,11 +111,11 @@ class ActivityPluginTest {
         assertTrue(Files.isRegularFile(plugin.getDataFolder().toPath().resolve("messages.yml")));
         assertInstanceOf(ActivityCommand.class, plugin.getCommand("activity").getExecutor());
         assertSame(plugin.getCommand("activity").getExecutor(), plugin.getCommand("activity").getTabCompleter());
-        assertEquals(Set.of(JoinListener.class, CraftListener.class, ActivityGui.class), listeners());
+        assertEquals(Set.of(JoinListener.class, CraftListener.class, ActivityGui.class, ActivityCommand.class), listeners());
         assertTrue(server.dispatchCommand(server.getConsoleSender(), "activity"));
         assertNotNull(server.getConsoleSender().nextMessage());
         server.getScheduler().performOneTick();
-        assertEquals(Set.of(JoinListener.class, CraftListener.class, ActivityGui.class), listeners());
+        assertEquals(Set.of(JoinListener.class, CraftListener.class, ActivityGui.class, ActivityCommand.class), listeners());
         UUID uuid = UUID.randomUUID();
         manager.getStore().get(uuid).addPoints(7, manager.getConfiguration().barMax());
         server.getScheduler().performTicks(manager.getConfiguration().saveIntervalMinutes() * 1200L);
@@ -189,12 +189,12 @@ class ActivityPluginTest {
         }
         LocalExpansionManager expansions = installPlaceholderApi();
         enablePlugin();
-        assertEquals(Set.of(JoinListener.class, CraftListener.class, ActivityGui.class), listeners());
+        assertEquals(Set.of(JoinListener.class, CraftListener.class, ActivityGui.class, ActivityCommand.class), listeners());
         assertNull(expansions.getExpansion("activity"));
 
         server.getScheduler().performOneTick();
 
-        assertEquals(Set.of("JoinListener", "CraftListener", "ActivityGui", "VoteListener", "InstrumentListener",
+        assertEquals(Set.of("JoinListener", "CraftListener", "ActivityGui", "ActivityCommand", "VoteListener", "InstrumentListener",
             "GeigerListener", "ProfessionXpListener", "MmoItemsStationListener", "VehicleBuildListener",
             "CharacterChatListener", "InjuryListener", "ProfessionUpgradeListener", "FurnitureListener", "BattleListener",
             "AdvancedCraftListener", "ArchaeologyListener", "MarketSaleListener", "CasinoWinListener", "DishCookedListener",

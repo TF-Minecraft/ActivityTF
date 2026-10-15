@@ -7,6 +7,9 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.inventory.Inventory;
 import net.md_5.bungee.api.ChatColor;
 import net.tfminecraft.activitytf.config.ActivityConfiguration;
@@ -22,17 +25,17 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Locale;
 import java.util.UUID;
 
-public class ActivityCommand implements CommandExecutor, TabCompleter {
+public class ActivityCommand implements CommandExecutor, TabCompleter, Listener {
 
     private static final List<String> SUBCOMMANDS =
         Arrays.asList("reload", "rewards", "check", "reset", "givereroll", "add", "addpoints");
 
     private static final String APPLY = "apply";
-
-    private static final List<String> READ_ONLY_SUBCOMMANDS = List.of("check");
 
     private static final String FORCE = "--force";
 
@@ -42,6 +45,7 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
 
     private final ActivityManager manager;
     private final ActivityGui gui;
+    private final Map<UUID, String> knownPlayers = new LinkedHashMap<>();
 
     public ActivityCommand(ActivityManager manager, ActivityGui gui) {
         this.manager = manager;
@@ -440,7 +444,8 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
         }
 
         if (args.length == 1) {
-            return filter(admin ? SUBCOMMANDS : READ_ONLY_SUBCOMMANDS, args[0]);
+            return filter(SUBCOMMANDS.stream()
+                .filter(sub -> sender.hasPermission(permissionFor(sub))).toList(), args[0]);
         }
 
         String sub = args[0].toLowerCase(Locale.ROOT);
@@ -451,7 +456,17 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
         if (args.length == 2
             && (sub.equals("reset") || sub.equals("add") || sub.equals("addpoints") || sub.equals("check")
                 || sub.equals("givereroll"))) {
-            return filter(onlineNames(), args[1]);
+            Map<String, String> names = new LinkedHashMap<>();
+            for (String name : onlineNames()) {
+                names.put(name.toLowerCase(Locale.ROOT), name);
+            }
+            for (String name : knownPlayers.values()) {
+                String key = name.toLowerCase(Locale.ROOT);
+                if (!names.containsKey(key) && Bukkit.getOfflinePlayerIfCached(name) != null) {
+                    names.put(key, name);
+                }
+            }
+            return filter(new ArrayList<>(names.values()), args[1]);
         }
 
         if (args.length == 2 && sub.equals("rewards")) {
@@ -471,6 +486,21 @@ public class ActivityCommand implements CommandExecutor, TabCompleter {
         }
 
         return Collections.emptyList();
+    }
+
+    // Enumerate saved players once at enable, never while completing. Joins refresh renamed accounts.
+    public void loadKnownPlayers() {
+        for (OfflinePlayer player : Bukkit.getOfflinePlayers()) {
+            if (player.hasPlayedBefore() && player.getName() != null) {
+                knownPlayers.put(player.getUniqueId(), player.getName());
+            }
+        }
+    }
+
+    @EventHandler
+    public void onJoin(PlayerJoinEvent event) {
+        Player player = event.getPlayer();
+        knownPlayers.put(player.getUniqueId(), player.getName());
     }
 
     List<String> onlineNames() {

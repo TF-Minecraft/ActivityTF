@@ -40,6 +40,8 @@ public class ActivityPlugin extends JavaPlugin {
         ActivityGui gui = new ActivityGui(manager);
 
         ActivityCommand command = new ActivityCommand(manager, gui);
+        command.loadKnownPlayers();
+        getServer().getPluginManager().registerEvents(command, this);
         getCommand("activity").setExecutor(command);
         getCommand("activity").setTabCompleter(command);
 
