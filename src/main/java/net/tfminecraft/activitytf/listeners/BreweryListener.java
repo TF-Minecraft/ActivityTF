@@ -4,6 +4,7 @@ import com.dre.brewery.BIngredients;
 import com.dre.brewery.Barrel;
 import com.dre.brewery.Brew;
 import com.dre.brewery.api.events.IngedientAddEvent;
+import com.dre.brewery.api.events.brew.BrewDrinkEvent;
 import com.dre.brewery.api.events.brew.BrewModifyEvent;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
@@ -110,6 +111,19 @@ public class BreweryListener implements Listener {
                 creditOnce(player, clicked, event.getSlot(), item, AGED, "brew_age");
             }
         }
+    }
+
+    // Brews that match no recipe (failed or unfinished ones) have quality 0.
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onDrink(BrewDrinkEvent event) {
+        recordDrink(event.getPlayer(), event.getQuality());
+    }
+
+    void recordDrink(Player player, int quality) {
+        if (player == null || quality < 1) {
+            return;
+        }
+        manager.recordAction(player.getUniqueId(), "brew_drink", 1);
     }
 
     private void creditOnce(Player player, Inventory inventory, int slot, ItemStack item,
