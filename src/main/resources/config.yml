@@ -237,6 +237,7 @@ activities:
     description:
       - "&7Send &a%every% &7substantial in-character messages."
       - "&7Short or repetitive messages do not count."
+      - "&7Someone else must be in earshot."
       - "&7Earn &a%points% &7activity point per completion."
       - "&7"
     material: WRITABLE_BOOK
