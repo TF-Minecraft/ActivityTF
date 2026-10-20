@@ -20,6 +20,8 @@ public class ReferralData {
     private long firstSeen;
     private UUID invitedBy;
     private long linkedAt;
+    private long lastSeen;
+    private boolean ipExempt;
     private final Set<Integer> claimed = new TreeSet<>();
     private final Set<Integer> inviterClaimed = new TreeSet<>();
     private final LinkedHashSet<String> ips = new LinkedHashSet<>();
@@ -58,6 +60,23 @@ public class ReferralData {
 
     public void setFirstSeen(long firstSeen) {
         this.firstSeen = firstSeen;
+    }
+
+    public long lastSeen() {
+        return lastSeen;
+    }
+
+    public void setLastSeen(long lastSeen) {
+        this.lastSeen = lastSeen;
+    }
+
+    /** Staff let this account link and claim despite a shared connection. */
+    public boolean ipExempt() {
+        return ipExempt;
+    }
+
+    public void setIpExempt(boolean ipExempt) {
+        this.ipExempt = ipExempt;
     }
 
     public UUID invitedBy() {

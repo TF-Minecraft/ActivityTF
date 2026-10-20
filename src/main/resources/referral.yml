@@ -13,10 +13,13 @@ enabled: true
 
 season:
   # When the season started, in server time: 2026-10-01 or 2026-10-01T06:10.
-  # Playtime only counts from here on, and changing it starts a new season:
-  # referrals.yml is moved aside (referrals-<old start>-<time>.yml) and every
-  # link and counted minute starts again from nothing. Empty = no season
-  # window, so only accounts in their first link.new-account-days can link.
+  # Playtime only counts from here on. Changing it from one date to another
+  # starts a new season: referrals.yml is moved aside
+  # (referrals-<old start>-<time>.yml) and every link and counted minute
+  # starts again from nothing. Setting it for the first time, or clearing it,
+  # keeps what was counted, and a date that does not parse keeps the old one.
+  # Empty = no season window, so only accounts in their first
+  # link.new-account-days can link.
   start: ""
   # For this many days after season.start, any account can link - and its
   # playtime since the season started already counts towards the rewards.
@@ -26,21 +29,25 @@ link:
   # After the opening days, only accounts whose first join on this server was
   # less than this many days ago can link.
   new-account-days: 7
-  # Refuse a link when the two accounts have ever joined from the same
-  # connection (last 16 connections per account, stored as salted hashes).
-  # Claims are held for the same reason if they share one later on.
+  # Refuse a link when the two accounts have joined from the same connection
+  # this season (last 16 connections per account, stored as salted hashes).
+  # Claims are held for the same reason if they share one later on. Staff
+  # can exempt an account that really shares a house with
+  # /referral allowip <player>.
   same-ip-check: true
   # Most players one account can have linked to it this season; 0 = no limit.
-  max-invitees: 0
+  max-invitees: 10
   # Most new links one inviter can receive in 24 hours; 0 = no limit. Stops
   # one account collecting a burst of throwaway accounts in an afternoon.
   max-links-per-day: 3
 
 playtime:
   # A minute counts only when the player has done something in the last
-  # afk-minutes: moved at least move-blocks, chatted, used a command, or
-  # broken or placed a block. Turning the camera, swinging or clicking alone
-  # does not count, so a mouse jiggler or an autoclicker earns nothing.
+  # afk-minutes: moved at least move-blocks (1 or more), chatted, used a real
+  # command, or broken or placed a block. Joining, turning the camera,
+  # swinging or clicking alone does not count, so a mouse jiggler, an
+  # autoclicker or a reconnect loop earns nothing. Being carried by water or
+  # pistons does look like walking.
   afk-minutes: 5
   move-blocks: 3
   # Worlds where nothing counts and nothing can be claimed (rewards go to

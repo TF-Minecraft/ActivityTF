@@ -105,6 +105,7 @@ public class ReferralManager {
     public void initialize() {
         config.load();
         store.load(config.seasonKey());
+        seedOnline();
         stopTimers();
         timer = plugin.getServer().getScheduler().runTaskTimer(plugin, this::tick, MINUTE_TICKS, MINUTE_TICKS);
         long save = activity.getConfiguration().saveIntervalMinutes() * MINUTE_TICKS;
@@ -118,10 +119,27 @@ public class ReferralManager {
     public void reload() {
         config.load();
         warnedPools.clear();
-        if (!Objects.equals(store.season(), config.seasonKey())) {
-            store.saveNow();
+        // A file that failed to load is read again, so fixing it by hand needs no restart.
+        if (!store.isLoaded() || !Objects.equals(store.season(), config.seasonKey())) {
+            if (store.isLoaded()) {
+                store.saveNow();
+            }
             store.load(config.seasonKey());
+            seedOnline();
         }
+    }
+
+    // Players already online when the store is (re)loaded never fire a join, so record them now.
+    private void seedOnline() {
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            seed(player);
+            anchors.putIfAbsent(player.getUniqueId(), player.getLocation());
+        }
+    }
+
+    /** Runs GUI work on the next tick, outside the inventory event that asked for it. */
+    public void runNextTick(Runnable work) {
+        plugin.getServer().getScheduler().runTask(plugin, work);
     }
 
     public void shutdown() {
@@ -182,11 +200,14 @@ public class ReferralManager {
     }
 
     // A move of at least playtime.move-blocks since the last one counts as being at the keyboard.
+    // The first sample only sets the anchor: joining (or a reconnect loop) is not activity.
     void sampleMovement(Player player, long now) {
         Location here = player.getLocation();
         Location anchor = anchors.get(player.getUniqueId());
         double move = config.moveBlocks();
-        if (anchor == null || anchor.getWorld() != here.getWorld() || anchor.distanceSquared(here) >= move * move) {
+        if (anchor == null) {
+            anchors.put(player.getUniqueId(), here);
+        } else if (anchor.getWorld() != here.getWorld() || anchor.distanceSquared(here) >= move * move) {
             anchors.put(player.getUniqueId(), here);
             noteActive(player.getUniqueId(), now);
         }
@@ -219,22 +240,42 @@ public class ReferralManager {
     }
 
     public void onJoin(Player player) {
+        seed(player);
+        anchors.put(player.getUniqueId(), player.getLocation());
+        lastActive.remove(player.getUniqueId());
+        if (config.enabled() && hasClaimable(player.getUniqueId())) {
+            player.sendMessage(messages().get("referral.reward-ready"));
+        }
+    }
+
+    // Name, first join, last seen and connection of an online account.
+    private void seed(Player player) {
         long now = clock.getAsLong();
         ReferralData data = store.get(player.getUniqueId(), player.getName());
         long first = player.getFirstPlayed() > 0 ? player.getFirstPlayed() : now;
         if (data.firstSeen() <= 0 || first < data.firstSeen()) {
             data.setFirstSeen(first);
         }
+        data.setLastSeen(now);
         InetSocketAddress address = player.getAddress();
         if (address != null && address.getAddress() != null) {
             data.addIp(store.ipHash(address.getAddress().getHostAddress()));
         }
         store.markDirty();
-        anchors.put(player.getUniqueId(), player.getLocation());
-        noteActive(player.getUniqueId(), now);
-        if (config.enabled() && hasClaimable(player.getUniqueId())) {
-            player.sendMessage(messages().get("referral.reward-ready"));
-        }
+    }
+
+    /** True when the IP check is on, neither account is exempt, and they have shared a connection. */
+    boolean sharedConnection(ReferralData one, ReferralData other) {
+        return config.ipCheck() && !one.ipExempt() && !other.ipExempt() && one.sharesIp(other);
+    }
+
+    /** Staff override for players who really share a connection (family, a shared house). */
+    public boolean toggleIpExempt(UUID uuid) {
+        ReferralData data = store.peek(uuid);
+        data.setIpExempt(!data.ipExempt());
+        store.markDirty();
+        store.saveNow();
+        return data.ipExempt();
     }
 
     public void onQuit(UUID uuid) {
@@ -307,7 +348,7 @@ public class ReferralManager {
             return Link.LOOP;
         }
         ReferralData data = store.peek(uuid);
-        if (config.ipCheck() && data != null && data.sharesIp(inviter)) {
+        if (data != null && sharedConnection(data, inviter)) {
             return Link.SAME_IP;
         }
         List<UUID> invited = invitees(inviterId);
@@ -527,7 +568,7 @@ public class ReferralManager {
         if (config.ignoredWorld(player.getWorld().getName())) {
             return Claim.WRONG_WORLD;
         }
-        if (config.ipCheck() && other != null && mine.sharesIp(other)) {
+        if (other != null && sharedConnection(mine, other)) {
             return Claim.SAME_IP;
         }
         return null;

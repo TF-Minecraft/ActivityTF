@@ -73,6 +73,7 @@ class ReferralGuiTest {
         InventoryClickEvent event = new InventoryClickEvent(player.getOpenInventory(),
             InventoryType.SlotType.CONTAINER, slot, ClickType.LEFT, InventoryAction.PICKUP_ALL);
         gui.onClick(event);
+        fixture.server.getScheduler().performOneTick();
         return event;
     }
 
@@ -314,8 +315,26 @@ class ReferralGuiTest {
         assertEquals(Material.GRAY_STAINED_GLASS_PANE, top(inviter).getItem(ReferralGui.FIRST_INVITEE_SLOT + 2).getType());
         click(inviter, ReferralGui.PREVIOUS_SLOT);
         assertEquals(0, marker(inviter).page());
+        click(inviter, ReferralGui.NEXT_SLOT);
+        assertEquals(1, marker(inviter).page(), "no arrow on the last page, so nothing happens");
         click(inviter, ReferralGui.BACK_SLOT);
         assertEquals(List.of(inviter), activityOpened);
+
+        gui.open(inviter);
+        click(inviter, ReferralGui.PREVIOUS_SLOT);
+        assertEquals(0, marker(inviter).page(), "no arrow on the first page either");
+        inviter.permissions.setPermission("activity.use", false);
+        said(inviter);
+        click(inviter, ReferralGui.BACK_SLOT);
+        assertEquals(1, activityOpened.size(), "the way back needs activity.use");
+        assertTrue(said(inviter).stream().anyMatch(line -> line.contains("No permission")));
+        TestPlayer gone = fixture.join("Gone", "10.9.9.9");
+        gone.openInventory(gui.build(gone, 0));
+        InventoryClickEvent late = new InventoryClickEvent(gone.getOpenInventory(),
+            InventoryType.SlotType.CONTAINER, ReferralGui.INVITER_SLOT, ClickType.LEFT, InventoryAction.PICKUP_ALL);
+        gui.onClick(late);
+        gone.disconnect();
+        fixture.server.getScheduler().performOneTick();
     }
 
     @Test
@@ -438,6 +457,7 @@ class ReferralGuiTest {
         InventoryClickEvent event = new InventoryClickEvent(player.getOpenInventory(),
             InventoryType.SlotType.CONTAINER, 22, ClickType.LEFT, InventoryAction.PICKUP_ALL);
         activity.onClick(event);
+        fixture.server.getScheduler().performOneTick();
         assertEquals(List.of(player), opened);
 
         activity.open(player);

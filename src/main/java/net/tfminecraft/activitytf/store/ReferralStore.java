@@ -66,12 +66,15 @@ public class ReferralStore {
             }
             salt = yaml.getString("salt", "");
             String stored = yaml.getString("season", "");
-            if (!stored.equals(currentSeason)) {
+            // Only a change from one real start date to another starts over; setting or clearing
+            // season.start keeps what was counted.
+            if (!stored.equals(currentSeason) && !stored.isEmpty() && !currentSeason.isEmpty()) {
                 if (!archive(stored)) {
                     return;
                 }
             } else {
                 read(yaml.getConfigurationSection("players"));
+                dirty |= !stored.equals(currentSeason);
             }
         }
         if (salt.isEmpty()) {
@@ -84,7 +87,7 @@ public class ReferralStore {
     }
 
     private boolean archive(String stored) {
-        String tag = stored.isEmpty() ? "unset" : stored.replaceAll("[^0-9A-Za-z-]", "-");
+        String tag = stored.replaceAll("[^0-9A-Za-z-]", "-");
         File old = new File(file.getParentFile(), "referrals-" + tag + "-" + System.currentTimeMillis() + ".yml");
         try {
             Files.move(file.toPath(), old.toPath());
@@ -116,6 +119,8 @@ public class ReferralStore {
     static ReferralData parse(ConfigurationSection entry) {
         ReferralData data = new ReferralData(entry.getString("name", ""), entry.getLong("first-seen"));
         data.setMinutes(entry.getInt("minutes"));
+        data.setLastSeen(entry.getLong("last-seen"));
+        data.setIpExempt(entry.getBoolean("ip-exempt"));
         UUID inviter = uuid(entry.getString("invited-by", ""));
         if (inviter != null) {
             data.link(inviter, entry.getLong("linked-at"));
@@ -162,17 +167,21 @@ public class ReferralStore {
         return players;
     }
 
-    /** The account a name was last seen on, ignoring case; null when nobody this season used it. */
+    /** The account a name was most recently seen on, ignoring case; null when nobody this season used it. */
     public UUID byName(String name) {
+        UUID found = null;
+        long seen = Long.MIN_VALUE;
         for (Map.Entry<UUID, ReferralData> entry : players.entrySet()) {
-            if (entry.getValue().name() != null && entry.getValue().name().equalsIgnoreCase(name)) {
-                return entry.getKey();
+            ReferralData data = entry.getValue();
+            if (data.name() != null && data.name().equalsIgnoreCase(name) && data.lastSeen() >= seen) {
+                found = entry.getKey();
+                seen = data.lastSeen();
             }
         }
-        return null;
+        return found;
     }
 
-    /** Salted hash of a connection address, so the file never holds a raw IP. */
+    /** Salted hash of a connection address, so the file holds no raw IP (not proof against someone who can read it and guess). */
     public String ipHash(String address) {
         return UUID.nameUUIDFromBytes((salt + "|" + address).getBytes(StandardCharsets.UTF_8)).toString();
     }
@@ -235,6 +244,10 @@ public class ReferralStore {
             yaml.set(path + ".name", data.name());
             yaml.set(path + ".minutes", data.minutes());
             yaml.set(path + ".first-seen", data.firstSeen());
+            yaml.set(path + ".last-seen", data.lastSeen());
+            if (data.ipExempt()) {
+                yaml.set(path + ".ip-exempt", true);
+            }
             if (data.invitedBy() != null) {
                 yaml.set(path + ".invited-by", data.invitedBy().toString());
                 yaml.set(path + ".linked-at", data.linkedAt());

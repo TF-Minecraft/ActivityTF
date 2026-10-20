@@ -51,6 +51,8 @@ class ReferralListenerTest {
     void joiningAndQuittingTrackTheAccount() {
         TestPlayer player = fixture.join("Alice", "10.0.0.1");
         assertNotNull(fixture.referrals.getStore().peek(player.getUniqueId()), "MockBukkit fires the join");
+        assertFalse(fixture.counts(player), "joining is not activity");
+        fixture.referrals.noteActive(player.getUniqueId());
         assertTrue(fixture.counts(player));
         player.disconnect();
         assertFalse(fixture.counts(player));
@@ -61,7 +63,11 @@ class ReferralListenerTest {
         TestPlayer player = fixture.join("Alice", "10.0.0.1");
         afkThen(player, p -> listener.onChat(new AsyncChatEvent(true, p, new HashSet<>(), (source, name, message, viewer) -> message,
             Component.text("hi"), Component.text("hi"), null)));
-        afkThen(player, p -> listener.onCommand(new PlayerCommandPreprocessEvent(p, "/me waves")));
+        afkThen(player, p -> listener.onCommand(new PlayerCommandPreprocessEvent(p, "/referral info")));
+        fixture.clock.addAndGet(Duration.ofMinutes(10).toMillis());
+        listener.onCommand(new PlayerCommandPreprocessEvent(player, "/nosuchcommand x"));
+        listener.onCommand(new PlayerCommandPreprocessEvent(player, "/"));
+        assertFalse(fixture.counts(player), "an unknown command is not activity");
         Block block = player.getWorld().getBlockAt(0, 64, 0);
         afkThen(player, p -> listener.onBreak(new BlockBreakEvent(block, p)));
         afkThen(player, p -> listener.onPlace(new BlockPlaceEvent(block, block.getState(), block,

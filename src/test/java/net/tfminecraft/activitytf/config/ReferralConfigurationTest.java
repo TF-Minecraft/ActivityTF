@@ -87,16 +87,25 @@ class ReferralConfigurationTest {
         assertEquals(0, config.maxLinksPerDay());
         assertFalse(config.ipCheck());
         assertEquals(1, config.afkMinutes());
-        assertEquals(0, config.moveBlocks());
+        assertEquals(1, config.moveBlocks());
         assertTrue(config.ignoredWorld("character_selection"));
         assertFalse(warned("no usable act"), "a disabled file is not reported");
     }
 
     @Test
-    void aBadSeasonDateIsReportedAndIgnored() throws Exception {
+    void aBadSeasonDateIsReportedAndKeepsThePreviousOne() throws Exception {
         ReferralConfiguration config = config("season: {start: soon}");
         assertNull(config.seasonStart());
         assertTrue(warned("season.start 'soon' is not a date"));
+        YamlConfiguration source = new YamlConfiguration();
+        source.loadFromString("season: {start: \"2026-10-01\"}");
+        config.load(source);
+        source.loadFromString("season: {start: \"2026-1O-01\"}");
+        config.load(source);
+        assertEquals("2026-10-01T00:00", config.seasonKey());
+        source.loadFromString("season: {start: \"\"}");
+        config.load(source);
+        assertEquals("", config.seasonKey());
     }
 
     @Test

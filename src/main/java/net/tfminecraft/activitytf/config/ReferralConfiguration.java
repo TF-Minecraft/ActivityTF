@@ -76,9 +76,13 @@ public class ReferralConfiguration {
     void load(ConfigurationSection config) {
         enabled = config.getBoolean("enabled", true);
 
+        // A season.start that does not parse keeps the previous one, so a typo never starts a new season.
         String start = config.getString("season.start", "").strip();
-        seasonStart = start.isEmpty() ? null : dateTime(start, "season.start");
-        seasonKey = seasonStart == null ? "" : seasonStart.toString();
+        LocalDateTime parsed = start.isEmpty() ? null : dateTime(start, "season.start");
+        if (start.isEmpty() || parsed != null) {
+            seasonStart = parsed;
+            seasonKey = parsed == null ? "" : parsed.toString();
+        }
         openDays = Math.max(0, config.getInt("season.open-days", 14));
         newAccountDays = Math.max(0, config.getInt("link.new-account-days", 7));
         maxInvitees = Math.max(0, config.getInt("link.max-invitees", 0));
@@ -86,7 +90,7 @@ public class ReferralConfiguration {
         ipCheck = config.getBoolean("link.same-ip-check", true);
 
         afkMinutes = Math.max(1, config.getInt("playtime.afk-minutes", 5));
-        moveBlocks = Math.max(0, config.getInt("playtime.move-blocks", 3));
+        moveBlocks = Math.max(1, config.getInt("playtime.move-blocks", 3));
         Set<String> worlds = new HashSet<>();
         for (String world : config.getStringList("playtime.ignored-worlds")) {
             worlds.add(world.strip().toLowerCase(Locale.ROOT));

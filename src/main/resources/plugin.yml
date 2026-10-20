@@ -12,7 +12,7 @@ commands:
     usage: /activity [reload|rewards [apply]|check <player>|reset <player>|givereroll <player>|add <player> <activity> <count> [--force]|addpoints <player> <points>]
   referral:
     description: Open the referral menu, pick who invited you, or run referral staff subcommands
-    usage: /referral [invitedby <name>|info <player>|unlink <player>|addtime <player> <minutes>]
+    usage: /referral [invitedby <name>|info <player>|unlink <player>|addtime <player> <minutes>|allowip <player>]
     aliases: [referrals]
 permissions:
   activity.use:
@@ -28,7 +28,7 @@ permissions:
     description: Open the referral menu and claim referral rewards
     default: true
   activity.referral.admin:
-    description: Inspect, unlink and adjust referral playtime
+    description: Inspect, unlink, adjust referral playtime and exempt accounts from the same-connection check
     default: op
   activity.admin:
     description: Access to activity admin subcommands

@@ -78,7 +78,7 @@ admin:
   check-task-hidden: "&7 %slot%. &8%activity%&7 - hidden"
 referral:
   usage: "&eUsage: /referral &7(opens the menu)&e, /referral invitedby <name>"
-  usage-admin: "&eStaff: /referral info <player> | unlink <player> | addtime <player> <minutes>"
+  usage-admin: "&eStaff: /referral info <player> | unlink <player> | addtime <player> <minutes> | allowip <player>"
   reward-ready: "&a&lREFERRAL REWARD READY! &7Open &f/referral &7to claim."
   claimed: "&a&lREFERRAL &7You received %reward%&7."
   linked-inviter: "&a&lREFERRAL &f%name% &7says you invited them. Their playtime now earns you rewards in &f/referral&7."
@@ -114,6 +114,8 @@ referral:
     unlinked: "&aUnlinked %name% - they can pick who invited them again."
     not-linked: "&e%name% is not linked."
     time-added: "&a%name% now has &f%minutes%&a counted minutes."
+    ip-exempt-on: "&a%name% may now link and claim with accounts on the same connection."
+    ip-exempt-off: "&e%name% is held to the same-connection check again."
   gui:
     title: "&8Referral"
     who-invited: "#e6ca40&lWho invited you?"

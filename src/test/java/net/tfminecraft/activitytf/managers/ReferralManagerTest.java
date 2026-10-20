@@ -74,6 +74,9 @@ class ReferralManagerTest {
     void aMinuteCountsOnlyForSomeoneWhoMovedOrActedRecently() {
         TestPlayer player = fixture.join("Alice", "10.0.0.1");
         fixture.tick();
+        assertEquals(0, data(player).minutes(), "joining alone is not activity");
+        referrals.noteActive(player.getUniqueId());
+        fixture.tick();
         assertEquals(1, data(player).minutes());
 
         fixture.clock.addAndGet(Duration.ofMinutes(5).toMillis());
@@ -92,6 +95,11 @@ class ReferralManagerTest {
         player.idle = Duration.ofMinutes(5);
         fixture.tick();
         assertEquals(3, data(player).minutes(), "a client that went silent does not count");
+
+        player.idle = Duration.ZERO;
+        referrals.onQuit(player.getUniqueId());
+        fixture.tick();
+        assertEquals(3, data(player).minutes(), "the first sample without an anchor only sets it");
     }
 
     @Test
@@ -111,6 +119,7 @@ class ReferralManagerTest {
     @Test
     void nothingCountsWhenDisabledOrBeforeTheSeason() throws Exception {
         TestPlayer player = fixture.join("Alice", "10.0.0.1");
+        referrals.noteActive(player.getUniqueId());
         fixture.writeReferral(ReferralFixture.CONFIG.replace("enabled: true", "enabled: false"));
         referrals.reload();
         assertFalse(fixture.counts(player));
@@ -447,7 +456,8 @@ class ReferralManagerTest {
         linked(invitee, inviter);
         fixture.writeReferral(ReferralFixture.CONFIG.replace("2026-10-15", "2026-10-18"));
         referrals.reload();
-        assertNull(referrals.getStore().peek(invitee.getUniqueId()), "a new season starts empty");
+        assertNull(data(invitee).invitedBy(), "a new season starts with no links");
+        assertEquals(0, data(invitee).minutes());
         File[] archived = fixture.plugin.getDataFolder().listFiles((dir, name) -> name.startsWith("referrals-2026-10-15"));
         assertNotNull(archived);
         assertEquals(1, archived.length);
@@ -460,6 +470,7 @@ class ReferralManagerTest {
     @Test
     void timersSaveAndShutdownWritesTheFile() {
         TestPlayer player = fixture.join("Alice", "10.0.0.1");
+        referrals.noteActive(player.getUniqueId());
         fixture.server.getScheduler().performTicks(5 * 60 * 20L);
         fixture.server.getScheduler().waitAsyncTasksFinished();
         YamlConfiguration saved = YamlConfiguration.loadConfiguration(
@@ -470,6 +481,63 @@ class ReferralManagerTest {
         saved = YamlConfiguration.loadConfiguration(new File(fixture.plugin.getDataFolder(), "referrals.yml"));
         assertEquals(42, saved.getInt("players." + player.getUniqueId() + ".minutes"));
         referrals.shutdown();
+    }
+
+    @Test
+    void settingTheFirstSeasonStartOrATypoKeepsWhatWasCounted() throws Exception {
+        fixture.writeReferral(ReferralFixture.CONFIG.replace("start: \"2026-10-15\"", "start: \"\""));
+        referrals.reload();
+        TestPlayer player = fixture.join("Alice", "10.0.0.1");
+        data(player).setMinutes(77);
+        fixture.writeReferral(ReferralFixture.CONFIG);
+        referrals.reload();
+        assertEquals("2026-10-15T00:00", referrals.getStore().season());
+        assertEquals(77, data(player).minutes(), "a first start date adopts the counted minutes");
+        fixture.writeReferral(ReferralFixture.CONFIG.replace("2026-10-15", "2026-1O-15"));
+        referrals.reload();
+        assertEquals("2026-10-15T00:00", referrals.getConfiguration().seasonKey(), "a typo keeps the old start");
+        assertEquals(77, data(player).minutes());
+    }
+
+    @Test
+    void aBrokenFileIsReadAgainOnReloadAndOnlinePlayersAreRecorded() throws Exception {
+        TestPlayer player = fixture.join("Alice", "10.0.0.1");
+        Path file = fixture.plugin.getDataFolder().toPath().resolve("referrals.yml");
+        Files.writeString(file, "players: [unclosed");
+        referrals.getStore().load(referrals.getConfiguration().seasonKey());
+        assertFalse(referrals.getStore().isLoaded());
+        Files.writeString(file, "season: \"2026-10-15T00:00\"\nsalt: abc\n");
+        referrals.reload();
+        assertTrue(referrals.getStore().isLoaded());
+        assertEquals(1, data(player).ips().size(), "the online player was recorded with their connection");
+        assertEquals(fixture.clock.get(), data(player).lastSeen());
+    }
+
+    @Test
+    void staffCanExemptAnAccountFromTheSameConnectionCheck() {
+        TestPlayer a = fixture.join("Aa", "10.0.0.1");
+        TestPlayer twin = fixture.join("Twin", "10.0.0.1");
+        assertEquals(Link.SAME_IP, referrals.link(twin, a.getUniqueId()));
+        assertTrue(referrals.toggleIpExempt(twin.getUniqueId()));
+        linked(twin, a);
+        data(twin).setMinutes(60);
+        assertEquals(Claim.CLAIMED, referrals.claimOwn(twin, 1));
+        assertFalse(referrals.toggleIpExempt(twin.getUniqueId()));
+        assertFalse(referrals.sharedConnection(data(a), data(fixture.join("Other", "10.0.0.7"))));
+        data(a).setIpExempt(true);
+        assertFalse(referrals.sharedConnection(data(a), data(twin)));
+    }
+
+    @Test
+    void aNameResolvesToTheAccountSeenMostRecently() {
+        TestPlayer old = fixture.join("Shared", "10.0.0.1");
+        UUID oldId = old.getUniqueId();
+        old.disconnect();
+        UUID newer = UUID.randomUUID();
+        referrals.getStore().get(newer, "shared").setLastSeen(fixture.clock.get() + 5);
+        assertEquals(newer, referrals.find("SHARED"));
+        referrals.getStore().peek(oldId).setLastSeen(fixture.clock.get() + 10);
+        assertEquals(oldId, referrals.find("shared"));
     }
 
     @Test

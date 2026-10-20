@@ -79,6 +79,8 @@ class ReferralStoreTest {
         data.claimed().add(1);
         data.inviterClaimed().add(3);
         data.addIp(store.ipHash("10.0.0.1"));
+        data.setLastSeen(77);
+        data.setIpExempt(true);
         assertTrue(store.isDirty());
         assertTrue(store.saveNow());
         assertFalse(store.isDirty());
@@ -95,6 +97,9 @@ class ReferralStoreTest {
         assertEquals(store.ipHash("10.0.0.1"), again.ipHash("10.0.0.1"), "the salt is kept");
         assertTrue(read.ips().contains(again.ipHash("10.0.0.1")));
         assertEquals(2, again.peek(inviter).rareClaims("act_1"));
+        assertEquals(77, read.lastSeen());
+        assertTrue(read.ipExempt());
+        assertFalse(again.peek(inviter).ipExempt());
         assertNull(again.peek(inviter).invitedBy());
         assertEquals(inviter, again.byName("INVITER"));
         assertNull(again.byName("nobody"));
@@ -169,9 +174,13 @@ class ReferralStoreTest {
         assertEquals(1, moved.length);
         assertTrue(Files.readString(moved[0].toPath()).contains("Old"));
 
-        Files.writeString(file.toPath(), "players: {}\n");
-        store("2026-10-01T00:00");
-        assertEquals(1, directory.toFile().listFiles((dir, name) -> name.startsWith("referrals-unset-")).length);
+        Files.writeString(file.toPath(), "players:\n  %s: {name: Kept}\n".formatted(UUID.randomUUID()));
+        ReferralStore adopted = store("2026-10-01T00:00");
+        assertEquals(1, adopted.all().size(), "a file with no season yet is kept, not moved aside");
+        assertTrue(adopted.isDirty());
+        assertEquals(1, directory.toFile().listFiles((dir, name) -> name.startsWith("referrals-")).length);
+        adopted.saveNow();
+        assertEquals(1, store("").all().size(), "clearing season.start keeps the data too");
     }
 
     @Test

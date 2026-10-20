@@ -124,6 +124,13 @@ class ReferralCommandTest {
         run(console, "referral unlink Newbie");
         assertTrue(said(console).stream().anyMatch(line -> line.contains("not linked")));
         run(console, "referral unlink nobody");
+        said(console);
+        run(console, "referral allowip Newbie");
+        assertTrue(said(console).stream().anyMatch(line -> line.contains("may now link")));
+        assertTrue(data(player).ipExempt());
+        run(console, "referral allowip Newbie");
+        assertTrue(said(console).stream().anyMatch(line -> line.contains("held to the same-connection check")));
+        run(console, "referral allowip nobody");
         assertTrue(fixture.logs.stream().anyMatch(line -> line.contains("REFERRAL-AUDIT") && line.contains("action=unlink")));
     }
 
@@ -139,7 +146,7 @@ class ReferralCommandTest {
         assertEquals(List.of(), command.onTabComplete(player, bukkit, "referral", new String[] {"invitedby", "x", ""}));
         assertEquals(List.of(), command.onTabComplete(player, bukkit, "referral", new String[] {}));
         var console = fixture.server.getConsoleSender();
-        assertEquals(List.of("invitedby", "info", "unlink", "addtime"),
+        assertEquals(List.of("invitedby", "info", "unlink", "addtime", "allowip"),
             command.onTabComplete(console, bukkit, "referral", new String[] {""}));
         assertEquals(2, command.onTabComplete(console, bukkit, "referral", new String[] {"unlink", ""}).size());
     }

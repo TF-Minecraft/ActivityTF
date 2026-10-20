@@ -42,6 +42,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /** /referral: your own milestones, the players you invited, and picking who invited you. */
 public class ReferralGui implements Listener {
@@ -78,7 +79,9 @@ public class ReferralGui implements Listener {
     public static final class Marker implements InventoryHolder {
 
         private final View view;
-        private final int page;
+        private int page;
+        private boolean previous;
+        private boolean next;
         private final UUID target;
         private final List<UUID> shown = new ArrayList<>();
         private final List<Integer> hours = new ArrayList<>();
@@ -162,6 +165,7 @@ public class ReferralGui implements Listener {
             List.of(messages.get("referral.gui.invited-header-lore"))));
         int pages = Math.max(1, (invited.size() + INVITEES_PER_PAGE - 1) / INVITEES_PER_PAGE);
         int shownPage = Math.max(0, Math.min(page, pages - 1));
+        marker.page = shownPage;
         List<UUID> slice = invited.subList(shownPage * INVITEES_PER_PAGE,
             Math.min(invited.size(), (shownPage + 1) * INVITEES_PER_PAGE));
         for (int index = 0; index < slice.size(); index++) {
@@ -170,12 +174,7 @@ public class ReferralGui implements Listener {
         }
 
         inventory.setItem(BACK_SLOT, item(Material.EXPERIENCE_BOTTLE, messages.get("referral.gui.back"), List.of()));
-        if (shownPage > 0) {
-            inventory.setItem(PREVIOUS_SLOT, item(Material.ARROW, messages.get("referral.gui.previous"), List.of()));
-        }
-        if (shownPage < pages - 1) {
-            inventory.setItem(NEXT_SLOT, item(Material.ARROW, messages.get("referral.gui.next"), List.of()));
-        }
+        pageArrows(inventory, marker, shownPage, pages);
         inventory.setItem(RARE_SLOT, rareItem(data, act));
         fill(inventory);
         return inventory;
@@ -376,16 +375,23 @@ public class ReferralGui implements Listener {
                 "%name%", other.getName()), List.of(messages.get("referral.gui.pick-player-lore"))));
         }
         inventory.setItem(BACK_SLOT, item(Material.OAK_DOOR, messages.get("referral.gui.pick-back"), List.of()));
-        if (shownPage > 0) {
-            inventory.setItem(PREVIOUS_SLOT, item(Material.ARROW, messages.get("referral.gui.previous"), List.of()));
-        }
-        if (shownPage < pages - 1) {
-            inventory.setItem(NEXT_SLOT, item(Material.ARROW, messages.get("referral.gui.next"), List.of()));
-        }
+        pageArrows(inventory, marker, shownPage, pages);
         inventory.setItem(TYPE_NAME_SLOT, item(Material.OAK_SIGN, messages.get("referral.gui.type-name"),
             List.of(messages.get("referral.gui.type-name-lore"))));
         fill(inventory);
         return inventory;
+    }
+
+    private void pageArrows(Inventory inventory, Marker marker, int page, int pages) {
+        Messages messages = messages();
+        marker.previous = page > 0;
+        marker.next = page < pages - 1;
+        if (marker.previous) {
+            inventory.setItem(PREVIOUS_SLOT, item(Material.ARROW, messages.get("referral.gui.previous"), List.of()));
+        }
+        if (marker.next) {
+            inventory.setItem(NEXT_SLOT, item(Material.ARROW, messages.get("referral.gui.next"), List.of()));
+        }
     }
 
     /** The last step before a permanent link: shows who and asks once more. */
@@ -443,15 +449,32 @@ public class ReferralGui implements Listener {
         }
     }
 
+    // Opening another inventory from inside its click event is left to the next tick.
+    private void show(Player player, Supplier<Inventory> next) {
+        referrals().runNextTick(() -> {
+            if (player.isOnline()) {
+                player.openInventory(next.get());
+            }
+        });
+    }
+
+    private static boolean pageClick(Marker marker, int slot) {
+        return slot == PREVIOUS_SLOT && marker.previous || slot == NEXT_SLOT && marker.next;
+    }
+
     private void clickMain(Player player, Marker marker, int slot) {
         if (slot == BACK_SLOT) {
+            if (!player.hasPermission("activity.use")) {
+                player.sendMessage(messages().get("admin.no-permission"));
+                return;
+            }
             sound(player);
-            openActivity.accept(player);
+            referrals().runNextTick(() -> openActivity.accept(player));
             return;
         }
-        if (slot == PREVIOUS_SLOT || slot == NEXT_SLOT) {
+        if (pageClick(marker, slot)) {
             sound(player);
-            player.openInventory(build(player, marker.page() + (slot == NEXT_SLOT ? 1 : -1)));
+            show(player, () -> build(player, marker.page() + (slot == NEXT_SLOT ? 1 : -1)));
             return;
         }
         if (slot == INVITER_SLOT) {
@@ -461,7 +484,7 @@ public class ReferralGui implements Listener {
                 return;
             }
             sound(player);
-            player.openInventory(buildPicker(player, 0));
+            show(player, () -> buildPicker(player, 0));
             return;
         }
         int first = MILESTONE_ROW + (9 - marker.hours.size()) / 2;
@@ -470,7 +493,7 @@ public class ReferralGui implements Listener {
             && marker.hours.get(index) != null) {
             Claim claim = referrals().claimOwn(player, marker.hours.get(index));
             report(player, claim);
-            player.openInventory(build(player, marker.page()));
+            show(player, () -> build(player, marker.page()));
             return;
         }
         int invitee = slot - FIRST_INVITEE_SLOT;
@@ -481,33 +504,33 @@ public class ReferralGui implements Listener {
             } else {
                 report(player, claims.get(claims.size() - 1));
             }
-            player.openInventory(build(player, marker.page()));
+            show(player, () -> build(player, marker.page()));
         }
     }
 
     private void clickPicker(Player player, Marker marker, int slot) {
         if (slot == BACK_SLOT) {
             sound(player);
-            player.openInventory(build(player, 0));
-        } else if (slot == PREVIOUS_SLOT || slot == NEXT_SLOT) {
+            show(player, () -> build(player, 0));
+        } else if (pageClick(marker, slot)) {
             sound(player);
-            player.openInventory(buildPicker(player, marker.page() + (slot == NEXT_SLOT ? 1 : -1)));
+            show(player, () -> buildPicker(player, marker.page() + (slot == NEXT_SLOT ? 1 : -1)));
         } else if (slot == TYPE_NAME_SLOT) {
             sound(player);
-            player.closeInventory();
+            referrals().runNextTick(player::closeInventory);
             String text = messages().get("referral.type-name-chat");
             player.sendMessage(LegacyComponentSerializer.legacySection().deserialize(text)
                 .clickEvent(ClickEvent.suggestCommand("/referral invitedby ")));
         } else if (slot >= 0 && slot < marker.shown.size()) {
             sound(player);
-            player.openInventory(buildConfirm(marker.shown.get(slot)));
+            show(player, () -> buildConfirm(marker.shown.get(slot)));
         }
     }
 
     private void clickConfirm(Player player, Marker marker, int slot) {
         if (slot == CANCEL_SLOT) {
             sound(player);
-            player.openInventory(build(player, 0));
+            show(player, () -> build(player, 0));
             return;
         }
         if (slot != CONFIRM_SLOT) {
@@ -523,7 +546,7 @@ public class ReferralGui implements Listener {
                 online.sendMessage(messages().get("referral.linked-inviter", "%name%", player.getName()));
             }
         }
-        player.openInventory(build(player, 0));
+        show(player, () -> build(player, 0));
     }
 
     private void report(Player player, Claim claim) {

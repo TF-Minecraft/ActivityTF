@@ -1,6 +1,7 @@
 package net.tfminecraft.activitytf.listeners;
 
 import io.papermc.paper.event.player.AsyncChatEvent;
+import org.bukkit.Bukkit;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -36,9 +37,13 @@ public class ReferralListener implements Listener {
         referrals.noteActive(event.getPlayer().getUniqueId());
     }
 
-    @EventHandler(priority = EventPriority.MONITOR)
+    // Only a real command that went through: a macro typing /x every few minutes is not activity.
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onCommand(PlayerCommandPreprocessEvent event) {
-        referrals.noteActive(event.getPlayer().getUniqueId());
+        String label = event.getMessage().substring(1).split(" ", 2)[0];
+        if (!label.isEmpty() && Bukkit.getCommandMap().getCommand(label) != null) {
+            referrals.noteActive(event.getPlayer().getUniqueId());
+        }
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)

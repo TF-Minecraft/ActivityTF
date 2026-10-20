@@ -58,5 +58,10 @@ class ReferralDataTest {
         assertTrue(data.rareClaims().isEmpty());
         assertEquals(0, data.rareClaims("act_2"));
         assertEquals(List.of(), data.ipList());
+        data.setLastSeen(3);
+        assertEquals(3, data.lastSeen());
+        assertFalse(data.ipExempt());
+        data.setIpExempt(true);
+        assertTrue(data.ipExempt());
     }
 }

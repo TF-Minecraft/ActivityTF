@@ -25,7 +25,7 @@ public class ReferralCommand implements CommandExecutor, TabCompleter {
     static final String ADMIN = "activity.referral.admin";
 
     private static final List<String> PLAYER_SUBCOMMANDS = List.of("invitedby");
-    private static final List<String> ADMIN_SUBCOMMANDS = List.of("info", "unlink", "addtime");
+    private static final List<String> ADMIN_SUBCOMMANDS = List.of("info", "unlink", "addtime", "allowip");
     private static final int MAX_ADD_MINUTES = 100_000;
 
     private final ActivityManager manager;
@@ -55,6 +55,7 @@ public class ReferralCommand implements CommandExecutor, TabCompleter {
             switch (sub) {
                 case "info" -> info(sender, args);
                 case "unlink" -> unlink(sender, args);
+                case "allowip" -> allowIp(sender, args);
                 default -> addTime(sender, args);
             }
             return true;
@@ -119,6 +120,17 @@ public class ReferralCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(messages().get(done ? "referral.admin.unlinked" : "referral.admin.not-linked",
             "%name%", args[1]));
         audit(sender, "action=unlink target=" + uuid + " result=" + (done ? "done" : "not-linked"));
+    }
+
+    private void allowIp(CommandSender sender, String[] args) {
+        UUID uuid = target(sender, args, 2);
+        if (uuid == null) {
+            return;
+        }
+        boolean exempt = referrals().toggleIpExempt(uuid);
+        sender.sendMessage(messages().get(exempt ? "referral.admin.ip-exempt-on" : "referral.admin.ip-exempt-off",
+            "%name%", args[1]));
+        audit(sender, "action=allowip target=" + uuid + " exempt=" + exempt + " result=done");
     }
 
     private void addTime(CommandSender sender, String[] args) {
