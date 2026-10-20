@@ -57,7 +57,9 @@ playtime:
 # The milestones, the same in every act: the new player's counted playtime
 # each one needs. Each is claimed once ever (per season), by the new player
 # and once by their inviter; claiming it in one act means it is not paid
-# again in the next. Up to 7.
+# again in the next. Up to 7. Claims are remembered by hours, so don't change
+# a milestone's hours during a season: a changed one is new, and everyone who
+# claimed the old one could claim it again.
 #   hours       the new player's counted playtime it needs
 #   rare        true = the inviter's reward counts towards the act's rare-limit
 #   new-player  what the invited player gets; inviter: what the inviter gets.

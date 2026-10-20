@@ -504,7 +504,8 @@ public class ReferralManager {
         if (data.invitedBy() == null) {
             return Claim.NOT_LINKED;
         }
-        Milestone milestone = milestone(act(), hours);
+        Act act = act();
+        Milestone milestone = milestone(act, hours);
         if (milestone == null || milestone.newPlayer() == null) {
             return Claim.NO_REWARD;
         }
@@ -518,7 +519,7 @@ public class ReferralManager {
         if (refused != null) {
             return refused;
         }
-        return pay(player, milestone.newPlayer(), "referral " + hours + "h",
+        return pay(player, act, milestone.newPlayer(), "referral " + hours + "h",
             () -> data.claimed().add(hours), () -> data.claimed().remove(hours));
     }
 
@@ -557,7 +558,7 @@ public class ReferralManager {
             return refused;
         }
         int rareDelta = milestone.rare() ? 1 : 0;
-        return pay(player, milestone.inviter(), "referral " + hours + "h for " + inviteeId,
+        return pay(player, act, milestone.inviter(), "referral " + hours + "h for " + inviteeId,
             () -> {
                 invitee.inviterClaimed().add(hours);
                 data.setRareClaims(act.id(), data.rareClaims(act.id()) + rareDelta);
@@ -601,8 +602,9 @@ public class ReferralManager {
         return null;
     }
 
-    private Claim pay(Player player, Reward reward, String at, Runnable apply, Runnable revert) {
-        RewardEntry entry = resolve(reward, player.getName());
+    // One act for the whole claim, so a claim at an act's start minute counts and pays in the same act.
+    private Claim pay(Player player, Act act, Reward reward, String at, Runnable apply, Runnable revert) {
+        RewardEntry entry = resolve(act, reward, player.getName());
         if (entry == null) {
             audit(player, "action=claim at=" + Utils.quotedForLog(at) + " result=unconfigured");
             return Claim.UNCONFIGURED;
@@ -630,13 +632,13 @@ public class ReferralManager {
         return Claim.CLAIMED;
     }
 
-    RewardEntry resolve(Reward reward, String name) {
+    RewardEntry resolve(Act act, Reward reward, String name) {
         if (reward.fixed() != null) {
             return reward.fixed();
         }
-        List<RewardEntry> pool = config.pool(act(), reward.pool());
+        List<RewardEntry> pool = config.pool(act, reward.pool());
         RewardEntry drawn = ActivityManager.draw(ActivityManager.runnableEntries(pool, name));
-        if (drawn == null && warnedPools.add(reward.pool())) {
+        if (drawn == null && warnedPools.add(act.id() + "/" + reward.pool())) {
             plugin.getLogger().warning("Referral pool '" + Utils.safeForLog(reward.pool()) + "' has no entry that"
                 + " can be paid to '" + Utils.safeForLog(name) + "' - the milestone stays claimable.");
         }

@@ -157,6 +157,7 @@ class ReferralConfigurationTest {
         assertEquals("Own", config.pool(config.acts().get(0), "pool_x").get(0).display());
         assertEquals("Shared", config.pool(config.acts().get(1), "pool_x").get(0).display());
         assertEquals("Shared", config.pool(null, "pool_x").get(0).display());
+        assertTrue(config.pool(config.acts().get(1), "pool_y").isEmpty());
         assertTrue(warned("acts.act_1.pools.notapool must use a pool_<name> name"));
         assertFalse(warned("has no usable pool"));
     }
@@ -206,9 +207,33 @@ class ReferralConfigurationTest {
     }
 
     @Test
-    void withoutMilestonesNothingCanBeClaimed() throws Exception {
-        config("acts: {act_1: {starts: \"2026-10-01\"}}");
+    void withoutMilestonesNothingCanBeClaimedAndTheOldLayoutIsNamed() throws Exception {
+        ReferralConfiguration config = config("""
+            acts:
+              act_1:
+                starts: "2026-10-01"
+                milestones: [{hours: 1, new-player: pool_x}]
+            """);
         assertTrue(warned("no usable entry under 'milestones'"));
+        assertTrue(warned("acts.act_1.milestones is the old layout"));
+        assertEquals(1, config.acts().size());
+        assertNull(config.act(LocalDateTime.of(2026, 10, 2, 0, 0)), "no milestones, so no act to claim in");
+    }
+
+    @Test
+    void missingPoolsAreReportedOncePerActAndNotWhenDisabled() throws Exception {
+        config("""
+            milestones: [{hours: 1, new-player: pool_x, inviter: pool_x}]
+            acts: {act_1: {starts: "2026-10-01", pools: {pool_x: []}}}
+            """);
+        assertEquals(1, logged.stream().filter(line -> line.contains("has no usable pool 'pool_x'")).count());
+        logged.clear();
+        config("""
+            enabled: false
+            milestones: [{hours: 1, new-player: pool_x}]
+            acts: {act_1: {starts: "2026-10-01"}}
+            """);
+        assertFalse(warned("has no usable pool"));
     }
 
     @Test

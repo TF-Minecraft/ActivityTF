@@ -114,16 +114,20 @@ public class ReferralConfiguration {
         if (enabled && acts.isEmpty()) {
             log().warning(FILE + " has no usable act under 'acts' - nothing can be claimed.");
         }
-        for (Act act : acts) {
-            warnMissingPools(act);
+        if (enabled) {
+            Set<String> warned = new HashSet<>();
+            for (Act act : acts) {
+                warnMissingPools(act, warned);
+            }
         }
     }
 
     // Every pool a milestone draws from must exist for every act, or that milestone can't be claimed then.
-    private void warnMissingPools(Act act) {
+    private void warnMissingPools(Act act, Set<String> warned) {
         for (Milestone milestone : milestones) {
             for (Reward reward : new Reward[] {milestone.newPlayer(), milestone.inviter()}) {
-                if (reward != null && reward.pool() != null && pool(act, reward.pool()).isEmpty()) {
+                if (reward != null && reward.pool() != null && pool(act, reward.pool()).isEmpty()
+                    && warned.add(act.id() + "/" + reward.pool())) {
                     log().warning(FILE + " acts." + Utils.safeForLog(act.id()) + " has no usable pool '"
                         + Utils.safeForLog(reward.pool()) + "' (nor does pools or the activity rewards) - the "
                         + milestone.hours() + "h milestone can't be claimed during that act.");
@@ -172,6 +176,10 @@ public class ReferralConfiguration {
             if (act == null) {
                 log().warning(FILE + " " + at + " is not a section - ignored.");
                 continue;
+            }
+            if (act.contains("milestones")) {
+                log().warning(FILE + " " + at + ".milestones is the old layout and is ignored - milestones are"
+                    + " now one top-level list shared by every act; an act only sets its pools.");
             }
             LocalDateTime starts = dateTime(act.getString("starts", "").strip(), at + ".starts");
             if (starts == null) {
@@ -261,10 +269,10 @@ public class ReferralConfiguration {
      */
     public List<RewardEntry> pool(Act act, String name) {
         List<RewardEntry> own = act == null ? null : act.pools().get(name);
-        if (own == null) {
+        if (own == null || own.isEmpty()) {
             own = pools.get(name);
         }
-        return own != null ? own : activity.rewardPool(name);
+        return own != null && !own.isEmpty() ? own : activity.rewardPool(name);
     }
 
     /** The milestones every act shares; each is claimed once ever (per season). */
@@ -272,8 +280,14 @@ public class ReferralConfiguration {
         return milestones;
     }
 
-    /** The act whose start is the latest one not after {@code now}; null before the first act. */
+    /**
+     * The act whose start is the latest one not after {@code now}; null before the first act, and
+     * while there are no milestones (nothing could be claimed in it anyway).
+     */
     public Act act(LocalDateTime now) {
+        if (milestones.isEmpty()) {
+            return null;
+        }
         Act current = null;
         for (Act act : acts) {
             if (!act.starts().isAfter(now)) {
