@@ -1,9 +1,12 @@
 package net.tfminecraft.activitytf.listeners;
 
 import net.tfminecraft.rpcharacters.chat.CharacterChatEvent;
+import org.bukkit.GameMode;
+import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.metadata.MetadataValue;
 import net.tfminecraft.activitytf.managers.ActivityManager;
 
 import java.util.ArrayDeque;
@@ -48,6 +51,12 @@ public class CharacterChatListener implements Listener {
             return;
         }
 
+        // Talking to nobody does not count. Skip before the history so a line rehearsed
+        // alone can still count once someone hears it.
+        if (!hasListener(event.getSender(), event.getRecipients())) {
+            return;
+        }
+
         UUID uuid = event.getSender().getUniqueId();
         if (process(uuid, strip(event.getMessage()))) {
             manager.recordAction(uuid, "ic_chat", 1);
@@ -66,6 +75,28 @@ public class CharacterChatListener implements Listener {
             recent.removeFirst();
         }
         return counts;
+    }
+
+    // RPCharacters fills recipients from the channel's radius and always includes the sender.
+    // Spectators and vanished staff are in range without being part of the scene.
+    static boolean hasListener(Player sender, Collection<Player> recipients) {
+        for (Player recipient : recipients) {
+            if (recipient != null && !recipient.getUniqueId().equals(sender.getUniqueId())
+                    && recipient.getGameMode() != GameMode.SPECTATOR && !isVanished(recipient)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // EssentialsX (and most vanish plugins) mark vanished players with "vanished" metadata.
+    static boolean isVanished(Player player) {
+        for (MetadataValue value : player.getMetadata("vanished")) {
+            if (value.asBoolean()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     int historySize(UUID uuid) {

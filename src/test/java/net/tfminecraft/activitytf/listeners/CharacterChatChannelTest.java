@@ -16,6 +16,8 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class CharacterChatChannelTest {
 
@@ -24,6 +26,7 @@ class CharacterChatChannelTest {
     private ActivityManager manager;
     private CharacterChatListener listener;
     private Player sender;
+    private Player hearer;
 
     @BeforeEach
     void setUp() {
@@ -33,6 +36,8 @@ class CharacterChatChannelTest {
         manager.tasks(uuid).reveal(0);
         listener = new CharacterChatListener(manager);
         sender = TestManagers.player(uuid, Set.of(), new ArrayList<>());
+        hearer = mock(Player.class);
+        when(hearer.getUniqueId()).thenReturn(UUID.randomUUID());
     }
 
     @ParameterizedTest
@@ -67,6 +72,6 @@ class CharacterChatChannelTest {
     }
 
     private CharacterChatEvent event(String channel, boolean command) {
-        return new CharacterChatEvent(sender, null, channel, MESSAGE, "Test", Set.of(sender), false, command);
+        return new CharacterChatEvent(sender, null, channel, MESSAGE, "Test", Set.of(sender, hearer), false, command);
     }
 }

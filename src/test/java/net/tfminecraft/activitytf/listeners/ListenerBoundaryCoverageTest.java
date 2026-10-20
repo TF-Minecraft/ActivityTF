@@ -21,6 +21,7 @@ import net.tfminecraft.simplefactions.war.battle.enums.BattleType;
 import net.tfminecraft.simplefactions.war.battle.events.BattleEndedEvent;
 import net.tfminecraft.vfbuilders.events.VehicleConstructEvent;
 import org.bukkit.Bukkit;
+import org.bukkit.GameMode;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.OfflinePlayer;
@@ -39,6 +40,7 @@ import org.bukkit.inventory.CraftingInventory;
 import org.bukkit.inventory.InventoryView;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.ShapelessRecipe;
+import org.bukkit.metadata.FixedMetadataValue;
 import org.bukkit.plugin.IllegalPluginAccessException;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitScheduler;
@@ -249,8 +251,35 @@ class ListenerBoundaryCoverageTest {
         assertEquals(2, listener.historySize(player.getUniqueId()));
     }
 
+    @Test
+    void roleplayChatOnlyCountsWhenSomeoneElseCanHearIt() {
+        CharacterChatListener listener = new CharacterChatListener(manager);
+        listen(listener);
+        PlayerMock spectator = server.addPlayer("Spectator");
+        spectator.setGameMode(GameMode.SPECTATOR);
+        PlayerMock vanished = server.addPlayer("Vanished");
+        vanished.setMetadata("vanished", new FixedMetadataValue(plugin, true));
+        PlayerMock shown = server.addPlayer("Shown");
+        shown.setMetadata("vanished", new FixedMetadataValue(plugin, false));
+        String text = "I carefully open the weathered wooden door";
+
+        fire(chat(player, "rp", text, Set.of(player)));
+        CharacterChatEvent unheard = chat(player, "rp", text, Set.of(player, spectator, vanished));
+        unheard.setRecipients(new HashSet<>(Arrays.asList(player, spectator, vanished, null)));
+        fire(unheard);
+        assertTrue(credits.isEmpty());
+        assertEquals(0, listener.historySize(player.getUniqueId()));
+
+        fire(chat(player, "rp", text, Set.of(player, spectator, shown)));
+        assertEquals(List.of(credit("ic_chat", 1)), credits);
+    }
+
     CharacterChatEvent chat(Player sender, String channel, String text) {
-        return new CharacterChatEvent(sender, null, channel, text, "Character", Set.of(player), false, false);
+        return chat(sender, channel, text, Set.of(player, server.addPlayer()));
+    }
+
+    CharacterChatEvent chat(Player sender, String channel, String text, Set<Player> recipients) {
+        return new CharacterChatEvent(sender, null, channel, text, "Character", recipients, false, false);
     }
 
     @Test
