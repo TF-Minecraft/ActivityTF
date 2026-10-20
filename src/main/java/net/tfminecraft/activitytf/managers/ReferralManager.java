@@ -39,6 +39,8 @@ import java.util.function.LongSupplier;
 public class ReferralManager {
 
     private static final long MINUTE_TICKS = 60L * 20L;
+    // Movement is sampled every second: once a minute misses someone pacing back to the same spot.
+    private static final long SAMPLE_TICKS = 20L;
     private static final long DAY_MILLIS = 24L * 60L * 60L * 1000L;
 
     public enum Link {
@@ -89,6 +91,7 @@ public class ReferralManager {
     private LongSupplier clock = System::currentTimeMillis;
 
     private BukkitTask timer;
+    private BukkitTask sampler;
     private BukkitTask autoSave;
 
     ReferralManager(JavaPlugin plugin, ActivityManager activity) {
@@ -108,6 +111,7 @@ public class ReferralManager {
         seedOnline();
         stopTimers();
         timer = plugin.getServer().getScheduler().runTaskTimer(plugin, this::tick, MINUTE_TICKS, MINUTE_TICKS);
+        sampler = plugin.getServer().getScheduler().runTaskTimer(plugin, this::sample, SAMPLE_TICKS, SAMPLE_TICKS);
         long save = activity.getConfiguration().saveIntervalMinutes() * MINUTE_TICKS;
         autoSave = plugin.getServer().getScheduler().runTaskTimer(plugin, () -> {
             if (store.isDirty()) {
@@ -148,6 +152,10 @@ public class ReferralManager {
     }
 
     private void stopTimers() {
+        if (sampler != null) {
+            sampler.cancel();
+            sampler = null;
+        }
         if (timer != null) {
             timer.cancel();
             timer = null;
@@ -187,6 +195,13 @@ public class ReferralManager {
     }
 
     // ---- playtime ----------------------------------------------------------------------------
+
+    void sample() {
+        long now = clock.getAsLong();
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            sampleMovement(player, now);
+        }
+    }
 
     void tick() {
         long now = clock.getAsLong();
@@ -610,7 +625,7 @@ public class ReferralManager {
         }
         String shown = entry.display() == null || entry.display().isBlank() ? reward.display() : entry.display();
         player.sendMessage(messages().get("referral.claimed", "%reward%", Utils.colorize(shown)));
-        audit(player, "action=claim at=" + Utils.quotedForLog(at) + " reward=" + Utils.quotedForLog(shown)
+        audit(player, "action=claim at=" + Utils.quotedForLog(at) + " reward=" + Utils.quotedForLog(plainText(shown))
             + " result=done");
         return Claim.CLAIMED;
     }
@@ -626,6 +641,10 @@ public class ReferralManager {
                 + " can be paid to '" + Utils.safeForLog(name) + "' - the milestone stays claimable.");
         }
         return drawn;
+    }
+
+    static String plainText(String text) {
+        return text.replaceAll("#[0-9a-fA-F]{6}|[&\u00a7][0-9a-fk-orA-FK-OR]", "");
     }
 
     private void audit(Player player, String what) {

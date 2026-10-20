@@ -557,6 +557,19 @@ class ReferralManagerTest {
     }
 
     @Test
+    void pacingBackAndForthIsCaughtByTheEverySecondSample() {
+        TestPlayer player = fixture.join("Pacer", "10.0.0.1");
+        Location start = player.getLocation().clone();
+        fixture.server.getScheduler().performTicks(20);
+        player.setLocation(start.clone().add(6, 0, 0));
+        fixture.server.getScheduler().performTicks(20);
+        player.setLocation(start);
+        fixture.server.getScheduler().performTicks(1200 - 40);
+        assertEquals(1, data(player).minutes(), "back at the same spot on the minute still counts");
+        assertEquals("x1 Abyssalite", ReferralManager.plainText("#50d990x1 &7Abyssalite\u00a7r"));
+    }
+
+    @Test
     void theClockReadsAsServerTime() {
         assertEquals(ReferralFixture.NOW, referrals.now());
         assertEquals(fixture.clock.get(), referrals.millis());
