@@ -60,8 +60,6 @@ class ReferralDataTest {
         assertEquals(List.of(), data.ipList());
         data.setLastSeen(3);
         assertEquals(3, data.lastSeen());
-        assertFalse(data.ipExempt());
-        data.setIpExempt(true);
-        assertTrue(data.ipExempt());
+        assertTrue(data.ipPartners().isEmpty());
     }
 }

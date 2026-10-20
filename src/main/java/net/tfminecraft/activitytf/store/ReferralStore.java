@@ -31,6 +31,7 @@ public class ReferralStore {
     private final Object saveLock = new Object();
 
     private volatile String season = "";
+    private volatile String lastStart = "";
     private volatile String salt = "";
     private volatile boolean dirty;
     private volatile boolean loaded;
@@ -54,6 +55,7 @@ public class ReferralStore {
         loaded = false;
         shuttingDown = false;
         season = currentSeason;
+        lastStart = currentSeason;
         salt = "";
         if (file.exists()) {
             YamlConfiguration yaml = new YamlConfiguration();
@@ -66,14 +68,16 @@ public class ReferralStore {
             }
             salt = yaml.getString("salt", "");
             String stored = yaml.getString("season", "");
+            String last = yaml.getString("last-start", stored);
             // Only a change from one real start date to another starts over; setting or clearing
-            // season.start keeps what was counted.
-            if (!stored.equals(currentSeason) && !stored.isEmpty() && !currentSeason.isEmpty()) {
-                if (!archive(stored)) {
+            // season.start keeps what was counted, and a blank one in between does not hide the change.
+            if (!last.isEmpty() && !currentSeason.isEmpty() && !last.equals(currentSeason)) {
+                if (!archive(last)) {
                     return;
                 }
             } else {
                 read(yaml.getConfigurationSection("players"));
+                lastStart = currentSeason.isEmpty() ? last : currentSeason;
                 dirty |= !stored.equals(currentSeason);
             }
         }
@@ -120,7 +124,12 @@ public class ReferralStore {
         ReferralData data = new ReferralData(entry.getString("name", ""), entry.getLong("first-seen"));
         data.setMinutes(entry.getInt("minutes"));
         data.setLastSeen(entry.getLong("last-seen"));
-        data.setIpExempt(entry.getBoolean("ip-exempt"));
+        for (String partner : entry.getStringList("ip-partners")) {
+            UUID id = uuid(partner);
+            if (id != null) {
+                data.ipPartners().add(id);
+            }
+        }
         UUID inviter = uuid(entry.getString("invited-by", ""));
         if (inviter != null) {
             data.link(inviter, entry.getLong("linked-at"));
@@ -236,6 +245,7 @@ public class ReferralStore {
         yaml.options().setHeader(List.of("Referral links and counted playtime. Written by the plugin - do not edit"
             + " while the server runs."));
         yaml.set("season", season);
+        yaml.set("last-start", lastStart);
         yaml.set("salt", salt);
         yaml.createSection("players");
         for (Map.Entry<UUID, ReferralData> entry : players.entrySet()) {
@@ -245,8 +255,8 @@ public class ReferralStore {
             yaml.set(path + ".minutes", data.minutes());
             yaml.set(path + ".first-seen", data.firstSeen());
             yaml.set(path + ".last-seen", data.lastSeen());
-            if (data.ipExempt()) {
-                yaml.set(path + ".ip-exempt", true);
+            if (!data.ipPartners().isEmpty()) {
+                yaml.set(path + ".ip-partners", data.ipPartners().stream().map(UUID::toString).sorted().toList());
             }
             if (data.invitedBy() != null) {
                 yaml.set(path + ".invited-by", data.invitedBy().toString());

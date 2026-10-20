@@ -125,12 +125,18 @@ class ReferralCommandTest {
         assertTrue(said(console).stream().anyMatch(line -> line.contains("not linked")));
         run(console, "referral unlink nobody");
         said(console);
-        run(console, "referral allowip Newbie");
+        run(console, "referral allowip Newbie Inviter");
         assertTrue(said(console).stream().anyMatch(line -> line.contains("may now link")));
-        assertTrue(data(player).ipExempt());
-        run(console, "referral allowip Newbie");
+        assertTrue(data(player).ipPartners().contains(inviter.getUniqueId()));
+        run(console, "referral allowip Newbie Inviter");
         assertTrue(said(console).stream().anyMatch(line -> line.contains("held to the same-connection check")));
-        run(console, "referral allowip nobody");
+        run(console, "referral allowip nobody Inviter");
+        run(console, "referral allowip Newbie nobody");
+        assertTrue(said(console).stream().filter(line -> line.contains("Nobody called")).count() == 2);
+        run(console, "referral allowip Newbie Newbie");
+        assertTrue(said(console).stream().anyMatch(line -> line.contains("Staff")));
+        run(console, "referral allowip Newbie");
+        assertTrue(said(console).stream().anyMatch(line -> line.contains("Staff")));
         assertTrue(fixture.logs.stream().anyMatch(line -> line.contains("REFERRAL-AUDIT") && line.contains("action=unlink")));
     }
 
@@ -149,5 +155,8 @@ class ReferralCommandTest {
         assertEquals(List.of("invitedby", "info", "unlink", "addtime", "allowip"),
             command.onTabComplete(console, bukkit, "referral", new String[] {""}));
         assertEquals(2, command.onTabComplete(console, bukkit, "referral", new String[] {"unlink", ""}).size());
+        assertEquals(2, command.onTabComplete(console, bukkit, "referral", new String[] {"allowip", "a", ""}).size());
+        assertEquals(List.of(), command.onTabComplete(player, bukkit, "referral", new String[] {"allowip", "a", ""}));
+        assertEquals(List.of(), command.onTabComplete(console, bukkit, "referral", new String[] {"info", "a", ""}));
     }
 }

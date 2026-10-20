@@ -500,6 +500,18 @@ class ReferralManagerTest {
     }
 
     @Test
+    void aBlankStartBetweenTwoDatesStillStartsANewSeason() throws Exception {
+        TestPlayer player = fixture.join("Alice", "10.0.0.1");
+        data(player).setMinutes(77);
+        fixture.writeReferral(ReferralFixture.CONFIG.replace("start: \"2026-10-15\"", "start: \"\""));
+        referrals.reload();
+        assertEquals(77, data(player).minutes());
+        fixture.writeReferral(ReferralFixture.CONFIG.replace("2026-10-15", "2026-10-16"));
+        referrals.reload();
+        assertEquals(0, data(player).minutes(), "the last real start was 2026-10-15");
+    }
+
+    @Test
     void aBrokenFileIsReadAgainOnReloadAndOnlinePlayersAreRecorded() throws Exception {
         TestPlayer player = fixture.join("Alice", "10.0.0.1");
         Path file = fixture.plugin.getDataFolder().toPath().resolve("referrals.yml");
@@ -518,14 +530,18 @@ class ReferralManagerTest {
         TestPlayer a = fixture.join("Aa", "10.0.0.1");
         TestPlayer twin = fixture.join("Twin", "10.0.0.1");
         assertEquals(Link.SAME_IP, referrals.link(twin, a.getUniqueId()));
-        assertTrue(referrals.toggleIpExempt(twin.getUniqueId()));
+        assertTrue(referrals.toggleIpPair(twin.getUniqueId(), a.getUniqueId()));
         linked(twin, a);
         data(twin).setMinutes(60);
         assertEquals(Claim.CLAIMED, referrals.claimOwn(twin, 1));
-        assertFalse(referrals.toggleIpExempt(twin.getUniqueId()));
-        assertFalse(referrals.sharedConnection(data(a), data(fixture.join("Other", "10.0.0.7"))));
-        data(a).setIpExempt(true);
-        assertFalse(referrals.sharedConnection(data(a), data(twin)));
+        assertEquals(Claim.CLAIMED, referrals.claimForInvitee(a, twin.getUniqueId(), 1));
+        TestPlayer alt = fixture.join("Alt", "10.0.0.1");
+        assertEquals(Link.SAME_IP, referrals.link(alt, a.getUniqueId()), "the pairing covers only that pair");
+        assertFalse(referrals.toggleIpPair(a.getUniqueId(), twin.getUniqueId()));
+        assertTrue(data(a).ipPartners().isEmpty() && data(twin).ipPartners().isEmpty());
+        assertTrue(referrals.sharedConnection(a.getUniqueId(), data(a), twin.getUniqueId(), data(twin)));
+        assertFalse(referrals.sharedConnection(a.getUniqueId(), data(a), alt.getUniqueId(),
+            data(fixture.join("Other", "10.0.0.7"))));
     }
 
     @Test

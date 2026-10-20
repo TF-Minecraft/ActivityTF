@@ -123,14 +123,23 @@ public class ReferralCommand implements CommandExecutor, TabCompleter {
     }
 
     private void allowIp(CommandSender sender, String[] args) {
-        UUID uuid = target(sender, args, 2);
-        if (uuid == null) {
+        UUID one = target(sender, args, 3);
+        if (one == null) {
             return;
         }
-        boolean exempt = referrals().toggleIpExempt(uuid);
-        sender.sendMessage(messages().get(exempt ? "referral.admin.ip-exempt-on" : "referral.admin.ip-exempt-off",
-            "%name%", args[1]));
-        audit(sender, "action=allowip target=" + uuid + " exempt=" + exempt + " result=done");
+        UUID other = referrals().find(args[2]);
+        if (other == null) {
+            sender.sendMessage(messages().get("referral.admin.unknown", "%name%", args[2]));
+            return;
+        }
+        if (one.equals(other)) {
+            sender.sendMessage(messages().get("referral.usage-admin"));
+            return;
+        }
+        boolean allowed = referrals().toggleIpPair(one, other);
+        sender.sendMessage(messages().get(allowed ? "referral.admin.ip-pair-on" : "referral.admin.ip-pair-off",
+            "%name%", args[1], "%other%", args[2]));
+        audit(sender, "action=allowip target=" + one + " other=" + other + " allowed=" + allowed + " result=done");
     }
 
     private void addTime(CommandSender sender, String[] args) {
@@ -170,7 +179,8 @@ public class ReferralCommand implements CommandExecutor, TabCompleter {
                 options.addAll(ADMIN_SUBCOMMANDS);
             }
         } else if (args.length == 2 && (args[0].equalsIgnoreCase("invitedby")
-            || sender.hasPermission(ADMIN) && ADMIN_SUBCOMMANDS.contains(args[0].toLowerCase(Locale.ROOT)))) {
+            || sender.hasPermission(ADMIN) && ADMIN_SUBCOMMANDS.contains(args[0].toLowerCase(Locale.ROOT)))
+            || args.length == 3 && args[0].equalsIgnoreCase("allowip") && sender.hasPermission(ADMIN)) {
             for (Player online : Bukkit.getOnlinePlayers()) {
                 if (!(sender instanceof Player player) || player.canSee(online)) {
                     options.add(online.getName());

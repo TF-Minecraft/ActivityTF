@@ -85,7 +85,7 @@ public class ReferralConfiguration {
         }
         openDays = Math.max(0, config.getInt("season.open-days", 14));
         newAccountDays = Math.max(0, config.getInt("link.new-account-days", 7));
-        maxInvitees = Math.max(0, config.getInt("link.max-invitees", 0));
+        maxInvitees = Math.max(0, config.getInt("link.max-invitees", 10));
         maxLinksPerDay = Math.max(0, config.getInt("link.max-links-per-day", 3));
         ipCheck = config.getBoolean("link.same-ip-check", true);
 

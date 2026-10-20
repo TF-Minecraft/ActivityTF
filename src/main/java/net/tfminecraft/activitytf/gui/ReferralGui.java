@@ -469,7 +469,11 @@ public class ReferralGui implements Listener {
                 return;
             }
             sound(player);
-            referrals().runNextTick(() -> openActivity.accept(player));
+            referrals().runNextTick(() -> {
+                if (player.isOnline()) {
+                    openActivity.accept(player);
+                }
+            });
             return;
         }
         if (pageClick(marker, slot)) {

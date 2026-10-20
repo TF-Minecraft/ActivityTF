@@ -353,7 +353,11 @@ public class ActivityGui implements Listener {
 
         if (event.getRawSlot() == REFERRAL_SLOT && referralShown(player)) {
             clickSound(player);
-            manager.referrals().runNextTick(() -> referralOpener.accept(player));
+            manager.referrals().runNextTick(() -> {
+                if (player.isOnline()) {
+                    referralOpener.accept(player);
+                }
+            });
             return;
         }
 

@@ -57,7 +57,7 @@ class ReferralConfigurationTest {
         assertEquals("", config.seasonKey());
         assertEquals(14, config.openDays());
         assertEquals(7, config.newAccountDays());
-        assertEquals(0, config.maxInvitees());
+        assertEquals(10, config.maxInvitees());
         assertEquals(3, config.maxLinksPerDay());
         assertTrue(config.ipCheck());
         assertEquals(5, config.afkMinutes());

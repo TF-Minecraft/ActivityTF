@@ -2,6 +2,7 @@ package net.tfminecraft.activitytf.models;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -21,7 +22,7 @@ public class ReferralData {
     private UUID invitedBy;
     private long linkedAt;
     private long lastSeen;
-    private boolean ipExempt;
+    private final Set<UUID> ipPartners = new HashSet<>();
     private final Set<Integer> claimed = new TreeSet<>();
     private final Set<Integer> inviterClaimed = new TreeSet<>();
     private final LinkedHashSet<String> ips = new LinkedHashSet<>();
@@ -70,13 +71,9 @@ public class ReferralData {
         this.lastSeen = lastSeen;
     }
 
-    /** Staff let this account link and claim despite a shared connection. */
-    public boolean ipExempt() {
-        return ipExempt;
-    }
-
-    public void setIpExempt(boolean ipExempt) {
-        this.ipExempt = ipExempt;
+    /** Accounts staff let this one link and claim with despite a shared connection (one household). */
+    public Set<UUID> ipPartners() {
+        return ipPartners;
     }
 
     public UUID invitedBy() {

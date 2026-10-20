@@ -264,18 +264,30 @@ public class ReferralManager {
         store.markDirty();
     }
 
-    /** True when the IP check is on, neither account is exempt, and they have shared a connection. */
-    boolean sharedConnection(ReferralData one, ReferralData other) {
-        return config.ipCheck() && !one.ipExempt() && !other.ipExempt() && one.sharesIp(other);
+    /** True when the IP check is on, staff have not paired the two, and they have shared a connection. */
+    boolean sharedConnection(UUID oneId, ReferralData one, UUID otherId, ReferralData other) {
+        return config.ipCheck() && !one.ipPartners().contains(otherId) && !other.ipPartners().contains(oneId)
+            && one.sharesIp(other);
     }
 
-    /** Staff override for players who really share a connection (family, a shared house). */
-    public boolean toggleIpExempt(UUID uuid) {
-        ReferralData data = store.peek(uuid);
-        data.setIpExempt(!data.ipExempt());
+    /**
+     * Staff override for two players who really share a connection (family, a shared house). It covers
+     * only that pair, so neither can use it for alts of their own. Returns true when now allowed.
+     */
+    public boolean toggleIpPair(UUID one, UUID other) {
+        ReferralData first = store.peek(one);
+        ReferralData second = store.peek(other);
+        boolean allow = !first.ipPartners().contains(other);
+        if (allow) {
+            first.ipPartners().add(other);
+            second.ipPartners().add(one);
+        } else {
+            first.ipPartners().remove(other);
+            second.ipPartners().remove(one);
+        }
         store.markDirty();
         store.saveNow();
-        return data.ipExempt();
+        return allow;
     }
 
     public void onQuit(UUID uuid) {
@@ -348,7 +360,7 @@ public class ReferralManager {
             return Link.LOOP;
         }
         ReferralData data = store.peek(uuid);
-        if (data != null && sharedConnection(data, inviter)) {
+        if (data != null && sharedConnection(uuid, data, inviterId, inviter)) {
             return Link.SAME_IP;
         }
         List<UUID> invited = invitees(inviterId);
@@ -487,7 +499,7 @@ public class ReferralManager {
         if (data.minutes() < milestone.minutes()) {
             return Claim.LOCKED;
         }
-        Claim refused = placeAndConnection(player, data, store.peek(data.invitedBy()));
+        Claim refused = placeAndConnection(player, data, data.invitedBy(), store.peek(data.invitedBy()));
         if (refused != null) {
             return refused;
         }
@@ -525,7 +537,7 @@ public class ReferralManager {
             case CLAIMABLE -> {
             }
         }
-        Claim refused = placeAndConnection(player, data, invitee);
+        Claim refused = placeAndConnection(player, data, inviteeId, invitee);
         if (refused != null) {
             return refused;
         }
@@ -564,11 +576,11 @@ public class ReferralManager {
 
     // Rewards go to the character being played, never to the character-selection room, and are
     // held for accounts that have been seen on the same connection.
-    private Claim placeAndConnection(Player player, ReferralData mine, ReferralData other) {
+    private Claim placeAndConnection(Player player, ReferralData mine, UUID otherId, ReferralData other) {
         if (config.ignoredWorld(player.getWorld().getName())) {
             return Claim.WRONG_WORLD;
         }
-        if (other != null && sharedConnection(mine, other)) {
+        if (other != null && sharedConnection(player.getUniqueId(), mine, otherId, other)) {
             return Claim.SAME_IP;
         }
         return null;

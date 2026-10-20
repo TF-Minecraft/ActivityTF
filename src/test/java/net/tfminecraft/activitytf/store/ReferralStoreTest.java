@@ -80,7 +80,7 @@ class ReferralStoreTest {
         data.inviterClaimed().add(3);
         data.addIp(store.ipHash("10.0.0.1"));
         data.setLastSeen(77);
-        data.setIpExempt(true);
+        data.ipPartners().add(inviter);
         assertTrue(store.isDirty());
         assertTrue(store.saveNow());
         assertFalse(store.isDirty());
@@ -98,8 +98,8 @@ class ReferralStoreTest {
         assertTrue(read.ips().contains(again.ipHash("10.0.0.1")));
         assertEquals(2, again.peek(inviter).rareClaims("act_1"));
         assertEquals(77, read.lastSeen());
-        assertTrue(read.ipExempt());
-        assertFalse(again.peek(inviter).ipExempt());
+        assertEquals(java.util.Set.of(inviter), read.ipPartners());
+        assertTrue(again.peek(inviter).ipPartners().isEmpty());
         assertNull(again.peek(inviter).invitedBy());
         assertEquals(inviter, again.byName("INVITER"));
         assertNull(again.byName("nobody"));
@@ -140,6 +140,26 @@ class ReferralStoreTest {
         assertEquals(1, store.all().size());
         assertNull(store.all().values().iterator().next().invitedBy());
         assertEquals(2, logged.stream().filter(line -> line.contains("Skipping malformed entry")).count());
+    }
+
+    @Test
+    void badPartnerIdsAreSkipped() throws IOException {
+        UUID uuid = UUID.randomUUID();
+        Files.writeString(file.toPath(), "players:\n  %s: {name: A, ip-partners: [nonsense]}\n".formatted(uuid));
+        assertTrue(store("").peek(uuid).ipPartners().isEmpty());
+    }
+
+    @Test
+    void theLastRealStartSurvivesABlankOne() throws IOException {
+        ReferralStore first = store("2026-07-01T00:00");
+        first.get(UUID.randomUUID(), "Old");
+        first.saveNow();
+        ReferralStore blank = store("");
+        assertEquals(1, blank.all().size());
+        blank.saveNow();
+        assertEquals("2026-07-01T00:00", YamlConfiguration.loadConfiguration(file).getString("last-start"));
+        assertEquals(1, store("2026-07-01T00:00").all().size(), "back to the same date keeps it");
+        assertTrue(store("2026-10-01T00:00").all().isEmpty(), "a new date starts over");
     }
 
     @Test

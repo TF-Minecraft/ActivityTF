@@ -32,8 +32,8 @@ link:
   # Refuse a link when the two accounts have joined from the same connection
   # this season (last 16 connections per account, stored as salted hashes).
   # Claims are held for the same reason if they share one later on. Staff
-  # can exempt an account that really shares a house with
-  # /referral allowip <player>.
+  # can allow one pair that really shares a house with
+  # /referral allowip <player> <player> (that pair only, not their alts).
   same-ip-check: true
   # Most players one account can have linked to it this season; 0 = no limit.
   max-invitees: 10
