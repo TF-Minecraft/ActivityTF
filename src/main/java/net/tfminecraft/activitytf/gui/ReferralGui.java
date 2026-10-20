@@ -305,13 +305,7 @@ public class ReferralGui implements Listener {
             lore.add(messages.get("referral.gui.rare-tag"));
         }
         if (reward.fixed() != null) {
-            lore.add(messages.get("referral.gui.contents"));
-            for (RewardEntry.Item item : reward.fixed().items()) {
-                lore.add(Utils.colorize("#50d990x" + item.amount() + " &f" + ActivityConfiguration.itemName(item.path())));
-            }
-            if (!reward.fixed().commands().isEmpty() && !reward.fixed().display().isBlank()) {
-                lore.add(Utils.colorize("&f" + reward.fixed().display()));
-            }
+            contents(lore, reward.fixed());
             return lore;
         }
         List<RewardEntry> pool = referrals().getConfiguration().pool(referrals().act(), reward.pool());
@@ -319,11 +313,26 @@ public class ReferralGui implements Listener {
             lore.add(messages.get("gui.reward-preview-unavailable"));
             return lore;
         }
+        if (pool.size() == 1) {
+            contents(lore, pool.get(0));
+            return lore;
+        }
         lore.add(messages.get("gui.reward-preview-one"));
         for (String option : RewardPreview.summarize(pool)) {
             lore.add(Utils.colorize(option));
         }
         return lore;
+    }
+
+    // A reward with only one possible outcome lists every item in it.
+    private void contents(List<String> lore, RewardEntry entry) {
+        lore.add(messages().get("referral.gui.contents"));
+        for (RewardEntry.Item item : entry.items()) {
+            lore.add(Utils.colorize("#50d990x" + item.amount() + " &f" + ActivityConfiguration.itemName(item.path())));
+        }
+        if (!entry.commands().isEmpty() && !entry.display().isBlank()) {
+            lore.add(Utils.colorize("&f" + entry.display()));
+        }
     }
 
     private ItemStack rewardItem(Reward reward, String name, List<String> lore, boolean glint) {

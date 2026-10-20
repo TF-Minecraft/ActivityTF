@@ -115,7 +115,8 @@ class ReferralGuiTest {
         assertEquals(Material.IRON_INGOT, inventory.getItem(13).getType());
         assertEquals(Material.EMERALD, inventory.getItem(15).getType());
         assertTrue(lore(inventory.getItem(11)).stream().anyMatch(line -> line.contains("pick who invited you")));
-        assertTrue(lore(inventory.getItem(15)).stream().anyMatch(line -> line.contains("Rare emerald")));
+        assertTrue(lore(inventory.getItem(15)).stream().anyMatch(line -> line.contains("x2") && line.contains("Emerald")),
+            "a one-entry pool lists what is inside");
         assertTrue(lore(inventory.getItem(15)).stream().anyMatch(line -> line.contains("Rare")));
         assertFalse(inventory.getItem(11).getItemMeta().hasEnchantmentGlintOverride());
         assertTrue(name(inventory.getItem(ReferralGui.RARE_SLOT)).contains("0"));
@@ -389,6 +390,12 @@ class ReferralGuiTest {
         assertTrue(gui.rewardLore(command, plain).stream().anyMatch(line -> line.contains("A title")));
         Reward silent = new Reward("Cmd", null, null, new RewardEntry(1, "", List.of("say hi"), List.of()));
         assertEquals(1, gui.rewardLore(silent, plain).size());
+        net.tfminecraft.activitytf.managers.TestManagers.pool(fixture.manager, "pool_two", List.of(
+            new RewardEntry(1, "&aOne", List.of(), List.of(new RewardEntry.Item("DIAMOND", 1))),
+            new RewardEntry(1, "&aOther", List.of(), List.of(new RewardEntry.Item("GOLD_INGOT", 2)))));
+        List<String> options = gui.rewardLore(new Reward("Two", null, "pool_two", null), plain);
+        assertTrue(options.get(0).contains("One random reward"), String.valueOf(options));
+        assertEquals(3, options.size());
         Reward empty = new Reward("Pool", null, "pool_nothing", null);
         assertTrue(gui.rewardLore(empty, plain).get(0).contains("unavailable"));
 
