@@ -809,43 +809,49 @@ public class ActivityConfiguration {
         return Map.copyOf(pools);
     }
 
-    private List<RewardEntry> loadRewardPool(ConfigurationSection config, String path) {
+    List<RewardEntry> loadRewardPool(ConfigurationSection config, String path) {
         List<RewardEntry> pool = new ArrayList<>();
         if (!set(config, path)) {
             return List.of();
         }
         int index = 0;
         for (Map<?, ?> entry : config.getMapList(path)) {
-            String where = path + "[" + index++ + "]";
-
-            int weight = entry.get("weight") instanceof Number number ? number.intValue() : 1;
-            if (weight <= 0) {
-                log().warning(where + " has weight " + weight + " - a weight must be above 0,"
-                    + " so this reward is skipped and can never be drawn.");
-                continue;
+            RewardEntry reward = rewardEntry(entry, path + "[" + index++ + "]");
+            if (reward != null) {
+                pool.add(reward);
             }
-
-            List<String> commands = new ArrayList<>();
-            if (entry.get("commands") instanceof List<?> raw) {
-                for (Object command : raw) {
-                    if (command != null) {
-                        commands.add(String.valueOf(command));
-                    }
-                }
-            }
-            List<RewardEntry.Item> items = loadRewardItems(entry.get("items"), where);
-
-            if (commands.isEmpty() && items.isEmpty()) {
-                log().warning(where + " has no commands and no items - skipped, since drawing it"
-                    + " would pay the player nothing.");
-                continue;
-            }
-
-            Object display = entry.get("display");
-            pool.add(new RewardEntry(Math.min(weight, 1_000_000),
-                display == null ? "" : String.valueOf(display), List.copyOf(commands), List.copyOf(items)));
         }
         return List.copyOf(pool);
+    }
+
+    // One pool-style entry (weight, display, items, commands); null, with a warning, when it pays nothing.
+    RewardEntry rewardEntry(Map<?, ?> entry, String where) {
+        int weight = entry.get("weight") instanceof Number number ? number.intValue() : 1;
+        if (weight <= 0) {
+            log().warning(where + " has weight " + weight + " - a weight must be above 0,"
+                + " so this reward is skipped and can never be drawn.");
+            return null;
+        }
+
+        List<String> commands = new ArrayList<>();
+        if (entry.get("commands") instanceof List<?> raw) {
+            for (Object command : raw) {
+                if (command != null) {
+                    commands.add(String.valueOf(command));
+                }
+            }
+        }
+        List<RewardEntry.Item> items = loadRewardItems(entry.get("items"), where);
+
+        if (commands.isEmpty() && items.isEmpty()) {
+            log().warning(where + " has no commands and no items - skipped, since drawing it"
+                + " would pay the player nothing.");
+            return null;
+        }
+
+        Object display = entry.get("display");
+        return new RewardEntry(Math.min(weight, 1_000_000),
+            display == null ? "" : String.valueOf(display), List.copyOf(commands), List.copyOf(items));
     }
 
     private List<RewardEntry.Item> loadRewardItems(Object raw, String where) {
@@ -1132,7 +1138,7 @@ public class ActivityConfiguration {
         return pool.isEmpty() && ActivityManager.neededPools(milestones, drops).contains(DEFAULT_POOL);
     }
 
-    static String itemName(String path) {
+    public static String itemName(String path) {
         String last = path.substring(Math.max(path.lastIndexOf('.'), path.lastIndexOf(':')) + 1);
         StringBuilder name = new StringBuilder();
         for (String word : last.toLowerCase(Locale.ROOT).split("_")) {

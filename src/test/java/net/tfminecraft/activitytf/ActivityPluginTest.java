@@ -27,9 +27,11 @@ import org.mockbukkit.mockbukkit.exception.UnimplementedOperationException;
 import org.objenesis.ObjenesisStd;
 import net.tfminecraft.activitytf.commands.ActivityCommand;
 import net.tfminecraft.activitytf.gui.ActivityGui;
+import net.tfminecraft.activitytf.gui.ReferralGui;
 import net.tfminecraft.activitytf.hooks.PlaceholderHook;
 import net.tfminecraft.activitytf.listeners.CraftListener;
 import net.tfminecraft.activitytf.listeners.JoinListener;
+import net.tfminecraft.activitytf.listeners.ReferralListener;
 import net.tfminecraft.activitytf.managers.ActivityManager;
 
 import java.lang.reflect.Field;
@@ -111,11 +113,13 @@ class ActivityPluginTest {
         assertTrue(Files.isRegularFile(plugin.getDataFolder().toPath().resolve("messages.yml")));
         assertInstanceOf(ActivityCommand.class, plugin.getCommand("activity").getExecutor());
         assertSame(plugin.getCommand("activity").getExecutor(), plugin.getCommand("activity").getTabCompleter());
-        assertEquals(Set.of(JoinListener.class, CraftListener.class, ActivityGui.class, ActivityCommand.class), listeners());
+        assertEquals(Set.of(JoinListener.class, CraftListener.class, ActivityGui.class, ActivityCommand.class,
+            ReferralListener.class, ReferralGui.class), listeners());
         assertTrue(server.dispatchCommand(server.getConsoleSender(), "activity"));
         assertNotNull(server.getConsoleSender().nextMessage());
         server.getScheduler().performOneTick();
-        assertEquals(Set.of(JoinListener.class, CraftListener.class, ActivityGui.class, ActivityCommand.class), listeners());
+        assertEquals(Set.of(JoinListener.class, CraftListener.class, ActivityGui.class, ActivityCommand.class,
+            ReferralListener.class, ReferralGui.class), listeners());
         UUID uuid = UUID.randomUUID();
         manager.getStore().get(uuid).addPoints(7, manager.getConfiguration().barMax());
         server.getScheduler().performTicks(manager.getConfiguration().saveIntervalMinutes() * 1200L);
@@ -189,12 +193,14 @@ class ActivityPluginTest {
         }
         LocalExpansionManager expansions = installPlaceholderApi();
         enablePlugin();
-        assertEquals(Set.of(JoinListener.class, CraftListener.class, ActivityGui.class, ActivityCommand.class), listeners());
+        assertEquals(Set.of(JoinListener.class, CraftListener.class, ActivityGui.class, ActivityCommand.class,
+            ReferralListener.class, ReferralGui.class), listeners());
         assertNull(expansions.getExpansion("activity"));
 
         server.getScheduler().performOneTick();
 
-        assertEquals(Set.of("JoinListener", "CraftListener", "ActivityGui", "ActivityCommand", "VoteListener", "InstrumentListener",
+        assertEquals(Set.of("JoinListener", "CraftListener", "ActivityGui", "ActivityCommand",
+            "ReferralListener", "ReferralGui", "VoteListener", "InstrumentListener",
             "GeigerListener", "ProfessionXpListener", "MmoItemsStationListener", "VehicleBuildListener",
             "CharacterChatListener", "InjuryListener", "ProfessionUpgradeListener", "FurnitureListener", "BattleListener",
             "AdvancedCraftListener", "ArchaeologyListener", "MarketSaleListener", "CasinoWinListener", "DishCookedListener",

@@ -1,0 +1,146 @@
+# Referrals: /referral (also a button in /activity).
+#
+# A new player opens /referral, clicks "Who invited you?" and picks an online
+# player or types a name (/referral invitedby <name>), then confirms. That is
+# one link per account, and it can never be changed by the player (staff can
+# undo it with /referral unlink <player>). Both players then claim rewards from
+# the same menu as the NEW player's counted playtime passes each milestone.
+#
+# /activity reload reloads this file too.
+
+# Off = nobody can link or claim, and no playtime is counted. The kill switch.
+enabled: true
+
+season:
+  # When the season started, in server time: 2026-10-01 or 2026-10-01T06:10.
+  # Playtime only counts from here on, and changing it starts a new season:
+  # referrals.yml is moved aside (referrals-<old start>-<time>.yml) and every
+  # link and counted minute starts again from nothing. Empty = no season
+  # window, so only accounts in their first link.new-account-days can link.
+  start: ""
+  # For this many days after season.start, any account can link - and its
+  # playtime since the season started already counts towards the rewards.
+  open-days: 14
+
+link:
+  # After the opening days, only accounts whose first join on this server was
+  # less than this many days ago can link.
+  new-account-days: 7
+  # Refuse a link when the two accounts have ever joined from the same
+  # connection (last 16 connections per account, stored as salted hashes).
+  # Claims are held for the same reason if they share one later on.
+  same-ip-check: true
+  # Most players one account can have linked to it this season; 0 = no limit.
+  max-invitees: 0
+  # Most new links one inviter can receive in 24 hours; 0 = no limit. Stops
+  # one account collecting a burst of throwaway accounts in an afternoon.
+  max-links-per-day: 3
+
+playtime:
+  # A minute counts only when the player has done something in the last
+  # afk-minutes: moved at least move-blocks, chatted, used a command, or
+  # broken or placed a block. Turning the camera, swinging or clicking alone
+  # does not count, so a mouse jiggler or an autoclicker earns nothing.
+  afk-minutes: 5
+  move-blocks: 3
+  # Worlds where nothing counts and nothing can be claimed (rewards go to
+  # the character being played, not to the character-selection room).
+  ignored-worlds: [character_selection]
+
+# Reward pools for the acts below, in the same format as the activity
+# rewards.pools. A pool name used below that is not defined here falls back
+# to the activity pool of that name (the one locked for this activity week).
+pools:
+  pool_referral_rare:
+    - weight: 50
+      display: "#50d990x1 #3b4e60Abyssalite Fragment"
+      items:
+        - item: "m.materials.abyssalite_fragment"
+          amount: 1
+    - weight: 50
+      display: "#50d990x1 #3b4e60Tin"
+      items:
+        - item: "m.materials.raw_tin"
+          amount: 1
+
+# One reward table per act. The act in use is the one with the latest
+# 'starts' that is not in the future, so the table changes by itself on the
+# day an act starts. Claims are remembered by milestone hours across acts: a
+# milestone claimed in one act is not paid again in the next.
+#
+#   display     the reward's name in the menu and in chat
+#   rare-limit  rare inviter rewards one inviter can claim per act (default
+#               2; -1 = no limit). Past it the slot waits for the next act.
+#   milestones  up to 7, each with:
+#     hours       the new player's counted playtime it needs
+#     rare        true = the inviter's reward counts towards rare-limit
+#     new-player  what the invited player gets; inviter: what the inviter gets.
+#                 Either one is optional. Each is a pool name (one draw), or a
+#                 block with display, icon (optional, the menu item), and
+#                 either 'pool: <name>' or items/commands as in a pool entry
+#                 (%player% / %uuid% work in commands).
+acts:
+  act_1:
+    display: "Act I"
+    starts: "2026-10-10T06:00"
+    rare-limit: 2
+    milestones:
+      - hours: 1
+        new-player:
+          display: "Starter kit"
+          icon: BUNDLE
+          items:
+            - item: COOKED_BEEF
+              amount: 16
+            - item: TORCH
+              amount: 32
+            - item: OAK_LOG
+              amount: 32
+        inviter:
+          display: "Coin"
+          items:
+            - item: m.currency.silver_coin
+              amount: 5
+      - hours: 3
+        new-player:
+          display: "Act materials (small)"
+          items:
+            - item: m.materials.ignitium
+              amount: 10
+        inviter:
+          display: "Act materials (small)"
+          items:
+            - item: m.materials.ignitium
+              amount: 10
+      - hours: 8
+        new-player:
+          display: "Act materials (medium)"
+          items:
+            - item: m.materials.ignitium
+              amount: 20
+        inviter:
+          display: "Act materials (medium)"
+          items:
+            - item: m.materials.ignitium
+              amount: 20
+      - hours: 20
+        new-player:
+          display: "Useful item"
+          items:
+            - item: m.loot.common_item_skin_scroll
+              amount: 1
+        inviter:
+          display: "Act materials (large)"
+          items:
+            - item: m.materials.ignitium
+              amount: 40
+      - hours: 45
+        rare: true
+        new-player:
+          display: "Rare act reward"
+          icon: m.materials.abyssalite_fragment
+          pool: pool_referral_rare
+        inviter:
+          display: "Rare act reward"
+          icon: m.materials.abyssalite_fragment
+          pool: pool_referral_rare

@@ -31,6 +31,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 public class ActivityGui implements Listener {
@@ -39,6 +40,7 @@ public class ActivityGui implements Listener {
     private static final int DAILY_BAR_SLOT = 3;
     private static final int REROLL_SLOT = 4;
     private static final int BAR_SLOT = 5;
+    private static final int REFERRAL_SLOT = 22;
 
     private static final int[] TASK_SLOTS = {10, 11, 12, 13, 14, 15, 16};
 
@@ -46,8 +48,21 @@ public class ActivityGui implements Listener {
 
     private final ActivityManager manager;
 
+    private Consumer<Player> referralOpener;
+
     public ActivityGui(ActivityManager manager) {
         this.manager = manager;
+    }
+
+    /** Adds the referral button, which opens the referral menu through {@code opener}. */
+    public void setReferralOpener(Consumer<Player> opener) {
+        this.referralOpener = opener;
+    }
+
+    public void open(Player player) {
+        Inventory inventory = build(player);
+        manager.claimDailyReward(player);
+        player.openInventory(inventory);
     }
 
     public static final class Marker implements InventoryHolder {
@@ -82,6 +97,11 @@ public class ActivityGui implements Listener {
             }
         }
 
+        if (referralShown(player)) {
+            inventory.setItem(REFERRAL_SLOT, item(Material.PLAYER_HEAD, messages.get("gui.referral-name"),
+                List.of(messages.get("gui.referral-lore"))));
+        }
+
         fillEmptySlots(inventory, messages);
 
         return inventory;
@@ -106,6 +126,11 @@ public class ActivityGui implements Listener {
         }
         String id = tasks.get(slot);
         return config.activity(id) == null ? null : id;
+    }
+
+    private boolean referralShown(Player player) {
+        return referralOpener != null && manager.referrals().getConfiguration().enabled()
+            && player.hasPermission("activity.referral");
     }
 
     private void fillEmptySlots(Inventory inventory, Messages messages) {
@@ -323,6 +348,12 @@ public class ActivityGui implements Listener {
         if (event.getRawSlot() == BAR_SLOT) {
             clickSound(player);
             claim(player, event);
+            return;
+        }
+
+        if (event.getRawSlot() == REFERRAL_SLOT && referralShown(player)) {
+            clickSound(player);
+            referralOpener.accept(player);
             return;
         }
 
