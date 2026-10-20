@@ -54,100 +54,84 @@ playtime:
   # the character being played, not to the character-selection room).
   ignored-worlds: [character_selection]
 
-# Reward pools for the acts below, in the same format as the activity
-# rewards.pools. A pool name used below that is not defined here falls back
-# to the activity pool of that name (the one locked for this activity week).
-pools:
-  pool_referral_rare:
-    - weight: 50
-      display: "#50d990x1 #3b4e60Abyssalite Fragment"
-      items:
-        - item: "m.materials.abyssalite_fragment"
-          amount: 1
-    - weight: 50
-      display: "#50d990x1 #3b4e60Tin"
-      items:
-        - item: "m.materials.raw_tin"
-          amount: 1
+# The milestones, the same in every act: the new player's counted playtime
+# each one needs. Each is claimed once ever (per season), by the new player
+# and once by their inviter; claiming it in one act means it is not paid
+# again in the next. Up to 7.
+#   hours       the new player's counted playtime it needs
+#   rare        true = the inviter's reward counts towards the act's rare-limit
+#   new-player  what the invited player gets; inviter: what the inviter gets.
+#               Either one is optional. Each is a pool name (one draw), or a
+#               block with display (the name in the menu), icon (optional,
+#               the menu item) and either 'pool: <name>' or items/commands as
+#               in a pool entry (%player% / %uuid% work in commands). A pool
+#               is looked up in the act in use first (acts.<act>.pools), then
+#               in the shared pools below, then in the activity rewards pools
+#               (the ones locked for this activity week) - so what a milestone
+#               hands over follows the act.
+milestones:
+  - hours: 1
+    new-player: {display: "Starter kit", icon: BUNDLE, pool: pool_ref_starter}
+    inviter: {display: "Coin", icon: m.currency.silver_coin, pool: pool_ref_coin}
+  - hours: 4
+    new-player: {display: "Act materials (small)", icon: m.materials.ignitium, pool: pool_ref_small}
+    inviter: {display: "Act materials (small)", icon: m.materials.ignitium, pool: pool_ref_small}
+  - hours: 12
+    new-player: {display: "Act materials (medium)", icon: m.materials.ignitium, pool: pool_ref_medium}
+    inviter: {display: "Act materials (medium)", icon: m.materials.ignitium, pool: pool_ref_medium}
+  - hours: 24
+    rare: true
+    new-player: {display: "Rare act reward", icon: m.materials.abyssalite_fragment, pool: pool_ref_rare}
+    inviter: {display: "Rare act reward", icon: m.materials.abyssalite_fragment, pool: pool_ref_rare}
 
-# One reward table per act. The act in use is the one with the latest
-# 'starts' that is not in the future, so the table changes by itself on the
-# day an act starts. Claims are remembered by milestone hours across acts: a
-# milestone claimed in one act is not paid again in the next.
-#
-#   display     the reward's name in the menu and in chat
+# Pools every act can use, in the same format as the activity rewards.pools.
+# An act's own pool of the same name wins.
+pools:
+  pool_ref_starter:
+    - display: "Starter kit"
+      items:
+        - item: COOKED_BEEF
+          amount: 16
+        - item: TORCH
+          amount: 32
+        - item: OAK_LOG
+          amount: 32
+  pool_ref_coin:
+    - display: "#50d990x5 #b8906eSilver Coin"
+      items:
+        - item: m.currency.silver_coin
+          amount: 5
+
+# The acts. The act in use is the one with the latest 'starts' that is not in
+# the future, so the loot changes by itself on the day an act starts.
+#   display     the act's name in the menu
 #   rare-limit  rare inviter rewards one inviter can claim per act (default
 #               2; -1 = no limit). Past it the slot waits for the next act.
-#   milestones  up to 7, each with:
-#     hours       the new player's counted playtime it needs
-#     rare        true = the inviter's reward counts towards rare-limit
-#     new-player  what the invited player gets; inviter: what the inviter gets.
-#                 Either one is optional. Each is a pool name (one draw), or a
-#                 block with display, icon (optional, the menu item), and
-#                 either 'pool: <name>' or items/commands as in a pool entry
-#                 (%player% / %uuid% work in commands).
+#   pools       this act's loot, by the pool names the milestones use
 acts:
   act_1:
     display: "Act I"
     starts: "2026-10-10T06:00"
     rare-limit: 2
-    milestones:
-      - hours: 1
-        new-player:
-          display: "Starter kit"
-          icon: BUNDLE
-          items:
-            - item: COOKED_BEEF
-              amount: 16
-            - item: TORCH
-              amount: 32
-            - item: OAK_LOG
-              amount: 32
-        inviter:
-          display: "Coin"
-          items:
-            - item: m.currency.silver_coin
-              amount: 5
-      - hours: 3
-        new-player:
-          display: "Act materials (small)"
+    pools:
+      pool_ref_small:
+        - display: "#50d990x10 #7f7d80Ignitium"
           items:
             - item: m.materials.ignitium
               amount: 10
-        inviter:
-          display: "Act materials (small)"
-          items:
-            - item: m.materials.ignitium
-              amount: 10
-      - hours: 8
-        new-player:
-          display: "Act materials (medium)"
+      pool_ref_medium:
+        - display: "#50d990x20 #7f7d80Ignitium"
           items:
             - item: m.materials.ignitium
               amount: 20
-        inviter:
-          display: "Act materials (medium)"
+      pool_ref_rare:
+        - weight: 50
+          display: "#50d990x1 #3b4e60Abyssalite Fragment"
           items:
-            - item: m.materials.ignitium
-              amount: 20
-      - hours: 20
-        new-player:
-          display: "Useful item"
-          items:
-            - item: m.loot.common_item_skin_scroll
+            - item: m.materials.abyssalite_fragment
               amount: 1
-        inviter:
-          display: "Act materials (large)"
+        - weight: 50
+          display: "#50d990x1 #3b4e60Tin"
           items:
-            - item: m.materials.ignitium
-              amount: 40
-      - hours: 45
-        rare: true
-        new-player:
-          display: "Rare act reward"
-          icon: m.materials.abyssalite_fragment
-          pool: pool_referral_rare
-        inviter:
-          display: "Rare act reward"
-          icon: m.materials.abyssalite_fragment
-          pool: pool_referral_rare
+            - item: m.materials.raw_tin
+              amount: 1

@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -110,13 +111,13 @@ class ReferralGuiTest {
         assertTrue(name(inventory.getItem(ReferralGui.PROGRESS_SLOT)).contains("1h 35m"));
         assertTrue(name(inventory.getItem(ReferralGui.PROGRESS_SLOT)).contains("5h"));
         assertTrue(lore(inventory.getItem(ReferralGui.RULES_SLOT)).stream().anyMatch(line -> line.contains("14")));
-        assertEquals(Material.BREAD, inventory.getItem(12).getType(), "three milestones sit in the middle");
+        assertEquals(Material.BREAD, inventory.getItem(11).getType(), "three milestones sit one slot apart in the middle");
         assertEquals(Material.IRON_INGOT, inventory.getItem(13).getType());
-        assertEquals(Material.EMERALD, inventory.getItem(14).getType());
-        assertTrue(lore(inventory.getItem(12)).stream().anyMatch(line -> line.contains("pick who invited you")));
-        assertTrue(lore(inventory.getItem(14)).stream().anyMatch(line -> line.contains("Rare emerald")));
-        assertTrue(lore(inventory.getItem(14)).stream().anyMatch(line -> line.contains("Rare")));
-        assertFalse(inventory.getItem(12).getItemMeta().hasEnchantmentGlintOverride());
+        assertEquals(Material.EMERALD, inventory.getItem(15).getType());
+        assertTrue(lore(inventory.getItem(11)).stream().anyMatch(line -> line.contains("pick who invited you")));
+        assertTrue(lore(inventory.getItem(15)).stream().anyMatch(line -> line.contains("Rare emerald")));
+        assertTrue(lore(inventory.getItem(15)).stream().anyMatch(line -> line.contains("Rare")));
+        assertFalse(inventory.getItem(11).getItemMeta().hasEnchantmentGlintOverride());
         assertTrue(name(inventory.getItem(ReferralGui.RARE_SLOT)).contains("0"));
         assertTrue(name(inventory.getItem(ReferralGui.INVITED_HEADER_SLOT)).contains("(0)"));
         assertEquals(Material.GRAY_STAINED_GLASS_PANE, inventory.getItem(ReferralGui.NEXT_SLOT).getType());
@@ -248,16 +249,16 @@ class ReferralGuiTest {
         data(player).setMinutes(60);
         gui.open(player);
         Inventory inventory = top(player);
-        assertEquals(Boolean.TRUE, inventory.getItem(12).getItemMeta().getEnchantmentGlintOverride());
+        assertEquals(Boolean.TRUE, inventory.getItem(11).getItemMeta().getEnchantmentGlintOverride());
         assertTrue(lore(inventory.getItem(13)).stream().anyMatch(line -> line.contains("2h")), "time left");
-        assertTrue(lore(inventory.getItem(12)).stream().anyMatch(line -> line.contains("Bread")));
+        assertTrue(lore(inventory.getItem(11)).stream().anyMatch(line -> line.contains("Bread")));
 
         click(player, 13);
         assertTrue(said(player).stream().anyMatch(line -> line.contains("Not played long enough")));
-        click(player, 12);
+        click(player, 11);
         assertTrue(player.getInventory().contains(Material.BREAD, 4));
-        assertTrue(name(top(player).getItem(12)).contains("✔"));
-        assertFalse(top(player).getItem(12).getItemMeta().hasEnchantmentGlintOverride());
+        assertTrue(name(top(player).getItem(11)).contains("✔"));
+        assertFalse(top(player).getItem(11).getItemMeta().hasEnchantmentGlintOverride());
         click(player, 10);
         click(player, 9);
     }
@@ -356,17 +357,17 @@ class ReferralGuiTest {
         fixture.writeReferral(ReferralFixture.CONFIG
             .replace("rare-limit: 1", "rare-limit: -1")
             .replace("""
-                      - hours: 3
-                        new-player:
-                          display: "Small"
-                          items:
-                            - item: IRON_INGOT
-                              amount: 2
+                  - hours: 3
+                    new-player:
+                      display: "Small"
+                      items:
+                        - item: IRON_INGOT
+                          amount: 2
                 """, """
-                      - hours: 3
-                        inviter:
-                          display: "Inviter only"
-                          commands: ["say hi"]
+                  - hours: 3
+                    inviter:
+                      display: "Inviter only"
+                      commands: ["say hi"]
                 """));
         referrals.reload();
         TestPlayer inviter = fixture.join("Inviter", "10.0.0.1");
@@ -405,6 +406,10 @@ class ReferralGuiTest {
         assertEquals("59m", ReferralGui.duration(59));
         assertEquals("1h", ReferralGui.duration(60));
         assertEquals("2h 5m", ReferralGui.duration(125));
+        assertArrayEquals(new int[] {10, 12, 14, 16}, ReferralGui.milestoneSlots(4));
+        assertArrayEquals(new int[] {13}, ReferralGui.milestoneSlots(1));
+        assertArrayEquals(new int[] {11, 12, 13, 14, 15}, ReferralGui.milestoneSlots(5));
+        assertArrayEquals(new int[] {10, 11, 12, 13, 14, 15, 16}, ReferralGui.milestoneSlots(7));
         assertEquals("referral.link.inviter-busy", ReferralGui.linkKey(Link.INVITER_BUSY));
     }
 

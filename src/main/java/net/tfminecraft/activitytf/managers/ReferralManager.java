@@ -634,7 +634,7 @@ public class ReferralManager {
         if (reward.fixed() != null) {
             return reward.fixed();
         }
-        List<RewardEntry> pool = config.pool(reward.pool());
+        List<RewardEntry> pool = config.pool(act(), reward.pool());
         RewardEntry drawn = ActivityManager.draw(ActivityManager.runnableEntries(pool, name));
         if (drawn == null && warnedPools.add(reward.pool())) {
             plugin.getLogger().warning("Referral pool '" + Utils.safeForLog(reward.pool()) + "' has no entry that"

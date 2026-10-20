@@ -21,7 +21,10 @@ import java.util.Map;
 import java.util.Set;
 import java.util.logging.Logger;
 
-/** referral.yml: who may link, how playtime is counted, and one milestone table per act. */
+/**
+ * referral.yml: who may link, how playtime is counted, the milestones (the same for every act, each
+ * claimed once ever), and per act the pools those milestones draw from.
+ */
 public class ReferralConfiguration {
 
     public static final String FILE = "referral.yml";
@@ -39,8 +42,12 @@ public class ReferralConfiguration {
         }
     }
 
-    /** {@code rareLimit} below 0 means no limit. */
-    public record Act(String id, String display, LocalDateTime starts, int rareLimit, List<Milestone> milestones) {
+    /**
+     * {@code rareLimit} below 0 means no limit. {@code milestones} is the shared list; {@code pools}
+     * holds this act's loot for the pool names the milestones draw from.
+     */
+    public record Act(String id, String display, LocalDateTime starts, int rareLimit, List<Milestone> milestones,
+                      Map<String, List<RewardEntry>> pools) {
     }
 
     private final JavaPlugin plugin;
@@ -58,6 +65,7 @@ public class ReferralConfiguration {
     private volatile int moveBlocks;
     private volatile Set<String> ignoredWorlds = Set.of();
     private volatile List<Act> acts = List.of();
+    private volatile List<Milestone> milestones = List.of();
     private volatile Map<String, List<RewardEntry>> pools = Map.of();
 
     public ReferralConfiguration(JavaPlugin plugin, ActivityConfiguration activity) {
@@ -97,10 +105,30 @@ public class ReferralConfiguration {
         }
         ignoredWorlds = Set.copyOf(worlds);
 
-        pools = loadPools(config.getConfigurationSection("pools"));
+        pools = loadPools(config.getConfigurationSection("pools"), "pools");
+        milestones = loadMilestones(config);
         acts = loadActs(config.getConfigurationSection("acts"));
+        if (enabled && milestones.isEmpty()) {
+            log().warning(FILE + " has no usable entry under 'milestones' - nothing can be claimed.");
+        }
         if (enabled && acts.isEmpty()) {
             log().warning(FILE + " has no usable act under 'acts' - nothing can be claimed.");
+        }
+        for (Act act : acts) {
+            warnMissingPools(act);
+        }
+    }
+
+    // Every pool a milestone draws from must exist for every act, or that milestone can't be claimed then.
+    private void warnMissingPools(Act act) {
+        for (Milestone milestone : milestones) {
+            for (Reward reward : new Reward[] {milestone.newPlayer(), milestone.inviter()}) {
+                if (reward != null && reward.pool() != null && pool(act, reward.pool()).isEmpty()) {
+                    log().warning(FILE + " acts." + Utils.safeForLog(act.id()) + " has no usable pool '"
+                        + Utils.safeForLog(reward.pool()) + "' (nor does pools or the activity rewards) - the "
+                        + milestone.hours() + "h milestone can't be claimed during that act.");
+                }
+            }
         }
     }
 
@@ -118,14 +146,14 @@ public class ReferralConfiguration {
         }
     }
 
-    private Map<String, List<RewardEntry>> loadPools(ConfigurationSection section) {
+    private Map<String, List<RewardEntry>> loadPools(ConfigurationSection section, String at) {
         if (section == null) {
             return Map.of();
         }
         Map<String, List<RewardEntry>> loaded = new LinkedHashMap<>();
         for (String key : section.getKeys(false)) {
             if (!ActivityConfiguration.isPoolName(key)) {
-                log().warning(FILE + " pools." + Utils.safeForLog(key) + " must use a pool_<name> name - ignored.");
+                log().warning(FILE + " " + at + "." + Utils.safeForLog(key) + " must use a pool_<name> name - ignored.");
                 continue;
             }
             loaded.put(ActivityConfiguration.poolName(key), activity.loadRewardPool(section, key));
@@ -150,24 +178,19 @@ public class ReferralConfiguration {
                 log().warning(FILE + " " + at + " has no usable 'starts' date - the act is ignored.");
                 continue;
             }
-            List<Milestone> milestones = loadMilestones(act, at);
-            if (milestones.isEmpty()) {
-                log().warning(FILE + " " + at + " has no usable milestone - the act is ignored.");
-                continue;
-            }
             loaded.add(new Act(id, act.getString("display", id), starts, act.getInt("rare-limit", 2),
-                milestones));
+                milestones, loadPools(act.getConfigurationSection("pools"), at + ".pools")));
         }
         loaded.sort(Comparator.comparing(Act::starts));
         return List.copyOf(loaded);
     }
 
-    private List<Milestone> loadMilestones(ConfigurationSection act, String at) {
+    private List<Milestone> loadMilestones(ConfigurationSection config) {
         List<Milestone> milestones = new ArrayList<>();
         Set<Integer> seen = new HashSet<>();
         int index = 0;
-        for (Map<?, ?> raw : act.getMapList("milestones")) {
-            String where = at + ".milestones[" + index++ + "]";
+        for (Map<?, ?> raw : config.getMapList("milestones")) {
+            String where = "milestones[" + index++ + "]";
             int hours = raw.get("hours") instanceof Number number ? number.intValue() : 0;
             if (hours < 1 || hours > 10_000) {
                 log().warning(FILE + " " + where + " needs 'hours' between 1 and 10000 - ignored.");
@@ -188,7 +211,7 @@ public class ReferralConfiguration {
         }
         milestones.sort(Comparator.comparingInt(Milestone::hours));
         if (milestones.size() > MAX_MILESTONES) {
-            log().warning(FILE + " " + at + " has " + milestones.size() + " milestones - only the first "
+            log().warning(FILE + " has " + milestones.size() + " milestones - only the first "
                 + MAX_MILESTONES + " fit in the menu, the rest are ignored.");
             return List.copyOf(milestones.subList(0, MAX_MILESTONES));
         }
@@ -200,7 +223,7 @@ public class ReferralConfiguration {
             return null;
         }
         if (raw instanceof String string && ActivityConfiguration.isPoolName(string)) {
-            return poolReward(ActivityConfiguration.poolName(string), null, null, at);
+            return poolReward(ActivityConfiguration.poolName(string), null, null);
         }
         if (!(raw instanceof Map<?, ?> block)) {
             log().warning(FILE + " " + at + " is not a pool name or a reward block - ignored.");
@@ -213,7 +236,7 @@ public class ReferralConfiguration {
             icon = null;
         }
         if (block.get("pool") instanceof String pool && ActivityConfiguration.isPoolName(pool)) {
-            return poolReward(ActivityConfiguration.poolName(pool), display, icon, at);
+            return poolReward(ActivityConfiguration.poolName(pool), display, icon);
         }
         RewardEntry fixed = activity.rewardEntry(block, FILE + " " + at);
         if (fixed == null) {
@@ -222,11 +245,7 @@ public class ReferralConfiguration {
         return new Reward(display == null || display.isBlank() ? fixedName(fixed) : display, icon, null, fixed);
     }
 
-    private Reward poolReward(String pool, String display, String icon, String at) {
-        if (pool(pool).isEmpty()) {
-            log().warning(FILE + " " + at + " draws from '" + Utils.safeForLog(pool) + "', which is not a pool in "
-                + FILE + " or the activity rewards, or has no usable entry - it stays unclaimable.");
-        }
+    private static Reward poolReward(String pool, String display, String icon) {
         return new Reward(display == null || display.isBlank() ? ActivityConfiguration.itemName(pool) : display,
             icon, pool, null);
     }
@@ -236,10 +255,21 @@ public class ReferralConfiguration {
         return first == null ? "Reward" : ActivityConfiguration.itemName(first.path());
     }
 
-    /** A pool from referral.yml, else the activity's (week-locked) reward pool of that name. */
-    public List<RewardEntry> pool(String name) {
-        List<RewardEntry> own = pools.get(name);
+    /**
+     * The act's own pool of that name, else referral.yml's shared {@code pools}, else the activity's
+     * (week-locked) reward pool. {@code act} may be null.
+     */
+    public List<RewardEntry> pool(Act act, String name) {
+        List<RewardEntry> own = act == null ? null : act.pools().get(name);
+        if (own == null) {
+            own = pools.get(name);
+        }
         return own != null ? own : activity.rewardPool(name);
+    }
+
+    /** The milestones every act shares; each is claimed once ever (per season). */
+    public List<Milestone> milestones() {
+        return milestones;
     }
 
     /** The act whose start is the latest one not after {@code now}; null before the first act. */

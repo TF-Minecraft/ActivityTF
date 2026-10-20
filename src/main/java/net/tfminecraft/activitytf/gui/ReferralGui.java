@@ -38,8 +38,10 @@ import net.tfminecraft.activitytf.utils.Utils;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -84,7 +86,7 @@ public class ReferralGui implements Listener {
         private boolean next;
         private final UUID target;
         private final List<UUID> shown = new ArrayList<>();
-        private final List<Integer> hours = new ArrayList<>();
+        private final Map<Integer, Integer> hours = new HashMap<>();
         private Inventory inventory;
 
         Marker(View view, int page, UUID target) {
@@ -149,11 +151,13 @@ public class ReferralGui implements Listener {
         inventory.setItem(RULES_SLOT, rulesItem());
 
         List<Milestone> milestones = act == null ? List.of() : act.milestones();
-        int first = MILESTONE_ROW + (9 - milestones.size()) / 2;
+        int[] slots = milestoneSlots(milestones.size());
         for (int index = 0; index < milestones.size(); index++) {
             Milestone milestone = milestones.get(index);
-            marker.hours.add(milestone.newPlayer() == null ? null : milestone.hours());
-            inventory.setItem(first + index, ownMilestoneItem(data, milestone));
+            if (milestone.newPlayer() != null) {
+                marker.hours.put(slots[index], milestone.hours());
+            }
+            inventory.setItem(slots[index], ownMilestoneItem(data, milestone));
         }
         if (act == null) {
             inventory.setItem(MILESTONE_ROW + 4, item(Material.BARRIER, messages.get("referral.gui.no-act"), List.of()));
@@ -310,7 +314,7 @@ public class ReferralGui implements Listener {
             }
             return lore;
         }
-        List<RewardEntry> pool = referrals().getConfiguration().pool(reward.pool());
+        List<RewardEntry> pool = referrals().getConfiguration().pool(referrals().act(), reward.pool());
         if (pool.isEmpty()) {
             lore.add(messages.get("gui.reward-preview-unavailable"));
             return lore;
@@ -491,11 +495,9 @@ public class ReferralGui implements Listener {
             show(player, () -> buildPicker(player, 0));
             return;
         }
-        int first = MILESTONE_ROW + (9 - marker.hours.size()) / 2;
-        int index = slot - first;
-        if (slot >= MILESTONE_ROW && slot < MILESTONE_ROW + 9 && index >= 0 && index < marker.hours.size()
-            && marker.hours.get(index) != null) {
-            Claim claim = referrals().claimOwn(player, marker.hours.get(index));
+        Integer hours = marker.hours.get(slot);
+        if (hours != null) {
+            Claim claim = referrals().claimOwn(player, hours);
             report(player, claim);
             show(player, () -> build(player, marker.page()));
             return;
@@ -583,6 +585,17 @@ public class ReferralGui implements Listener {
     }
 
     // ---- items -------------------------------------------------------------------------------
+
+    /** Up to four milestones sit one slot apart, centred; more fill the row side by side. */
+    static int[] milestoneSlots(int count) {
+        int step = count <= 4 ? 2 : 1;
+        int first = MILESTONE_ROW + (9 - (step * (count - 1) + 1)) / 2;
+        int[] slots = new int[count];
+        for (int index = 0; index < count; index++) {
+            slots[index] = first + index * step;
+        }
+        return slots;
+    }
 
     static String duration(int minutes) {
         int safe = Math.max(0, minutes);

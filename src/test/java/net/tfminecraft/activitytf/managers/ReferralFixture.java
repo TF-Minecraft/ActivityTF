@@ -42,43 +42,43 @@ public final class ReferralFixture {
           afk-minutes: 5
           move-blocks: 3
           ignored-worlds: [character_selection]
-        pools:
-          pool_ref_rare:
-            - weight: 1
-              display: "Rare emerald"
+        milestones:
+          - hours: 1
+            new-player:
+              display: "Starter kit"
               items:
-                - item: EMERALD
+                - item: BREAD
+                  amount: 4
+            inviter:
+              display: "Coin"
+              items:
+                - item: GOLD_NUGGET
+                  amount: 3
+          - hours: 3
+            new-player:
+              display: "Small"
+              items:
+                - item: IRON_INGOT
                   amount: 2
+          - hours: 5
+            rare: true
+            new-player:
+              display: "Rare act reward"
+              icon: EMERALD
+              pool: pool_ref_rare
+            inviter: pool_ref_rare
         acts:
           act_1:
             display: "Act I"
             starts: "2026-10-01"
             rare-limit: 1
-            milestones:
-              - hours: 1
-                new-player:
-                  display: "Starter kit"
+            pools:
+              pool_ref_rare:
+                - weight: 1
+                  display: "Rare emerald"
                   items:
-                    - item: BREAD
-                      amount: 4
-                inviter:
-                  display: "Coin"
-                  items:
-                    - item: GOLD_NUGGET
-                      amount: 3
-              - hours: 3
-                new-player:
-                  display: "Small"
-                  items:
-                    - item: IRON_INGOT
+                    - item: EMERALD
                       amount: 2
-              - hours: 5
-                rare: true
-                new-player:
-                  display: "Rare act reward"
-                  icon: EMERALD
-                  pool: pool_ref_rare
-                inviter: pool_ref_rare
         """;
 
     public final ServerMock server;

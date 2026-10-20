@@ -109,67 +109,92 @@ class ReferralConfigurationTest {
     }
 
     @Test
-    void actsAreSortedAndTheLatestStartedOneIsUsed() throws Exception {
+    void actsAreSortedTheLatestStartedOneIsUsedAndTheyShareTheMilestones() throws Exception {
         ReferralConfiguration config = config("""
+            milestones: [{hours: 1, new-player: pool_x}]
             acts:
               act_2:
                 starts: "2026-11-01"
-                milestones: [{hours: 1, new-player: pool_x}]
+                pools:
+                  pool_x: [{display: "Two", items: [{item: GOLD_INGOT}]}]
               act_1:
                 display: "Act I"
                 starts: "2026-10-01"
                 rare-limit: -1
-                milestones: [{hours: 1, new-player: pool_x}]
             """);
         assertEquals(List.of("act_1", "act_2"), config.acts().stream().map(Act::id).toList());
         assertNull(config.act(LocalDateTime.of(2026, 9, 30, 0, 0)));
-        assertEquals("act_1", config.act(LocalDateTime.of(2026, 10, 1, 0, 0)).id());
-        assertEquals("Act I", config.act(LocalDateTime.of(2026, 10, 31, 0, 0)).display());
-        assertEquals(-1, config.act(LocalDateTime.of(2026, 10, 31, 0, 0)).rareLimit());
+        Act first = config.act(LocalDateTime.of(2026, 10, 1, 0, 0));
+        assertEquals("act_1", first.id());
+        assertEquals("Act I", first.display());
+        assertEquals(-1, first.rareLimit());
         Act second = config.act(LocalDateTime.of(2026, 11, 2, 0, 0));
         assertEquals("act_2", second.display());
         assertEquals(2, second.rareLimit());
-        assertTrue(warned("draws from 'pool_x'"));
+        assertSame(config.milestones(), first.milestones());
+        assertSame(config.milestones(), second.milestones());
+        assertEquals("Two", config.pool(second, "pool_x").get(0).display());
+        assertTrue(config.pool(first, "pool_x").isEmpty());
+        assertTrue(warned("acts.act_1 has no usable pool 'pool_x'"), "act_1 has no loot for its 1h milestone");
+        assertFalse(warned("acts.act_2 has no usable pool"));
+    }
+
+    @Test
+    void anActsOwnPoolWinsOverTheSharedOneWhichWinsOverTheActivityOne() throws Exception {
+        ReferralConfiguration config = config("""
+            milestones: [{hours: 1, new-player: pool_x, inviter: {items: [{item: STONE}]}}]
+            pools:
+              pool_x: [{display: "Shared", items: [{item: IRON_INGOT}]}]
+            acts:
+              act_1:
+                starts: "2026-10-01"
+                pools:
+                  pool_x: [{display: "Own", items: [{item: DIAMOND}]}]
+                  notapool: [{items: [{item: DIAMOND}]}]
+              act_2:
+                starts: "2026-11-01"
+            """);
+        assertEquals("Own", config.pool(config.acts().get(0), "pool_x").get(0).display());
+        assertEquals("Shared", config.pool(config.acts().get(1), "pool_x").get(0).display());
+        assertEquals("Shared", config.pool(null, "pool_x").get(0).display());
+        assertTrue(warned("acts.act_1.pools.notapool must use a pool_<name> name"));
+        assertFalse(warned("has no usable pool"));
     }
 
     @Test
     void brokenActsAreReportedAndSkipped() throws Exception {
         ReferralConfiguration config = config("""
+            milestones: [{hours: 1, new-player: {items: [{item: STONE}]}}]
             acts:
               flat: 3
               nostart:
-                milestones: [{hours: 1, new-player: pool_x}]
+                display: x
               badstart:
                 starts: tomorrow
-                milestones: [{hours: 1, new-player: pool_x}]
-              empty:
-                starts: "2026-10-01"
             """);
         assertTrue(config.acts().isEmpty());
         assertTrue(warned("acts.flat is not a section"));
         assertTrue(warned("acts.nostart has no usable 'starts' date"));
         assertTrue(warned("acts.badstart.starts 'tomorrow' is not a date"));
-        assertTrue(warned("acts.empty has no usable milestone"));
+        assertTrue(warned("no usable act"));
+        assertFalse(warned("no usable entry under 'milestones'"));
     }
 
     @Test
     void milestonesAreValidatedSortedAndCapped() throws Exception {
         StringBuilder many = new StringBuilder();
         for (int hours = 9; hours >= 1; hours--) {
-            many.append("      - {hours: ").append(hours).append(", new-player: pool_x}\n");
+            many.append("  - {hours: ").append(hours).append(", new-player: pool_x}\n");
         }
         ReferralConfiguration config = config("""
-            acts:
-              act_1:
-                starts: "2026-10-01"
-                milestones:
-                  - {hours: 0, new-player: pool_x}
-                  - {hours: 20000, new-player: pool_x}
-                  - {hours: x, new-player: pool_x}
-                  - {hours: 2}
-                  - {hours: 9, new-player: pool_x}
+            milestones:
+              - {hours: 0, new-player: pool_x}
+              - {hours: 20000, new-player: pool_x}
+              - {hours: x, new-player: pool_x}
+              - {hours: 2}
+              - {hours: 9, new-player: pool_x}
             """ + many);
-        List<Milestone> milestones = config.acts().get(0).milestones();
+        List<Milestone> milestones = config.milestones();
         assertEquals(List.of(1, 2, 3, 4, 5, 6, 7), milestones.stream().map(Milestone::hours).toList());
         assertEquals(60, milestones.get(0).minutes());
         assertTrue(warned("milestones[0] needs 'hours' between 1 and 10000"));
@@ -181,6 +206,12 @@ class ReferralConfigurationTest {
     }
 
     @Test
+    void withoutMilestonesNothingCanBeClaimed() throws Exception {
+        config("acts: {act_1: {starts: \"2026-10-01\"}}");
+        assertTrue(warned("no usable entry under 'milestones'"));
+    }
+
+    @Test
     void rewardsArePoolNamesPoolBlocksOrFixedEntries() throws Exception {
         ReferralConfiguration config = config("""
             pools:
@@ -188,25 +219,22 @@ class ReferralConfigurationTest {
                 - {display: "Gem", items: [{item: DIAMOND, amount: 2}]}
               notapool:
                 - {items: [{item: DIAMOND}]}
-            acts:
-              act_1:
-                starts: "2026-10-01"
-                milestones:
-                  - hours: 1
-                    rare: true
-                    new-player: pool_mine
-                    inviter: {pool: pool_mine, display: "Gift", icon: EMERALD}
-                  - hours: 2
-                    new-player: {items: [{item: IRON_INGOT, amount: 3}]}
-                    inviter: {display: "Hi", commands: ["say %player%"], icon: "x.bad"}
-                  - hours: 3
-                    new-player: {display: " ", commands: ["say hi"]}
-                    inviter: "DIAMOND"
-                  - hours: 4
-                    new-player: {display: "Nothing"}
-                    inviter: 5
+            milestones:
+              - hours: 1
+                rare: true
+                new-player: pool_mine
+                inviter: {pool: pool_mine, display: "Gift", icon: EMERALD}
+              - hours: 2
+                new-player: {items: [{item: IRON_INGOT, amount: 3}]}
+                inviter: {display: "Hi", commands: ["say %player%"], icon: "x.bad"}
+              - hours: 3
+                new-player: {display: " ", commands: ["say hi"]}
+                inviter: "DIAMOND"
+              - hours: 4
+                new-player: {display: "Nothing"}
+                inviter: 5
             """);
-        List<Milestone> milestones = config.acts().get(0).milestones();
+        List<Milestone> milestones = config.milestones();
         Milestone first = milestones.get(0);
         assertTrue(first.rare());
         assertEquals("pool_mine", first.newPlayer().pool());
@@ -214,7 +242,7 @@ class ReferralConfigurationTest {
         assertNull(first.newPlayer().fixed());
         assertEquals("Gift", first.inviter().display());
         assertEquals("EMERALD", first.inviter().icon());
-        assertEquals(1, config.pool("pool_mine").size());
+        assertEquals(1, config.pool(null, "pool_mine").size());
         assertTrue(warned("pools.notapool must use a pool_<name> name"));
 
         Milestone second = milestones.get(1);
@@ -240,8 +268,8 @@ class ReferralConfigurationTest {
         field.setAccessible(true);
         List<RewardEntry> pool = List.of(new RewardEntry(1, "x", List.of(), List.of(new RewardEntry.Item("DIAMOND", 1))));
         field.set(config.activity(), Map.of("pool_act1", pool));
-        assertEquals(pool, config.pool("pool_act1"));
-        assertTrue(config.pool("pool_none").isEmpty());
+        assertEquals(pool, config.pool(null, "pool_act1"));
+        assertTrue(config.pool(null, "pool_none").isEmpty());
     }
 
     @Test
@@ -267,9 +295,9 @@ class ReferralConfigurationTest {
     void theShippedReferralYmlLoadsCleanly() throws Exception {
         ReferralConfiguration config = config(Files.readString(Path.of("src/main/resources/referral.yml")));
         assertEquals(1, config.acts().size());
-        assertEquals(5, config.acts().get(0).milestones().size());
-        assertEquals(List.of(1, 3, 8, 20, 45), config.acts().get(0).milestones().stream().map(Milestone::hours).toList());
-        assertTrue(config.acts().get(0).milestones().get(4).rare());
+        assertEquals(List.of(1, 4, 12, 24), config.milestones().stream().map(Milestone::hours).toList());
+        assertTrue(config.milestones().get(3).rare());
+        assertEquals(List.of(false, false, false), config.milestones().subList(0, 3).stream().map(Milestone::rare).toList());
         assertTrue(config.ignoredWorld("character_selection"));
         assertTrue(logged.isEmpty(), "shipped referral.yml warns: " + logged);
     }
