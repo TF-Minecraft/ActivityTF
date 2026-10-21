@@ -116,7 +116,7 @@ class ReferralGuiTest {
         assertTrue(lore(inventory.getItem(11)).stream().anyMatch(line -> line.contains("pick who invited you")));
         assertTrue(lore(inventory.getItem(15)).stream().anyMatch(line -> line.contains("x2") && line.contains("Emerald")),
             "a one-entry pool lists what is inside");
-        assertFalse(inventory.getItem(11).getItemMeta().hasEnchantmentGlintOverride());
+        assertEquals(Boolean.FALSE, inventory.getItem(11).getItemMeta().getEnchantmentGlintOverride());
         assertTrue(name(inventory.getItem(ReferralGui.RARE_SLOT)).contains("0 players"));
         assertTrue(lore(inventory.getItem(ReferralGui.RULES_SLOT)).stream().anyMatch(line -> line.contains("5h")),
             "the rules name the hours that count for the rare track");
@@ -260,7 +260,7 @@ class ReferralGuiTest {
         click(player, 11);
         assertTrue(player.getInventory().contains(Material.BREAD, 4));
         assertTrue(name(top(player).getItem(11)).contains("✔"));
-        assertFalse(top(player).getItem(11).getItemMeta().hasEnchantmentGlintOverride());
+        assertEquals(Boolean.FALSE, top(player).getItem(11).getItemMeta().getEnchantmentGlintOverride());
         click(player, 10);
         click(player, 9);
     }
@@ -384,6 +384,7 @@ class ReferralGuiTest {
         assertEquals(Material.LIGHT_GRAY_STAINED_GLASS_PANE, top(player).getItem(13).getType());
         click(player, 13);
         assertTrue(name(top(player).getItem(ReferralGui.RARE_SLOT)).contains("No rare track"));
+        assertEquals(Boolean.FALSE, top(player).getItem(ReferralGui.RARE_SLOT).getItemMeta().getEnchantmentGlintOverride());
         assertFalse(lore(top(player).getItem(ReferralGui.RULES_SLOT)).stream()
             .anyMatch(line -> line.contains("rare track")), "no rare track, no rule about it");
         gui.open(inviter);
@@ -423,7 +424,7 @@ class ReferralGuiTest {
         assertEquals(Material.CHEST, one.getType(), "a pool step without an icon");
         assertEquals(Boolean.TRUE, one.getItemMeta().getEnchantmentGlintOverride());
         assertEquals(Material.DIAMOND, two.getType());
-        assertFalse(two.getItemMeta().hasEnchantmentGlintOverride());
+        assertEquals(Boolean.FALSE, two.getItemMeta().getEnchantmentGlintOverride());
         assertTrue(lore(two).stream().anyMatch(line -> line.contains("x1") && line.contains("Diamond")));
         assertTrue(lore(two).stream().anyMatch(line -> line.contains("1 player") && line.contains("more need")));
 
@@ -439,7 +440,10 @@ class ReferralGuiTest {
         click(inviter, ReferralGui.BACK_SLOT);
         assertEquals(ReferralGui.View.MAIN, marker(inviter).view());
         star = top(inviter).getItem(ReferralGui.RARE_SLOT);
-        assertFalse(star.getItemMeta().hasEnchantmentGlintOverride());
+        assertEquals(Boolean.FALSE, star.getItemMeta().getEnchantmentGlintOverride(),
+            "a nether star glints by default, so nothing to claim must switch it off");
+        assertEquals(Boolean.FALSE, gui.buildRare(inviter).getItem(ReferralGui.RARE_HEADER_SLOT).getItemMeta()
+            .getEnchantmentGlintOverride());
 
         data(second).setMinutes(300);
         data(second).inviterClaimed().addAll(List.of(1, 5));
@@ -447,6 +451,24 @@ class ReferralGuiTest {
         gui.open(inviter);
         assertTrue(lore(top(inviter).getItem(ReferralGui.RARE_SLOT)).stream()
             .anyMatch(line -> line.contains("Every rare reward claimed")));
+    }
+
+    @Test
+    void anIconThatGlintsByDefaultOnlyGlintsWhenClaimable() throws Exception {
+        fixture.writeReferral(ReferralFixture.CONFIG.replace("icon: EMERALD", "icon: NETHER_STAR"));
+        referrals.reload();
+        TestPlayer inviter = fixture.join("Inviter", "10.0.0.1");
+        TestPlayer player = fixture.join("Newbie", "10.0.0.2");
+        link(player, inviter);
+        gui.open(player);
+        assertEquals(Material.NETHER_STAR, top(player).getItem(15).getType());
+        assertEquals(Boolean.FALSE, top(player).getItem(15).getItemMeta().getEnchantmentGlintOverride(), "locked");
+        data(player).setMinutes(300);
+        gui.open(player);
+        assertEquals(Boolean.TRUE, top(player).getItem(15).getItemMeta().getEnchantmentGlintOverride(), "claimable");
+        data(player).claimed().add(5);
+        gui.open(player);
+        assertEquals(Boolean.FALSE, top(player).getItem(15).getItemMeta().getEnchantmentGlintOverride(), "claimed");
     }
 
     @Test

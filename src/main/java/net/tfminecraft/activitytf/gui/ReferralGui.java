@@ -269,8 +269,10 @@ public class ReferralGui implements Listener {
     private ItemStack rareButton(UUID uuid, ReferralData data, Act act) {
         Messages messages = messages();
         if (act == null || act.rareTrack().isEmpty()) {
-            return item(Material.NETHER_STAR, messages.get(act == null ? "referral.gui.no-act" : "referral.gui.rare-empty"),
-                List.of());
+            ItemStack star = item(Material.NETHER_STAR,
+                messages.get(act == null ? "referral.gui.no-act" : "referral.gui.rare-empty"), List.of());
+            glint(star, false);
+            return star;
         }
         int completed = referrals().completedInvitees(uuid).size();
         String goal = duration(referrals().getConfiguration().completionMinutes());
@@ -291,9 +293,8 @@ public class ReferralGui implements Listener {
         lore.add(messages.get("referral.gui.rare-open"));
         ItemStack star = item(Material.NETHER_STAR, messages.get("referral.gui.rare-track", "%count%", players(completed),
             "%hours%", goal), lore);
-        if (claimable) {
-            glint(star);
-        }
+        // A nether star glints by default, so its glint is set either way.
+        glint(star, claimable);
         return star;
     }
 
@@ -325,8 +326,10 @@ public class ReferralGui implements Listener {
             }
             header.add(messages.get("referral.gui.rare-reached", "%hours%", goal, "%names%", String.join(", ", names)));
         }
-        inventory.setItem(RARE_HEADER_SLOT, item(Material.NETHER_STAR, messages.get("referral.gui.rare-track",
-            "%count%", players(completed.size()), "%hours%", goal), header));
+        ItemStack star = item(Material.NETHER_STAR, messages.get("referral.gui.rare-track",
+            "%count%", players(completed.size()), "%hours%", goal), header);
+        glint(star, false);
+        inventory.setItem(RARE_HEADER_SLOT, star);
 
         List<RareStep> steps = act == null ? List.of() : act.rareTrack();
         for (int index = 0; index < steps.size(); index++) {
@@ -476,9 +479,8 @@ public class ReferralGui implements Listener {
     private ItemStack rewardItem(Reward reward, String name, List<String> lore, boolean glint) {
         ItemStack stack = rewardIcon(reward);
         item(stack, name, lore);
-        if (glint) {
-            glint(stack);
-        }
+        // Set either way: some icons (nether stars, enchanted books, enchanted custom items) glint by default.
+        glint(stack, glint);
         return stack;
     }
 
@@ -791,8 +793,12 @@ public class ReferralGui implements Listener {
     }
 
     private static void glint(ItemStack stack) {
+        glint(stack, true);
+    }
+
+    private static void glint(ItemStack stack, boolean on) {
         ItemMeta meta = stack.getItemMeta();
-        meta.setEnchantmentGlintOverride(true);
+        meta.setEnchantmentGlintOverride(on);
         stack.setItemMeta(meta);
     }
 
