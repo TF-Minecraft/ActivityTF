@@ -42,7 +42,7 @@ class ReferralDataTest {
     }
 
     @Test
-    void linksAndRareCounts() {
+    void linksAndRareSteps() {
         ReferralData data = new ReferralData("A", 0);
         UUID inviter = UUID.randomUUID();
         data.link(inviter, 7);
@@ -52,11 +52,9 @@ class ReferralDataTest {
         assertNull(data.invitedBy());
         assertEquals(0, data.linkedAt());
 
-        data.setRareClaims("act_1", 2);
-        assertEquals(2, data.rareClaims("act_1"));
-        data.setRareClaims("act_1", 0);
-        assertTrue(data.rareClaims().isEmpty());
-        assertEquals(0, data.rareClaims("act_2"));
+        data.rareClaimed().add(3);
+        data.rareClaimed().add(1);
+        assertEquals(List.of(1, 3), List.copyOf(data.rareClaimed()));
         assertEquals(List.of(), data.ipList());
         data.setLastSeen(3);
         assertEquals(3, data.lastSeen());

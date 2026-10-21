@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import net.tfminecraft.activitytf.config.ReferralConfiguration.Act;
 import net.tfminecraft.activitytf.config.ReferralConfiguration.Milestone;
+import net.tfminecraft.activitytf.config.ReferralConfiguration.RareStep;
 import net.tfminecraft.activitytf.models.RewardEntry;
 
 import java.io.File;
@@ -121,18 +122,21 @@ class ReferralConfigurationTest {
                 display: "Act I"
                 starts: "2026-10-01"
                 rare-limit: -1
+            rare-track: [{players: 1, reward: pool_x}]
             """);
         assertEquals(List.of("act_1", "act_2"), config.acts().stream().map(Act::id).toList());
         assertNull(config.act(LocalDateTime.of(2026, 9, 30, 0, 0)));
         Act first = config.act(LocalDateTime.of(2026, 10, 1, 0, 0));
         assertEquals("act_1", first.id());
         assertEquals("Act I", first.display());
-        assertEquals(-1, first.rareLimit());
+        assertTrue(warned("acts.act_1.rare-limit is no longer used"));
         Act second = config.act(LocalDateTime.of(2026, 11, 2, 0, 0));
         assertEquals("act_2", second.display());
-        assertEquals(2, second.rareLimit());
         assertSame(config.milestones(), first.milestones());
         assertSame(config.milestones(), second.milestones());
+        assertEquals(1, config.rareTrack().size());
+        assertSame(config.rareTrack(), first.rareTrack());
+        assertSame(config.rareTrack(), second.rareTrack());
         assertEquals("Two", config.pool(second, "pool_x").get(0).display());
         assertTrue(config.pool(first, "pool_x").isEmpty());
         assertTrue(warned("acts.act_1 has no usable pool 'pool_x'"), "act_1 has no loot for its 1h milestone");
@@ -182,9 +186,9 @@ class ReferralConfigurationTest {
     }
 
     @Test
-    void milestonesAreValidatedSortedAndCapped() throws Exception {
+    void milestonesAreValidatedSortedAndNotCapped() throws Exception {
         StringBuilder many = new StringBuilder();
-        for (int hours = 9; hours >= 1; hours--) {
+        for (int hours = 12; hours >= 1; hours--) {
             many.append("  - {hours: ").append(hours).append(", new-player: pool_x}\n");
         }
         ReferralConfiguration config = config("""
@@ -196,14 +200,48 @@ class ReferralConfigurationTest {
               - {hours: 9, new-player: pool_x}
             """ + many);
         List<Milestone> milestones = config.milestones();
-        assertEquals(List.of(1, 2, 3, 4, 5, 6, 7), milestones.stream().map(Milestone::hours).toList());
+        assertEquals(List.of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12), milestones.stream().map(Milestone::hours).toList());
         assertEquals(60, milestones.get(0).minutes());
+        assertEquals(12 * 60, config.completionMinutes(), "the last milestone counts for the rare track");
         assertTrue(warned("milestones[0] needs 'hours' between 1 and 10000"));
         assertTrue(warned("milestones[1] needs 'hours'"));
         assertTrue(warned("milestones[2] needs 'hours'"));
         assertTrue(warned("milestones[3] pays neither player"));
         assertTrue(warned("repeats 9h"));
-        assertTrue(warned("has 9 milestones - only the first 7"));
+    }
+
+    @Test
+    void rareStepsAreValidatedSortedAndCapped() throws Exception {
+        StringBuilder many = new StringBuilder();
+        for (int players = 30; players >= 1; players--) {
+            many.append("  - {players: ").append(players).append(", reward: pool_x}\n");
+        }
+        ReferralConfiguration config = config("""
+            milestones:
+              - {hours: 24, new-player: pool_x, rare: true}
+            rare-track:
+              - {players: 0, reward: pool_x}
+              - {players: 2000, reward: pool_x}
+              - {players: 4}
+              - {players: 5, reward: 7}
+              - {players: 3, reward: {display: "Gems", items: [{item: DIAMOND, amount: 2}]}}
+            """ + many);
+        List<RareStep> steps = config.rareTrack();
+        assertEquals(ReferralConfiguration.MAX_RARE_STEPS, steps.size());
+        assertEquals(List.of(1, 2, 3), steps.subList(0, 3).stream().map(RareStep::players).toList());
+        assertEquals("Gems", steps.get(2).reward().display(), "the first of a repeated count wins");
+        assertEquals(List.of(new RewardEntry.Item("DIAMOND", 2)), steps.get(2).reward().fixed().items());
+        assertEquals("pool_x", steps.get(0).reward().pool());
+        assertEquals(24 * 60, config.completionMinutes());
+        assertTrue(warned("rare-track[0] needs 'players' between 1 and 1000"));
+        assertTrue(warned("rare-track[1] needs 'players'"));
+        assertTrue(warned("rare-track[2] has no usable 'reward'"));
+        assertTrue(warned("rare-track[3].reward is not a pool name"));
+        assertTrue(warned("repeats 3 players"));
+        assertTrue(warned("rare-track steps - only the first 28"));
+        assertTrue(warned("milestones[0].rare is no longer used"));
+        assertTrue(warned("step for 11 players can never be claimed: link.max-invitees is 10"));
+        assertFalse(warned("step for 10 players can never"));
     }
 
     @Test
@@ -218,15 +256,18 @@ class ReferralConfigurationTest {
         assertTrue(warned("acts.act_1.milestones is the old layout"));
         assertEquals(1, config.acts().size());
         assertNull(config.act(LocalDateTime.of(2026, 10, 2, 0, 0)), "no milestones, so no act to claim in");
+        assertEquals(0, config.completionMinutes());
     }
 
     @Test
     void missingPoolsAreReportedOncePerActAndNotWhenDisabled() throws Exception {
         config("""
             milestones: [{hours: 1, new-player: pool_x, inviter: pool_x}]
+            rare-track: [{players: 1, reward: pool_x}, {players: 2, reward: pool_y}]
             acts: {act_1: {starts: "2026-10-01", pools: {pool_x: []}}}
             """);
         assertEquals(1, logged.stream().filter(line -> line.contains("has no usable pool 'pool_x'")).count());
+        assertTrue(warned("pool 'pool_y' (nor does pools or the activity rewards) - the 2-player rare step"));
         logged.clear();
         config("""
             enabled: false
@@ -246,7 +287,6 @@ class ReferralConfigurationTest {
                 - {items: [{item: DIAMOND}]}
             milestones:
               - hours: 1
-                rare: true
                 new-player: pool_mine
                 inviter: {pool: pool_mine, display: "Gift", icon: EMERALD}
               - hours: 2
@@ -261,7 +301,6 @@ class ReferralConfigurationTest {
             """);
         List<Milestone> milestones = config.milestones();
         Milestone first = milestones.get(0);
-        assertTrue(first.rare());
         assertEquals("pool_mine", first.newPlayer().pool());
         assertEquals("Pool Mine", first.newPlayer().display());
         assertNull(first.newPlayer().fixed());
@@ -271,7 +310,6 @@ class ReferralConfigurationTest {
         assertTrue(warned("pools.notapool must use a pool_<name> name"));
 
         Milestone second = milestones.get(1);
-        assertFalse(second.rare());
         assertEquals("Iron Ingot", second.newPlayer().display());
         assertEquals(List.of(new RewardEntry.Item("IRON_INGOT", 3)), second.newPlayer().fixed().items());
         assertEquals("Hi", second.inviter().display());
@@ -321,8 +359,13 @@ class ReferralConfigurationTest {
         ReferralConfiguration config = config(Files.readString(Path.of("src/main/resources/referral.yml")));
         assertEquals(1, config.acts().size());
         assertEquals(List.of(1, 4, 12, 24), config.milestones().stream().map(Milestone::hours).toList());
-        assertTrue(config.milestones().get(3).rare());
-        assertEquals(List.of(false, false, false), config.milestones().subList(0, 3).stream().map(Milestone::rare).toList());
+        assertEquals(24 * 60, config.completionMinutes());
+        assertEquals(List.of(1, 3, 5), config.rareTrack().stream().map(RareStep::players).toList());
+        assertEquals("pool_ref_rare", config.rareTrack().get(0).reward().pool());
+        Act act = config.acts().get(0);
+        assertEquals(1, config.pool(act, config.rareTrack().get(1).reward().pool()).size(),
+            "later steps are one-entry act pools, so they hand over specific items");
+        assertEquals(3, config.pool(act, "pool_ref_rare_5").get(0).items().size());
         assertTrue(config.ignoredWorld("character_selection"));
         assertTrue(logged.isEmpty(), "shipped referral.yml warns: " + logged);
     }

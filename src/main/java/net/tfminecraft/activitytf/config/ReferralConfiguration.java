@@ -22,32 +22,36 @@ import java.util.Set;
 import java.util.logging.Logger;
 
 /**
- * referral.yml: who may link, how playtime is counted, the milestones (the same for every act, each
- * claimed once ever), and per act the pools those milestones draw from.
+ * referral.yml: who may link, how playtime is counted, the timed milestones (the same for every act, each
+ * claimed once ever), the inviter's rare track, and per act the pools those rewards draw from.
  */
 public class ReferralConfiguration {
 
     public static final String FILE = "referral.yml";
 
-    /** The GUI has one row of seven milestone slots. */
-    public static final int MAX_MILESTONES = 7;
+    /** The rare-track menu has four rows of seven steps. */
+    public static final int MAX_RARE_STEPS = 28;
 
     /** A milestone reward: a fixed entry, or one draw from {@code pool}. */
     public record Reward(String display, String icon, String pool, RewardEntry fixed) {
     }
 
-    public record Milestone(int hours, Reward newPlayer, Reward inviter, boolean rare) {
+    public record Milestone(int hours, Reward newPlayer, Reward inviter) {
         public int minutes() {
             return hours * 60;
         }
     }
 
+    /** A rare-track step: the inviter claims it once {@code players} invitees have reached the last milestone. */
+    public record RareStep(int players, Reward reward) {
+    }
+
     /**
-     * {@code rareLimit} below 0 means no limit. {@code milestones} is the shared list; {@code pools}
-     * holds this act's loot for the pool names the milestones draw from.
+     * {@code milestones} and {@code rareTrack} are the shared lists; {@code pools} holds this act's loot for
+     * the pool names they draw from.
      */
-    public record Act(String id, String display, LocalDateTime starts, int rareLimit, List<Milestone> milestones,
-                      Map<String, List<RewardEntry>> pools) {
+    public record Act(String id, String display, LocalDateTime starts, List<Milestone> milestones,
+                      List<RareStep> rareTrack, Map<String, List<RewardEntry>> pools) {
     }
 
     private final JavaPlugin plugin;
@@ -66,6 +70,7 @@ public class ReferralConfiguration {
     private volatile Set<String> ignoredWorlds = Set.of();
     private volatile List<Act> acts = List.of();
     private volatile List<Milestone> milestones = List.of();
+    private volatile List<RareStep> rareTrack = List.of();
     private volatile Map<String, List<RewardEntry>> pools = Map.of();
 
     public ReferralConfiguration(JavaPlugin plugin, ActivityConfiguration activity) {
@@ -107,12 +112,21 @@ public class ReferralConfiguration {
 
         pools = loadPools(config.getConfigurationSection("pools"), "pools");
         milestones = loadMilestones(config);
+        rareTrack = loadRareTrack(config);
         acts = loadActs(config.getConfigurationSection("acts"));
         if (enabled && milestones.isEmpty()) {
             log().warning(FILE + " has no usable entry under 'milestones' - nothing can be claimed.");
         }
         if (enabled && acts.isEmpty()) {
             log().warning(FILE + " has no usable act under 'acts' - nothing can be claimed.");
+        }
+        if (enabled && maxInvitees > 0) {
+            for (RareStep step : rareTrack) {
+                if (step.players() > maxInvitees) {
+                    log().warning(FILE + " rare-track step for " + step.players() + " players can never be"
+                        + " claimed: link.max-invitees is " + maxInvitees + ".");
+                }
+            }
         }
         if (enabled) {
             Set<String> warned = new HashSet<>();
@@ -122,17 +136,23 @@ public class ReferralConfiguration {
         }
     }
 
-    // Every pool a milestone draws from must exist for every act, or that milestone can't be claimed then.
+    // Every pool a reward draws from must exist for every act, or that reward can't be claimed then.
     private void warnMissingPools(Act act, Set<String> warned) {
         for (Milestone milestone : milestones) {
-            for (Reward reward : new Reward[] {milestone.newPlayer(), milestone.inviter()}) {
-                if (reward != null && reward.pool() != null && pool(act, reward.pool()).isEmpty()
-                    && warned.add(act.id() + "/" + reward.pool())) {
-                    log().warning(FILE + " acts." + Utils.safeForLog(act.id()) + " has no usable pool '"
-                        + Utils.safeForLog(reward.pool()) + "' (nor does pools or the activity rewards) - the "
-                        + milestone.hours() + "h milestone can't be claimed during that act.");
-                }
-            }
+            warnMissingPool(act, milestone.newPlayer(), "the " + milestone.hours() + "h milestone", warned);
+            warnMissingPool(act, milestone.inviter(), "the " + milestone.hours() + "h milestone", warned);
+        }
+        for (RareStep step : rareTrack) {
+            warnMissingPool(act, step.reward(), "the " + step.players() + "-player rare step", warned);
+        }
+    }
+
+    private void warnMissingPool(Act act, Reward reward, String what, Set<String> warned) {
+        if (reward != null && reward.pool() != null && pool(act, reward.pool()).isEmpty()
+            && warned.add(act.id() + "/" + reward.pool())) {
+            log().warning(FILE + " acts." + Utils.safeForLog(act.id()) + " has no usable pool '"
+                + Utils.safeForLog(reward.pool()) + "' (nor does pools or the activity rewards) - " + what
+                + " can't be claimed during that act.");
         }
     }
 
@@ -181,13 +201,17 @@ public class ReferralConfiguration {
                 log().warning(FILE + " " + at + ".milestones is the old layout and is ignored - milestones are"
                     + " now one top-level list shared by every act; an act only sets its pools.");
             }
+            if (act.contains("rare-limit")) {
+                log().warning(FILE + " " + at + ".rare-limit is no longer used and is ignored - rare rewards are"
+                    + " the top-level rare-track list now.");
+            }
             LocalDateTime starts = dateTime(act.getString("starts", "").strip(), at + ".starts");
             if (starts == null) {
                 log().warning(FILE + " " + at + " has no usable 'starts' date - the act is ignored.");
                 continue;
             }
-            loaded.add(new Act(id, act.getString("display", id), starts, act.getInt("rare-limit", 2),
-                milestones, loadPools(act.getConfigurationSection("pools"), at + ".pools")));
+            loaded.add(new Act(id, act.getString("display", id), starts, milestones, rareTrack,
+                loadPools(act.getConfigurationSection("pools"), at + ".pools")));
         }
         loaded.sort(Comparator.comparing(Act::starts));
         return List.copyOf(loaded);
@@ -214,16 +238,47 @@ public class ReferralConfiguration {
                 log().warning(FILE + " " + where + " pays neither player - ignored.");
                 continue;
             }
+            if (raw.containsKey("rare")) {
+                log().warning(FILE + " " + where + ".rare is no longer used and is ignored - rare rewards are"
+                    + " the top-level rare-track list now.");
+            }
             seen.add(hours);
-            milestones.add(new Milestone(hours, newPlayer, inviter, Boolean.TRUE.equals(raw.get("rare"))));
+            milestones.add(new Milestone(hours, newPlayer, inviter));
         }
         milestones.sort(Comparator.comparingInt(Milestone::hours));
-        if (milestones.size() > MAX_MILESTONES) {
-            log().warning(FILE + " has " + milestones.size() + " milestones - only the first "
-                + MAX_MILESTONES + " fit in the menu, the rest are ignored.");
-            return List.copyOf(milestones.subList(0, MAX_MILESTONES));
-        }
         return List.copyOf(milestones);
+    }
+
+    private List<RareStep> loadRareTrack(ConfigurationSection config) {
+        List<RareStep> steps = new ArrayList<>();
+        Set<Integer> seen = new HashSet<>();
+        int index = 0;
+        for (Map<?, ?> raw : config.getMapList("rare-track")) {
+            String where = "rare-track[" + index++ + "]";
+            int players = raw.get("players") instanceof Number number ? number.intValue() : 0;
+            if (players < 1 || players > 1_000) {
+                log().warning(FILE + " " + where + " needs 'players' between 1 and 1000 - ignored.");
+                continue;
+            }
+            if (seen.contains(players)) {
+                log().warning(FILE + " " + where + " repeats " + players + " players - ignored.");
+                continue;
+            }
+            Reward reward = reward(raw.get("reward"), where + ".reward");
+            if (reward == null) {
+                log().warning(FILE + " " + where + " has no usable 'reward' - ignored.");
+                continue;
+            }
+            seen.add(players);
+            steps.add(new RareStep(players, reward));
+        }
+        steps.sort(Comparator.comparingInt(RareStep::players));
+        if (steps.size() > MAX_RARE_STEPS) {
+            log().warning(FILE + " has " + steps.size() + " rare-track steps - only the first "
+                + MAX_RARE_STEPS + " fit in the menu, the rest are ignored.");
+            return List.copyOf(steps.subList(0, MAX_RARE_STEPS));
+        }
+        return List.copyOf(steps);
     }
 
     private Reward reward(Object raw, String at) {
@@ -278,6 +333,17 @@ public class ReferralConfiguration {
     /** The milestones every act shares; each is claimed once ever (per season). */
     public List<Milestone> milestones() {
         return milestones;
+    }
+
+    /** The inviter's rare track, by how many invitees reached the last milestone; each step claimed once. */
+    public List<RareStep> rareTrack() {
+        return rareTrack;
+    }
+
+    /** Counted minutes an invitee needs to count on the rare track: the last milestone's (0 without any). */
+    public int completionMinutes() {
+        List<Milestone> all = milestones;
+        return all.isEmpty() ? 0 : all.get(all.size() - 1).minutes();
     }
 
     /**

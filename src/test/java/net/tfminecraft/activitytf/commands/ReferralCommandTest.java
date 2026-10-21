@@ -99,7 +99,11 @@ class ReferralCommandTest {
         var console = fixture.server.getConsoleSender();
 
         run(console, "referral info Newbie");
-        assertTrue(said(console).stream().anyMatch(line -> line.contains("Newbie") && line.contains("Inviter")));
+        assertTrue(said(console).stream().anyMatch(line -> line.contains("Newbie") && line.contains("Inviter")
+            && line.replaceAll("§.", "").contains("counted for: -")));
+        fixture.referrals.getStore().peek(player.getUniqueId()).setRareCountedFor(inviter.getUniqueId());
+        run(console, "referral info Newbie");
+        assertTrue(said(console).stream().anyMatch(line -> line.replaceAll("§.", "").contains("counted for: Inviter")));
         run(console, "referral info Inviter");
         assertTrue(said(console).stream().anyMatch(line -> line.contains("Newbie (0h)")));
         run(console, "referral info nobody");

@@ -108,7 +108,14 @@ public class ReferralCommand implements CommandExecutor, TabCompleter {
         }
         sender.sendMessage(messages().get("referral.admin.info", "%name%", data.name(), "%minutes%", data.minutes(),
             "%hours%", data.minutes() / 60, "%inviter%", inviter == null ? "-" : inviter.name(),
-            "%claimed%", data.claimed(), "%invited%", invited.isEmpty() ? "-" : String.join(", ", invited)));
+            "%claimed%", data.claimed(), "%invited%", invited.isEmpty() ? "-" : String.join(", ", invited),
+            "%completed%", referrals().completedInvitees(uuid).size(), "%rare%", data.rareClaimed(),
+            "%counted-for%", name(data.rareCountedFor())));
+    }
+
+    private String name(UUID uuid) {
+        ReferralData data = uuid == null ? null : referrals().getStore().peek(uuid);
+        return data == null ? "-" : data.name();
     }
 
     private void unlink(CommandSender sender, String[] args) {

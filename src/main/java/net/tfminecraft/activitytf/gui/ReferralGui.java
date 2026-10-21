@@ -23,6 +23,7 @@ import net.tfminecraft.activitytf.config.Messages;
 import net.tfminecraft.activitytf.config.ReferralConfiguration;
 import net.tfminecraft.activitytf.config.ReferralConfiguration.Act;
 import net.tfminecraft.activitytf.config.ReferralConfiguration.Milestone;
+import net.tfminecraft.activitytf.config.ReferralConfiguration.RareStep;
 import net.tfminecraft.activitytf.config.ReferralConfiguration.Reward;
 import net.tfminecraft.activitytf.hooks.ItemsAdderItems;
 import net.tfminecraft.activitytf.hooks.TLibsItems;
@@ -46,7 +47,7 @@ import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
-/** /referral: your own milestones, the players you invited, and picking who invited you. */
+/** /referral: your own milestones, the players you invited, your rare track, and picking who invited you. */
 public class ReferralGui implements Listener {
 
     static final int SIZE = 54;
@@ -56,6 +57,9 @@ public class ReferralGui implements Listener {
     static final int PROGRESS_SLOT = 4;
     static final int RULES_SLOT = 8;
     static final int MILESTONE_ROW = 9;
+    static final int MILESTONES_PER_PAGE = 7;
+    static final int MILESTONE_PREVIOUS_SLOT = 9;
+    static final int MILESTONE_NEXT_SLOT = 17;
     static final int INVITED_HEADER_SLOT = 22;
     static final int FIRST_INVITEE_SLOT = 27;
     static final int INVITEES_PER_PAGE = 18;
@@ -66,6 +70,10 @@ public class ReferralGui implements Listener {
     static final int NEXT_SLOT = 50;
     static final int PLAYERS_PER_PAGE = 45;
 
+    static final int RARE_HEADER_SLOT = 4;
+    static final int RARE_STEPS_PER_ROW = 7;
+    private static final int RARE_NAMES_SHOWN = 10;
+
     static final int CONFIRM_SLOT = 11;
     static final int CONFIRM_HEAD_SLOT = 13;
     static final int CANCEL_SLOT = 15;
@@ -75,7 +83,8 @@ public class ReferralGui implements Listener {
     enum View {
         MAIN,
         PICK,
-        CONFIRM
+        CONFIRM,
+        RARE
     }
 
     public static final class Marker implements InventoryHolder {
@@ -84,6 +93,9 @@ public class ReferralGui implements Listener {
         private int page;
         private boolean previous;
         private boolean next;
+        private int milestonePage;
+        private boolean milestonePrevious;
+        private boolean milestoneNext;
         private final UUID target;
         private final List<UUID> shown = new ArrayList<>();
         private final Map<Integer, Integer> hours = new HashMap<>();
@@ -106,6 +118,10 @@ public class ReferralGui implements Listener {
 
         int page() {
             return page;
+        }
+
+        int milestonePage() {
+            return milestonePage;
         }
 
         UUID target() {
@@ -135,8 +151,13 @@ public class ReferralGui implements Listener {
 
     // ---- main view ---------------------------------------------------------------------------
 
-    @SuppressWarnings("deprecation")
     public Inventory build(Player player, int page) {
+        return build(player, page, 0);
+    }
+
+    /** {@code milestonePage} scrolls the milestone row when there are more than seven milestones. */
+    @SuppressWarnings("deprecation")
+    public Inventory build(Player player, int page, int milestonePage) {
         Messages messages = messages();
         ReferralManager referrals = referrals();
         ReferralData data = referrals.getStore().get(player.getUniqueId(), player.getName());
@@ -151,19 +172,35 @@ public class ReferralGui implements Listener {
         inventory.setItem(RULES_SLOT, rulesItem());
 
         List<Milestone> milestones = act == null ? List.of() : act.milestones();
-        int[] slots = milestoneSlots(milestones.size());
-        for (int index = 0; index < milestones.size(); index++) {
-            Milestone milestone = milestones.get(index);
+        int milestonePages = Math.max(1, (milestones.size() + MILESTONES_PER_PAGE - 1) / MILESTONES_PER_PAGE);
+        int shownMilestones = Math.max(0, Math.min(milestonePage, milestonePages - 1));
+        marker.milestonePage = shownMilestones;
+        List<Milestone> row = milestones.subList(shownMilestones * MILESTONES_PER_PAGE,
+            Math.min(milestones.size(), (shownMilestones + 1) * MILESTONES_PER_PAGE));
+        int[] slots = milestoneSlots(milestonePages > 1 ? MILESTONES_PER_PAGE : row.size());
+        for (int index = 0; index < row.size(); index++) {
+            Milestone milestone = row.get(index);
             if (milestone.newPlayer() != null) {
                 marker.hours.put(slots[index], milestone.hours());
             }
             inventory.setItem(slots[index], ownMilestoneItem(data, milestone));
+        }
+        marker.milestonePrevious = shownMilestones > 0;
+        marker.milestoneNext = shownMilestones < milestonePages - 1;
+        if (marker.milestonePrevious) {
+            inventory.setItem(MILESTONE_PREVIOUS_SLOT, item(Material.ARROW,
+                messages.get("referral.gui.milestones-previous"), List.of()));
+        }
+        if (marker.milestoneNext) {
+            inventory.setItem(MILESTONE_NEXT_SLOT, item(Material.ARROW,
+                messages.get("referral.gui.milestones-next"), List.of()));
         }
         if (act == null) {
             inventory.setItem(MILESTONE_ROW + 4, item(Material.BARRIER, messages.get("referral.gui.no-act"), List.of()));
         }
 
         List<UUID> invited = referrals.invitees(player.getUniqueId());
+        List<UUID> completed = referrals.completedInvitees(player.getUniqueId());
         inventory.setItem(INVITED_HEADER_SLOT, item(Material.NAME_TAG,
             messages.get("referral.gui.invited-header", "%count%", invited.size()),
             List.of(messages.get("referral.gui.invited-header-lore"))));
@@ -174,12 +211,12 @@ public class ReferralGui implements Listener {
             Math.min(invited.size(), (shownPage + 1) * INVITEES_PER_PAGE));
         for (int index = 0; index < slice.size(); index++) {
             marker.shown.add(slice.get(index));
-            inventory.setItem(FIRST_INVITEE_SLOT + index, inviteeItem(data, slice.get(index), act));
+            inventory.setItem(FIRST_INVITEE_SLOT + index, inviteeItem(slice.get(index), act, completed));
         }
 
         inventory.setItem(BACK_SLOT, item(Material.EXPERIENCE_BOTTLE, messages.get("referral.gui.back"), List.of()));
         pageArrows(inventory, marker, shownPage, pages);
-        inventory.setItem(RARE_SLOT, rareItem(data, act));
+        inventory.setItem(RARE_SLOT, rareButton(player.getUniqueId(), data, act));
         fill(inventory);
         return inventory;
     }
@@ -220,18 +257,115 @@ public class ReferralGui implements Listener {
     private ItemStack rulesItem() {
         Messages messages = messages();
         ReferralConfiguration config = referrals().getConfiguration();
-        return item(Material.BOOK, messages.get("referral.gui.rules"), messages.lines("referral.gui.rules-lore",
-            "%open-days%", config.openDays(), "%new-days%", config.newAccountDays(), "%afk%", config.afkMinutes()));
+        List<String> lore = new ArrayList<>(messages.lines("referral.gui.rules-lore", "%open-days%", config.openDays(),
+            "%new-days%", config.newAccountDays(), "%afk%", config.afkMinutes()));
+        if (!config.rareTrack().isEmpty() && config.completionMinutes() > 0) {
+            lore.addAll(messages.lines("referral.gui.rules-lore-rare", "%hours%", duration(config.completionMinutes())));
+        }
+        return item(Material.BOOK, messages.get("referral.gui.rules"), lore);
     }
 
-    private ItemStack rareItem(ReferralData data, Act act) {
+    // Slot 49: how far along the rare track you are, and the way into it.
+    private ItemStack rareButton(UUID uuid, ReferralData data, Act act) {
         Messages messages = messages();
-        if (act == null) {
-            return item(Material.NETHER_STAR, messages.get("referral.gui.no-act"), List.of());
+        if (act == null || act.rareTrack().isEmpty()) {
+            return item(Material.NETHER_STAR, messages.get(act == null ? "referral.gui.no-act" : "referral.gui.rare-empty"),
+                List.of());
         }
-        String limit = act.rareLimit() < 0 ? "∞" : Integer.toString(act.rareLimit());
-        return item(Material.NETHER_STAR, messages.get("referral.gui.rare", "%used%", data.rareClaims(act.id()),
-            "%limit%", limit), List.of(messages.get("referral.gui.rare-lore", "%act%", Utils.colorize(act.display()))));
+        int completed = referrals().completedInvitees(uuid).size();
+        String goal = duration(referrals().getConfiguration().completionMinutes());
+        List<String> lore = new ArrayList<>(messages.lines("referral.gui.rare-track-lore", "%hours%", goal));
+        lore.add(" ");
+        RareStep next = null;
+        boolean claimable = false;
+        for (RareStep step : act.rareTrack()) {
+            State state = referrals().rareState(data, completed, step);
+            claimable |= state == State.CLAIMABLE;
+            if (next == null && state != State.CLAIMED) {
+                next = step;
+            }
+        }
+        lore.add(next == null ? messages.get("referral.gui.rare-all-claimed")
+            : messages.get("referral.gui.rare-next", "%players%", players(next.players()),
+                "%reward%", Utils.colorize(next.reward().display())));
+        lore.add(messages.get("referral.gui.rare-open"));
+        ItemStack star = item(Material.NETHER_STAR, messages.get("referral.gui.rare-track", "%count%", players(completed),
+            "%hours%", goal), lore);
+        if (claimable) {
+            glint(star);
+        }
+        return star;
+    }
+
+    /** The rare track: one step per row slot, claimed by the inviter as their invitees reach the last milestone. */
+    @SuppressWarnings("deprecation")
+    Inventory buildRare(Player player) {
+        Messages messages = messages();
+        ReferralManager referrals = referrals();
+        ReferralData data = referrals.getStore().get(player.getUniqueId(), player.getName());
+        Act act = referrals.act();
+        String goal = duration(referrals.getConfiguration().completionMinutes());
+        List<UUID> completed = referrals.completedInvitees(player.getUniqueId());
+
+        Marker marker = new Marker(View.RARE, 0, null);
+        Inventory inventory = Bukkit.createInventory(marker, SIZE, messages.get("referral.gui.rare-title"));
+        marker.inventory = inventory;
+
+        List<String> header = new ArrayList<>(messages.lines("referral.gui.rare-track-lore", "%hours%", goal));
+        header.add(" ");
+        if (completed.isEmpty()) {
+            header.add(messages.get("referral.gui.rare-nobody", "%hours%", goal));
+        } else {
+            List<String> names = new ArrayList<>();
+            for (UUID id : completed.subList(0, Math.min(RARE_NAMES_SHOWN, completed.size()))) {
+                names.add(referrals.getStore().peek(id).name());
+            }
+            if (completed.size() > RARE_NAMES_SHOWN) {
+                names.add("+" + (completed.size() - RARE_NAMES_SHOWN));
+            }
+            header.add(messages.get("referral.gui.rare-reached", "%hours%", goal, "%names%", String.join(", ", names)));
+        }
+        inventory.setItem(RARE_HEADER_SLOT, item(Material.NETHER_STAR, messages.get("referral.gui.rare-track",
+            "%count%", players(completed.size()), "%hours%", goal), header));
+
+        List<RareStep> steps = act == null ? List.of() : act.rareTrack();
+        for (int index = 0; index < steps.size(); index++) {
+            int slot = rareStepSlot(index);
+            marker.hours.put(slot, steps.get(index).players());
+            inventory.setItem(slot, rareStepItem(data, completed.size(), steps.get(index), goal));
+        }
+        if (steps.isEmpty()) {
+            inventory.setItem(MILESTONE_ROW + 13, item(Material.BARRIER,
+                messages.get(act == null ? "referral.gui.no-act" : "referral.gui.rare-empty"), List.of()));
+        }
+        inventory.setItem(BACK_SLOT, item(Material.OAK_DOOR, messages.get("referral.gui.pick-back"), List.of()));
+        fill(inventory);
+        return inventory;
+    }
+
+    private ItemStack rareStepItem(ReferralData data, int completed, RareStep step, String goal) {
+        Messages messages = messages();
+        State state = referrals().rareState(data, completed, step);
+        List<String> lore = rewardLore(step.reward());
+        lore.add(" ");
+        lore.add(switch (state) {
+            case CLAIMED -> messages.get("referral.gui.status-claimed");
+            case CLAIMABLE -> messages.get("referral.gui.status-claim");
+            default -> messages.get("referral.gui.rare-status-locked", "%left%", players(step.players() - completed),
+                "%hours%", goal);
+        });
+        String key = switch (state) {
+            case CLAIMED -> "referral.gui.rare-step-claimed";
+            case CLAIMABLE -> "referral.gui.rare-step-claimable";
+            default -> "referral.gui.rare-step-locked";
+        };
+        String name = messages.get(key, "%players%", players(step.players()),
+            "%reward%", Utils.colorize(step.reward().display()));
+        return rewardItem(step.reward(), name, lore, state == State.CLAIMABLE);
+    }
+
+    private String players(int count) {
+        return messages().get(count == 1 ? "referral.gui.player-one" : "referral.gui.player-many", "%count%", count);
     }
 
     private ItemStack ownMilestoneItem(ReferralData data, Milestone milestone) {
@@ -242,7 +376,7 @@ public class ReferralGui implements Listener {
                 messages.get("referral.gui.milestone-none", "%hours%", milestone.hours()), List.of());
         }
         State state = referrals().ownState(data, milestone);
-        List<String> lore = rewardLore(reward, milestone);
+        List<String> lore = rewardLore(reward);
         lore.add(" ");
         lore.add(switch (state) {
             case CLAIMED -> messages.get("referral.gui.status-claimed");
@@ -254,7 +388,7 @@ public class ReferralGui implements Listener {
         return rewardItem(reward, stateName(state, milestone, reward), lore, state == State.CLAIMABLE);
     }
 
-    private ItemStack inviteeItem(ReferralData inviter, UUID inviteeId, Act act) {
+    private ItemStack inviteeItem(UUID inviteeId, Act act, List<UUID> completed) {
         Messages messages = messages();
         ReferralData invitee = referrals().getStore().peek(inviteeId);
         List<String> lore = new ArrayList<>();
@@ -266,13 +400,20 @@ public class ReferralGui implements Listener {
                 if (reward == null) {
                     continue;
                 }
-                State state = referrals().inviterState(inviter, invitee, act, milestone);
+                State state = referrals().inviterState(invitee, milestone);
                 if (state == State.CLAIMABLE && next == null) {
                     next = milestone.hours();
                 }
-                lore.add(messages.get("referral.gui.invitee-line-" + state.name().toLowerCase(Locale.ROOT).replace('_', '-'),
+                lore.add(messages.get("referral.gui.invitee-line-" + state.name().toLowerCase(Locale.ROOT),
                     "%hours%", milestone.hours(), "%reward%", Utils.colorize(reward.display()),
                     "%left%", duration(milestone.minutes() - invitee.minutes())));
+            }
+            if (!act.rareTrack().isEmpty()) {
+                int goal = referrals().getConfiguration().completionMinutes();
+                String key = completed.contains(inviteeId) ? "referral.gui.invitee-rare-counts"
+                    : invitee.minutes() >= goal ? "referral.gui.invitee-rare-not-counted"
+                    : "referral.gui.invitee-rare-pending";
+                lore.add(messages.get(key, "%hours%", duration(goal)));
             }
         }
         lore.add(" ");
@@ -298,12 +439,9 @@ public class ReferralGui implements Listener {
     }
 
     /** Exactly what a reward hands over: its items, or every option of the pool it draws from. */
-    List<String> rewardLore(Reward reward, Milestone milestone) {
+    List<String> rewardLore(Reward reward) {
         Messages messages = messages();
         List<String> lore = new ArrayList<>();
-        if (milestone.rare()) {
-            lore.add(messages.get("referral.gui.rare-tag"));
-        }
         if (reward.fixed() != null) {
             contents(lore, reward.fixed());
             return lore;
@@ -459,6 +597,7 @@ public class ReferralGui implements Listener {
             case MAIN -> clickMain(player, marker, slot);
             case PICK -> clickPicker(player, marker, slot);
             case CONFIRM -> clickConfirm(player, marker, slot);
+            case RARE -> clickRare(player, marker, slot);
         }
     }
 
@@ -491,7 +630,19 @@ public class ReferralGui implements Listener {
         }
         if (pageClick(marker, slot)) {
             sound(player);
-            show(player, () -> build(player, marker.page() + (slot == NEXT_SLOT ? 1 : -1)));
+            show(player, () -> build(player, marker.page() + (slot == NEXT_SLOT ? 1 : -1), marker.milestonePage));
+            return;
+        }
+        if (slot == MILESTONE_PREVIOUS_SLOT && marker.milestonePrevious
+            || slot == MILESTONE_NEXT_SLOT && marker.milestoneNext) {
+            sound(player);
+            show(player, () -> build(player, marker.page(),
+                marker.milestonePage + (slot == MILESTONE_NEXT_SLOT ? 1 : -1)));
+            return;
+        }
+        if (slot == RARE_SLOT) {
+            sound(player);
+            show(player, () -> buildRare(player));
             return;
         }
         if (slot == INVITER_SLOT) {
@@ -508,7 +659,7 @@ public class ReferralGui implements Listener {
         if (hours != null) {
             Claim claim = referrals().claimOwn(player, hours);
             report(player, claim);
-            show(player, () -> build(player, marker.page()));
+            show(player, () -> build(player, marker.page(), marker.milestonePage));
             return;
         }
         int invitee = slot - FIRST_INVITEE_SLOT;
@@ -519,7 +670,20 @@ public class ReferralGui implements Listener {
             } else {
                 report(player, claims.get(claims.size() - 1));
             }
-            show(player, () -> build(player, marker.page()));
+            show(player, () -> build(player, marker.page(), marker.milestonePage));
+        }
+    }
+
+    private void clickRare(Player player, Marker marker, int slot) {
+        if (slot == BACK_SLOT) {
+            sound(player);
+            show(player, () -> build(player, 0));
+            return;
+        }
+        Integer players = marker.hours.get(slot);
+        if (players != null) {
+            report(player, referrals().claimRare(player, players));
+            show(player, () -> buildRare(player));
         }
     }
 
@@ -594,6 +758,11 @@ public class ReferralGui implements Listener {
     }
 
     // ---- items -------------------------------------------------------------------------------
+
+    /** Rare steps fill rows 1-4, seven to a row, leaving the outer columns free. */
+    static int rareStepSlot(int index) {
+        return MILESTONE_ROW + 1 + (index / RARE_STEPS_PER_ROW) * 9 + index % RARE_STEPS_PER_ROW;
+    }
 
     /** Up to four milestones sit one slot apart, centred; more fill the row side by side. */
     static int[] milestoneSlots(int count) {

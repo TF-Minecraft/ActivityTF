@@ -9,6 +9,7 @@ import net.tfminecraft.activitytf.config.Messages;
 import net.tfminecraft.activitytf.config.ReferralConfiguration;
 import net.tfminecraft.activitytf.config.ReferralConfiguration.Act;
 import net.tfminecraft.activitytf.config.ReferralConfiguration.Milestone;
+import net.tfminecraft.activitytf.config.ReferralConfiguration.RareStep;
 import net.tfminecraft.activitytf.config.ReferralConfiguration.Reward;
 import net.tfminecraft.activitytf.models.ReferralData;
 import net.tfminecraft.activitytf.models.RewardEntry;
@@ -34,7 +35,7 @@ import java.util.function.LongSupplier;
 
 /**
  * Referral links between a new player and the player who invited them, the AFK-aware playtime that
- * unlocks their milestones, and the claims both of them make from the referral menu.
+ * unlocks their milestones, the inviter's rare track, and the claims both of them make from the referral menu.
  */
 public class ReferralManager {
 
@@ -66,7 +67,7 @@ public class ReferralManager {
         NO_REWARD,
         ALREADY_CLAIMED,
         LOCKED,
-        RARE_LIMIT,
+        TOO_FEW,
         WRONG_WORLD,
         SAME_IP,
         UNCONFIGURED
@@ -75,8 +76,7 @@ public class ReferralManager {
     public enum State {
         LOCKED,
         CLAIMABLE,
-        CLAIMED,
-        RARE_LIMIT
+        CLAIMED
     }
 
     private final JavaPlugin plugin;
@@ -456,18 +456,52 @@ public class ReferralManager {
         return data.invitedBy() != null && data.minutes() >= milestone.minutes() ? State.CLAIMABLE : State.LOCKED;
     }
 
-    public State inviterState(ReferralData inviter, ReferralData invitee, Act act, Milestone milestone) {
+    public State inviterState(ReferralData invitee, Milestone milestone) {
         if (invitee.inviterClaimed().contains(milestone.hours())) {
             return State.CLAIMED;
         }
-        if (invitee.minutes() < milestone.minutes()) {
-            return State.LOCKED;
-        }
-        return rareLimitReached(inviter, act, milestone) ? State.RARE_LIMIT : State.CLAIMABLE;
+        return invitee.minutes() < milestone.minutes() ? State.LOCKED : State.CLAIMABLE;
     }
 
-    private static boolean rareLimitReached(ReferralData inviter, Act act, Milestone milestone) {
-        return milestone.rare() && act.rareLimit() >= 0 && inviter.rareClaims(act.id()) >= act.rareLimit();
+    public static RareStep rareStep(Act act, int players) {
+        if (act != null) {
+            for (RareStep step : act.rareTrack()) {
+                if (step.players() == players) {
+                    return step;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The players this inviter brought in who reached the last milestone, skipping any that share a
+     * connection with the inviter or already counted for another inviter's rare track (before staff
+     * re-linked them): they move the inviter along the rare track.
+     */
+    public List<UUID> completedInvitees(UUID inviter) {
+        ReferralData mine = store.peek(inviter);
+        int goal = config.completionMinutes();
+        List<UUID> done = new ArrayList<>();
+        if (mine == null || goal <= 0) {
+            return done;
+        }
+        for (UUID id : invitees(inviter)) {
+            ReferralData invitee = store.peek(id);
+            UUID countedFor = invitee.rareCountedFor();
+            if (invitee.minutes() >= goal && (countedFor == null || countedFor.equals(inviter))
+                && !sharedConnection(inviter, mine, id, invitee)) {
+                done.add(id);
+            }
+        }
+        return done;
+    }
+
+    public State rareState(ReferralData inviter, int completed, RareStep step) {
+        if (inviter.rareClaimed().contains(step.players())) {
+            return State.CLAIMED;
+        }
+        return completed >= step.players() ? State.CLAIMABLE : State.LOCKED;
     }
 
     /** True when this account has any milestone, its own or an invitee's, it could claim now. */
@@ -484,10 +518,15 @@ public class ReferralManager {
         }
         for (UUID invitee : invitees(uuid)) {
             for (Milestone milestone : act.milestones()) {
-                if (milestone.inviter() != null
-                    && inviterState(data, store.peek(invitee), act, milestone) == State.CLAIMABLE) {
+                if (milestone.inviter() != null && inviterState(store.peek(invitee), milestone) == State.CLAIMABLE) {
                     return true;
                 }
+            }
+        }
+        int completed = completedInvitees(uuid).size();
+        for (RareStep step : act.rareTrack()) {
+            if (rareState(data, completed, step) == State.CLAIMABLE) {
+                return true;
             }
         }
         return false;
@@ -540,32 +579,57 @@ public class ReferralManager {
             return Claim.NO_REWARD;
         }
         ReferralData data = store.get(player.getUniqueId(), player.getName());
-        switch (inviterState(data, invitee, act, milestone)) {
-            case CLAIMED -> {
-                return Claim.ALREADY_CLAIMED;
-            }
-            case LOCKED -> {
-                return Claim.LOCKED;
-            }
-            case RARE_LIMIT -> {
-                return Claim.RARE_LIMIT;
-            }
-            case CLAIMABLE -> {
-            }
+        State state = inviterState(invitee, milestone);
+        if (state != State.CLAIMABLE) {
+            return state == State.CLAIMED ? Claim.ALREADY_CLAIMED : Claim.LOCKED;
         }
         Claim refused = placeAndConnection(player, data, inviteeId, invitee);
         if (refused != null) {
             return refused;
         }
-        int rareDelta = milestone.rare() ? 1 : 0;
         return pay(player, act, milestone.inviter(), "referral " + hours + "h for " + inviteeId,
+            () -> invitee.inviterClaimed().add(hours), () -> invitee.inviterClaimed().remove(hours));
+    }
+
+    /** The inviter claims a rare-track step once enough of their invitees have reached the last milestone. */
+    public Claim claimRare(Player player, int players) {
+        if (!config.enabled()) {
+            return Claim.DISABLED;
+        }
+        if (!store.isLoaded()) {
+            return Claim.FAILED;
+        }
+        Act act = act();
+        RareStep step = rareStep(act, players);
+        if (step == null) {
+            return Claim.NO_REWARD;
+        }
+        ReferralData data = store.get(player.getUniqueId(), player.getName());
+        List<UUID> completed = completedInvitees(player.getUniqueId());
+        State state = rareState(data, completed.size(), step);
+        if (state != State.CLAIMABLE) {
+            return state == State.CLAIMED ? Claim.ALREADY_CLAIMED : Claim.TOO_FEW;
+        }
+        if (config.ignoredWorld(player.getWorld().getName())) {
+            return Claim.WRONG_WORLD;
+        }
+        // The invitees this claim stands on are tied to this inviter's track from now on.
+        List<ReferralData> newlyCounted = new ArrayList<>();
+        for (UUID id : completed) {
+            ReferralData invitee = store.peek(id);
+            if (invitee.rareCountedFor() == null) {
+                newlyCounted.add(invitee);
+            }
+        }
+        UUID inviter = player.getUniqueId();
+        return pay(player, act, step.reward(), "referral rare " + players + " players",
             () -> {
-                invitee.inviterClaimed().add(hours);
-                data.setRareClaims(act.id(), data.rareClaims(act.id()) + rareDelta);
+                data.rareClaimed().add(players);
+                newlyCounted.forEach(invitee -> invitee.setRareCountedFor(inviter));
             },
             () -> {
-                invitee.inviterClaimed().remove(hours);
-                data.setRareClaims(act.id(), data.rareClaims(act.id()) - rareDelta);
+                data.rareClaimed().remove(players);
+                newlyCounted.forEach(invitee -> invitee.setRareCountedFor(null));
             });
     }
 
@@ -577,9 +641,8 @@ public class ReferralManager {
         if (act == null || invitee == null) {
             return results;
         }
-        ReferralData data = store.get(player.getUniqueId(), player.getName());
         for (Milestone milestone : act.milestones()) {
-            if (milestone.inviter() != null && inviterState(data, invitee, act, milestone) == State.CLAIMABLE) {
+            if (milestone.inviter() != null && inviterState(invitee, milestone) == State.CLAIMABLE) {
                 Claim claim = claimForInvitee(player, inviteeId, milestone.hours());
                 results.add(claim);
                 if (claim != Claim.CLAIMED) {

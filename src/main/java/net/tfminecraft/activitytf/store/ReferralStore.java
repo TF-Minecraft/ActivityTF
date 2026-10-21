@@ -134,17 +134,13 @@ public class ReferralStore {
         if (inviter != null) {
             data.link(inviter, entry.getLong("linked-at"));
         }
+        data.setRareCountedFor(uuid(entry.getString("rare-counted-for", "")));
         data.claimed().addAll(entry.getIntegerList("claimed"));
         data.inviterClaimed().addAll(entry.getIntegerList("inviter-claimed"));
         for (String ip : entry.getStringList("ips")) {
             data.addIp(ip);
         }
-        ConfigurationSection rare = entry.getConfigurationSection("rare");
-        if (rare != null) {
-            for (String act : rare.getKeys(false)) {
-                data.setRareClaims(act, rare.getInt(act));
-            }
-        }
+        data.rareClaimed().addAll(entry.getIntegerList("rare-claimed"));
         return data;
     }
 
@@ -262,11 +258,14 @@ public class ReferralStore {
                 yaml.set(path + ".invited-by", data.invitedBy().toString());
                 yaml.set(path + ".linked-at", data.linkedAt());
             }
+            if (data.rareCountedFor() != null) {
+                yaml.set(path + ".rare-counted-for", data.rareCountedFor().toString());
+            }
             yaml.set(path + ".claimed", new ArrayList<>(data.claimed()));
             yaml.set(path + ".inviter-claimed", new ArrayList<>(data.inviterClaimed()));
             yaml.set(path + ".ips", data.ipList());
-            if (!data.rareClaims().isEmpty()) {
-                yaml.createSection(path + ".rare", data.rareClaims());
+            if (!data.rareClaimed().isEmpty()) {
+                yaml.set(path + ".rare-claimed", new ArrayList<>(data.rareClaimed()));
             }
         }
         return yaml;

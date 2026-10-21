@@ -61,17 +61,24 @@ public final class ReferralFixture {
                 - item: IRON_INGOT
                   amount: 2
           - hours: 5
-            rare: true
             new-player:
               display: "Rare act reward"
               icon: EMERALD
               pool: pool_ref_rare
             inviter: pool_ref_rare
+        rare-track:
+          - players: 1
+            reward: pool_ref_rare
+          - players: 2
+            reward:
+              display: "Diamonds"
+              items:
+                - item: DIAMOND
+                  amount: 1
         acts:
           act_1:
             display: "Act I"
             starts: "2026-10-01"
-            rare-limit: 1
             pools:
               pool_ref_rare:
                 - weight: 1

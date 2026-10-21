@@ -54,23 +54,26 @@ playtime:
   # the character being played, not to the character-selection room).
   ignored-worlds: [character_selection]
 
-# The milestones, the same in every act: the new player's counted playtime
-# each one needs. Each is claimed once ever (per season), by the new player
-# and once by their inviter; claiming it in one act means it is not paid
-# again in the next. Up to 7. Claims are remembered by hours, so don't change
-# a milestone's hours during a season: a changed one is new, and everyone who
-# claimed the old one could claim it again.
-#   hours       the new player's counted playtime it needs
-#   rare        true = the inviter's reward counts towards the act's rare-limit
+# The timed milestones, the same in every act: the new player's counted
+# playtime each one needs. Add, remove or change as many as you like (the
+# menu shows seven at a time and scrolls past that). Each is claimed once
+# ever (per season) by the new player, and once per invited player by their
+# inviter; claiming it in one act means it is not paid again in the next.
+# Claims are remembered by hours, so don't change a milestone's hours during
+# a season: a changed one is new, and everyone who claimed the old one could
+# claim it again. The last milestone (the most hours) is also the goal of the
+# inviter's rare track below, so adding a later milestone mid-season moves
+# that goal too.
+#   hours       the new player's counted playtime it needs (1 to 10000)
 #   new-player  what the invited player gets; inviter: what the inviter gets.
 #               Either one is optional. Each is a pool name (one draw), or a
 #               block with display (the name in the menu), icon (optional,
-#               the menu item) and either 'pool: <name>' or items/commands as
-#               in a pool entry (%player% / %uuid% work in commands). A pool
-#               is looked up in the act in use first (acts.<act>.pools), then
-#               in the shared pools below, then in the activity rewards pools
-#               (the ones locked for this activity week) - so what a milestone
-#               hands over follows the act.
+#               the menu item) and either 'pool: <name>' or a fixed reward:
+#               items and/or commands as in a pool entry (%player% / %uuid%
+#               work in commands). A pool is looked up in the act in use first
+#               (acts.<act>.pools), then in the shared pools below, then in
+#               the activity rewards pools (the ones locked for this activity
+#               week) - so what a pool hands over follows the act.
 milestones:
   - hours: 1
     new-player: {display: "Starter kit", icon: BUNDLE, pool: pool_ref_starter}
@@ -82,9 +85,29 @@ milestones:
     new-player: {display: "Act materials (medium)", icon: m.materials.ignitium, pool: pool_ref_medium}
     inviter: {display: "Act materials (medium)", icon: m.materials.ignitium, pool: pool_ref_medium}
   - hours: 24
-    rare: true
-    new-player: {display: "Rare act reward", icon: m.materials.abyssalite_fragment, pool: pool_ref_rare}
-    inviter: {display: "Rare act reward", icon: m.materials.abyssalite_fragment, pool: pool_ref_rare}
+    new-player: {display: "Act materials (large)", icon: m.materials.ignitium, pool: pool_ref_large}
+    inviter: {display: "Act materials (large)", icon: m.materials.ignitium, pool: pool_ref_large}
+
+# The inviter's rare track. Every player you invited who reaches the last
+# milestone above (24h of counted playtime) moves you one step along it.
+# Players who share a connection with you don't count, and a player counts
+# for one inviter's track only (staff re-linking them doesn't count them
+# again). Each step is claimed once per season, by the inviter only, and is
+# remembered by its player count - don't change 'players' during a season.
+# Up to 28 steps; a step above link.max-invitees can never be reached.
+#   players  how many of your invited players must have reached it (1 to 1000)
+#   reward   the same as a milestone reward: a pool name, or a block with
+#            display / icon and either 'pool: <name>' or fixed items/commands.
+#            A pool with one entry hands over exactly those items (and the
+#            menu lists them), and like every pool it can differ per act;
+#            fixed items are the same in every act.
+rare-track:
+  - players: 1
+    reward: {display: "Rare act reward", icon: m.materials.abyssalite_fragment, pool: pool_ref_rare}
+  - players: 3
+    reward: {display: "Rare materials bundle", icon: m.materials.abyssalite_fragment, pool: pool_ref_rare_3}
+  - players: 5
+    reward: {display: "Recruiter's chest", icon: CHEST, pool: pool_ref_rare_5}
 
 # Pools every act can use, in the same format as the activity rewards.pools.
 # An act's own pool of the same name wins.
@@ -107,14 +130,12 @@ pools:
 # The acts. The act in use is the one with the latest 'starts' that is not in
 # the future, so the loot changes by itself on the day an act starts.
 #   display     the act's name in the menu
-#   rare-limit  rare inviter rewards one inviter can claim per act (default
-#               2; -1 = no limit). Past it the slot waits for the next act.
-#   pools       this act's loot, by the pool names the milestones use
+#   pools       this act's loot, by the pool names the milestones and the
+#               rare track use
 acts:
   act_1:
     display: "Act I"
     starts: "2026-10-10T06:00"
-    rare-limit: 2
     pools:
       pool_ref_small:
         - display: "#50d990x10 #7f7d80Ignitium"
@@ -126,6 +147,11 @@ acts:
           items:
             - item: m.materials.ignitium
               amount: 20
+      pool_ref_large:
+        - display: "#50d990x30 #7f7d80Ignitium"
+          items:
+            - item: m.materials.ignitium
+              amount: 30
       pool_ref_rare:
         - weight: 50
           display: "#50d990x1 #3b4e60Abyssalite Fragment"
@@ -137,3 +163,19 @@ acts:
           items:
             - item: m.materials.raw_tin
               amount: 1
+      pool_ref_rare_3:
+        - display: "#50d990x2 #3b4e60Abyssalite Fragment #7f7d80+ #50d990x2 #3b4e60Tin"
+          items:
+            - item: m.materials.abyssalite_fragment
+              amount: 2
+            - item: m.materials.raw_tin
+              amount: 2
+      pool_ref_rare_5:
+        - display: "Recruiter's chest"
+          items:
+            - item: m.materials.abyssalite_fragment
+              amount: 3
+            - item: m.materials.raw_tin
+              amount: 3
+            - item: m.currency.silver_coin
+              amount: 25

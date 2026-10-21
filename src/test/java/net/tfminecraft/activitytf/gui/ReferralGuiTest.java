@@ -12,7 +12,6 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockbukkit.mockbukkit.entity.PlayerMock;
-import net.tfminecraft.activitytf.config.ReferralConfiguration.Milestone;
 import net.tfminecraft.activitytf.config.ReferralConfiguration.Reward;
 import net.tfminecraft.activitytf.managers.ReferralFixture;
 import net.tfminecraft.activitytf.managers.ReferralFixture.TestPlayer;
@@ -117,9 +116,11 @@ class ReferralGuiTest {
         assertTrue(lore(inventory.getItem(11)).stream().anyMatch(line -> line.contains("pick who invited you")));
         assertTrue(lore(inventory.getItem(15)).stream().anyMatch(line -> line.contains("x2") && line.contains("Emerald")),
             "a one-entry pool lists what is inside");
-        assertTrue(lore(inventory.getItem(15)).stream().anyMatch(line -> line.contains("Rare")));
         assertFalse(inventory.getItem(11).getItemMeta().hasEnchantmentGlintOverride());
-        assertTrue(name(inventory.getItem(ReferralGui.RARE_SLOT)).contains("0"));
+        assertTrue(name(inventory.getItem(ReferralGui.RARE_SLOT)).contains("0 players"));
+        assertTrue(lore(inventory.getItem(ReferralGui.RULES_SLOT)).stream().anyMatch(line -> line.contains("5h")),
+            "the rules name the hours that count for the rare track");
+        assertEquals(Material.GRAY_STAINED_GLASS_PANE, inventory.getItem(ReferralGui.MILESTONE_NEXT_SLOT).getType());
         assertTrue(name(inventory.getItem(ReferralGui.INVITED_HEADER_SLOT)).contains("(0)"));
         assertEquals(Material.GRAY_STAINED_GLASS_PANE, inventory.getItem(ReferralGui.NEXT_SLOT).getType());
     }
@@ -273,8 +274,7 @@ class ReferralGuiTest {
         link(second, inviter);
         data(first).setMinutes(300);
         data(second).setMinutes(300);
-        data(inviter).setRareClaims("act_1", 1);
-        data(second).inviterClaimed().add(1);
+        data(second).inviterClaimed().addAll(List.of(1, 5));
 
         gui.open(inviter);
         Inventory inventory = top(inviter);
@@ -282,12 +282,13 @@ class ReferralGuiTest {
         assertEquals(Material.PLAYER_HEAD, alpha.getType());
         assertTrue(name(alpha).contains("Alpha") && name(alpha).contains("CLAIM 1h"));
         assertEquals(Boolean.TRUE, alpha.getItemMeta().getEnchantmentGlintOverride());
-        assertTrue(lore(alpha).stream().anyMatch(line -> line.contains("act limit reached")));
+        assertTrue(lore(alpha).stream().anyMatch(line -> line.contains("Counts for your rare track")
+            && !line.contains(" at ")));
         ItemStack beta = inventory.getItem(ReferralGui.FIRST_INVITEE_SLOT + 1);
         assertFalse(name(beta).contains("CLAIM"));
         assertTrue(lore(beta).stream().anyMatch(line -> line.contains("✔")));
         assertTrue(name(inventory.getItem(ReferralGui.INVITED_HEADER_SLOT)).contains("(2)"));
-        assertTrue(name(inventory.getItem(ReferralGui.RARE_SLOT)).contains("1"));
+        assertTrue(name(inventory.getItem(ReferralGui.RARE_SLOT)).contains("2 players"));
 
         said(inviter);
         click(inviter, ReferralGui.FIRST_INVITEE_SLOT);
@@ -295,10 +296,12 @@ class ReferralGuiTest {
         click(inviter, ReferralGui.FIRST_INVITEE_SLOT + 1);
         assertTrue(said(inviter).stream().anyMatch(line -> line.contains("Nothing to claim")));
 
-        data(inviter).setRareClaims("act_1", 0);
+        data(first).inviterClaimed().remove(5);
         data(inviter).addIp(data(first).ips().iterator().next());
         click(inviter, ReferralGui.FIRST_INVITEE_SLOT);
         assertTrue(said(inviter).stream().anyMatch(line -> line.contains("same connection")));
+        assertTrue(lore(top(inviter).getItem(ReferralGui.FIRST_INVITEE_SLOT)).stream()
+            .anyMatch(line -> line.contains("Doesn't count for your rare track")), "the goal reached on a shared connection");
         click(inviter, ReferralGui.FIRST_INVITEE_SLOT + 5);
     }
 
@@ -351,12 +354,15 @@ class ReferralGuiTest {
         assertTrue(lore(top(inviter).getItem(ReferralGui.FIRST_INVITEE_SLOT)).stream()
             .anyMatch(line -> line.contains("Nothing to claim")));
         assertEquals(Material.NETHER_STAR, top(inviter).getItem(ReferralGui.RARE_SLOT).getType());
+        assertTrue(name(top(inviter).getItem(ReferralGui.RARE_SLOT)).contains("No referral rewards"));
+        click(inviter, ReferralGui.RARE_SLOT);
+        assertTrue(name(top(inviter).getItem(22)).contains("No referral rewards"));
     }
 
     @Test
-    void milestonesWithOnlyAnInviterRewardAndUnlimitedRares() throws Exception {
+    void milestonesWithOnlyAnInviterRewardAndNoRareTrack() throws Exception {
         fixture.writeReferral(ReferralFixture.CONFIG
-            .replace("rare-limit: 1", "rare-limit: -1")
+            .replace("rare-track:", "unused-track:")
             .replace("""
                   - hours: 3
                     new-player:
@@ -377,27 +383,150 @@ class ReferralGuiTest {
         gui.open(player);
         assertEquals(Material.LIGHT_GRAY_STAINED_GLASS_PANE, top(player).getItem(13).getType());
         click(player, 13);
-        assertTrue(name(top(player).getItem(ReferralGui.RARE_SLOT)).contains("∞"));
+        assertTrue(name(top(player).getItem(ReferralGui.RARE_SLOT)).contains("No rare track"));
+        assertFalse(lore(top(player).getItem(ReferralGui.RULES_SLOT)).stream()
+            .anyMatch(line -> line.contains("rare track")), "no rare track, no rule about it");
+        gui.open(inviter);
+        assertFalse(lore(top(inviter).getItem(ReferralGui.FIRST_INVITEE_SLOT)).stream()
+            .anyMatch(line -> line.contains("rare track")), "no rare track, no rare line");
+        click(inviter, ReferralGui.RARE_SLOT);
+        assertEquals(Material.BARRIER, top(inviter).getItem(22).getType());
+    }
+
+    @Test
+    void theRareTrackMenuShowsEachStepAndClaimsIt() {
+        TestPlayer inviter = fixture.join("Inviter", "10.0.0.1");
+        TestPlayer first = fixture.join("Alpha", "10.0.0.2");
+        TestPlayer second = fixture.join("Beta", "10.0.0.3");
+        link(first, inviter);
+        link(second, inviter);
+        data(first).setMinutes(300);
+        data(first).inviterClaimed().addAll(List.of(1, 5));
+        data(second).setMinutes(60);
+
+        gui.open(inviter);
+        ItemStack star = top(inviter).getItem(ReferralGui.RARE_SLOT);
+        assertEquals(Material.NETHER_STAR, star.getType());
+        assertTrue(name(star).contains("1 player") && !name(star).contains("players"), name(star));
+        assertEquals(Boolean.TRUE, star.getItemMeta().getEnchantmentGlintOverride(), "the 1-player step is ready");
+        assertTrue(lore(star).stream().anyMatch(line -> line.contains("Next step") && line.contains("1 player")));
+        assertTrue(lore(top(inviter).getItem(ReferralGui.FIRST_INVITEE_SLOT + 1)).stream()
+            .anyMatch(line -> line.contains("Counts for your rare track at 5h")));
+
+        click(inviter, ReferralGui.RARE_SLOT);
+        Inventory rare = top(inviter);
+        assertEquals(ReferralGui.SIZE, rare.getSize());
+        assertTrue(lore(rare.getItem(ReferralGui.RARE_HEADER_SLOT)).stream()
+            .anyMatch(line -> line.contains("Reached 5h") && line.contains("Alpha")));
+        ItemStack one = rare.getItem(ReferralGui.rareStepSlot(0));
+        ItemStack two = rare.getItem(ReferralGui.rareStepSlot(1));
+        assertEquals(Material.CHEST, one.getType(), "a pool step without an icon");
+        assertEquals(Boolean.TRUE, one.getItemMeta().getEnchantmentGlintOverride());
+        assertEquals(Material.DIAMOND, two.getType());
+        assertFalse(two.getItemMeta().hasEnchantmentGlintOverride());
+        assertTrue(lore(two).stream().anyMatch(line -> line.contains("x1") && line.contains("Diamond")));
+        assertTrue(lore(two).stream().anyMatch(line -> line.contains("1 player") && line.contains("more need")));
+
+        said(inviter);
+        click(inviter, ReferralGui.rareStepSlot(1));
+        assertTrue(said(inviter).stream().anyMatch(line -> line.contains("Not enough of the players you invited")));
+        click(inviter, ReferralGui.rareStepSlot(0));
+        assertTrue(inviter.getInventory().contains(Material.EMERALD, 2));
+        assertTrue(name(top(inviter).getItem(ReferralGui.rareStepSlot(0))).contains("✔"));
+        click(inviter, ReferralGui.RARE_HEADER_SLOT);
+        assertEquals(ReferralGui.View.RARE, marker(inviter).view());
+
+        click(inviter, ReferralGui.BACK_SLOT);
+        assertEquals(ReferralGui.View.MAIN, marker(inviter).view());
+        star = top(inviter).getItem(ReferralGui.RARE_SLOT);
+        assertFalse(star.getItemMeta().hasEnchantmentGlintOverride());
+
+        data(second).setMinutes(300);
+        data(second).inviterClaimed().addAll(List.of(1, 5));
+        data(inviter).rareClaimed().add(2);
+        gui.open(inviter);
+        assertTrue(lore(top(inviter).getItem(ReferralGui.RARE_SLOT)).stream()
+            .anyMatch(line -> line.contains("Every rare reward claimed")));
+    }
+
+    @Test
+    void theRareHeaderShortensALongListOfNames() {
+        TestPlayer inviter = fixture.join("Inviter", "10.0.0.1");
+        for (int index = 0; index < 12; index++) {
+            TestPlayer invitee = fixture.join("R" + (char) ('a' + index), "10.3.0." + index);
+            link(invitee, inviter);
+            data(invitee).setMinutes(300);
+        }
+        inviter.openInventory(gui.buildRare(inviter));
+        assertTrue(lore(top(inviter).getItem(ReferralGui.RARE_HEADER_SLOT)).stream()
+            .anyMatch(line -> line.contains("+2")));
+        TestPlayer nobody = fixture.join("Nobody", "10.4.0.1");
+        nobody.openInventory(gui.buildRare(nobody));
+        assertTrue(lore(top(nobody).getItem(ReferralGui.RARE_HEADER_SLOT)).stream()
+            .anyMatch(line -> line.contains("Nobody you invited")));
+    }
+
+    @Test
+    void moreThanSevenMilestonesScrollTheRow() throws Exception {
+        StringBuilder milestones = new StringBuilder("milestones:\n");
+        for (int hours = 1; hours <= 9; hours++) {
+            milestones.append("  - hours: ").append(hours).append("\n    new-player: {items: [{item: ")
+                .append(hours == 9 ? "DIAMOND" : "IRON_INGOT").append("}]}\n");
+        }
+        String config = ReferralFixture.CONFIG;
+        config = config.substring(0, config.indexOf("milestones:")) + milestones + config.substring(config.indexOf("rare-track:"));
+        fixture.writeReferral(config);
+        referrals.reload();
+        TestPlayer inviter = fixture.join("Inviter", "10.0.0.1");
+        TestPlayer player = fixture.join("Newbie", "10.0.0.2");
+        link(player, inviter);
+        data(player).setMinutes(9 * 60);
+        gui.open(player);
+        assertEquals(Material.GRAY_STAINED_GLASS_PANE, top(player).getItem(ReferralGui.MILESTONE_PREVIOUS_SLOT).getType());
+        assertEquals(Material.ARROW, top(player).getItem(ReferralGui.MILESTONE_NEXT_SLOT).getType());
+        assertEquals(Material.IRON_INGOT, top(player).getItem(16).getType(), "the first seven fill the row");
+        assertTrue(name(top(player).getItem(10)).contains("1h"));
+
+        click(player, ReferralGui.MILESTONE_NEXT_SLOT);
+        assertEquals(1, marker(player).milestonePage());
+        assertTrue(name(top(player).getItem(10)).contains("8h"));
+        assertEquals(Material.DIAMOND, top(player).getItem(11).getType());
+        assertEquals(Material.GRAY_STAINED_GLASS_PANE, top(player).getItem(12).getType(), "the last page is not padded");
+        assertEquals(Material.ARROW, top(player).getItem(ReferralGui.MILESTONE_PREVIOUS_SLOT).getType());
+        click(player, ReferralGui.MILESTONE_NEXT_SLOT);
+        assertEquals(1, marker(player).milestonePage(), "no arrow on the last page");
+
+        click(player, 11);
+        assertTrue(player.getInventory().contains(Material.DIAMOND, 1));
+        assertEquals(1, marker(player).milestonePage(), "a claim keeps the row where it was");
+        assertTrue(name(top(player).getItem(11)).contains("✔"));
+        assertTrue(lore(top(player).getItem(ReferralGui.RULES_SLOT)).stream().anyMatch(line -> line.contains("9h")));
+
+        click(player, ReferralGui.MILESTONE_PREVIOUS_SLOT);
+        assertEquals(0, marker(player).milestonePage());
+        click(player, ReferralGui.MILESTONE_PREVIOUS_SLOT);
+        assertEquals(0, marker(player).milestonePage());
+        player.openInventory(gui.build(player, 0, 99));
+        assertEquals(1, marker(player).milestonePage(), "a page past the end shows the last");
     }
 
     @Test
     void rewardLoreListsItemsCommandsAndPools() {
-        Milestone plain = new Milestone(1, null, null, false);
         Reward items = new Reward("Kit", null, null, new RewardEntry(1, "", List.of(),
             List.of(new RewardEntry.Item("IRON_INGOT", 3))));
-        assertEquals(2, gui.rewardLore(items, plain).size());
+        assertEquals(2, gui.rewardLore(items).size());
         Reward command = new Reward("Cmd", null, null, new RewardEntry(1, "A title", List.of("say hi"), List.of()));
-        assertTrue(gui.rewardLore(command, plain).stream().anyMatch(line -> line.contains("A title")));
+        assertTrue(gui.rewardLore(command).stream().anyMatch(line -> line.contains("A title")));
         Reward silent = new Reward("Cmd", null, null, new RewardEntry(1, "", List.of("say hi"), List.of()));
-        assertEquals(1, gui.rewardLore(silent, plain).size());
+        assertEquals(1, gui.rewardLore(silent).size());
         net.tfminecraft.activitytf.managers.TestManagers.pool(fixture.manager, "pool_two", List.of(
             new RewardEntry(1, "&aOne", List.of(), List.of(new RewardEntry.Item("DIAMOND", 1))),
             new RewardEntry(1, "&aOther", List.of(), List.of(new RewardEntry.Item("GOLD_INGOT", 2)))));
-        List<String> options = gui.rewardLore(new Reward("Two", null, "pool_two", null), plain);
+        List<String> options = gui.rewardLore(new Reward("Two", null, "pool_two", null));
         assertTrue(options.get(0).contains("One random reward"), String.valueOf(options));
         assertEquals(3, options.size());
         Reward empty = new Reward("Pool", null, "pool_nothing", null);
-        assertTrue(gui.rewardLore(empty, plain).get(0).contains("unavailable"));
+        assertTrue(gui.rewardLore(empty).get(0).contains("unavailable"));
 
         assertEquals(Material.CHEST, gui.rewardIcon(empty).getType());
         assertEquals(Material.PAPER, gui.rewardIcon(silent).getType());
@@ -417,6 +546,10 @@ class ReferralGuiTest {
         assertArrayEquals(new int[] {13}, ReferralGui.milestoneSlots(1));
         assertArrayEquals(new int[] {11, 12, 13, 14, 15}, ReferralGui.milestoneSlots(5));
         assertArrayEquals(new int[] {10, 11, 12, 13, 14, 15, 16}, ReferralGui.milestoneSlots(7));
+        assertEquals(10, ReferralGui.rareStepSlot(0));
+        assertEquals(16, ReferralGui.rareStepSlot(6));
+        assertEquals(19, ReferralGui.rareStepSlot(7));
+        assertEquals(43, ReferralGui.rareStepSlot(27));
         assertEquals("referral.link.inviter-busy", ReferralGui.linkKey(Link.INVITER_BUSY));
     }
 

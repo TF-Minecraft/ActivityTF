@@ -357,7 +357,7 @@ class ReferralManagerTest {
     }
 
     @Test
-    void inviterClaimsFollowTheInviteesPlaytimeAndTheRareLimit() {
+    void inviterClaimsFollowEachInviteesPlaytime() {
         TestPlayer inviter = fixture.join("Inviter", "10.0.0.1");
         TestPlayer first = fixture.join("First", "10.0.0.2");
         TestPlayer second = fixture.join("Second", "10.0.0.3");
@@ -376,18 +376,16 @@ class ReferralManagerTest {
         assertEquals(List.of(Claim.CLAIMED, Claim.CLAIMED), referrals.claimAllForInvitee(inviter, first.getUniqueId()));
         assertTrue(inviter.getInventory().contains(Material.GOLD_NUGGET, 3));
         assertTrue(inviter.getInventory().contains(Material.EMERALD, 2));
-        assertEquals(1, data(inviter).rareClaims("act_1"));
         assertEquals(Claim.ALREADY_CLAIMED, referrals.claimForInvitee(inviter, first.getUniqueId(), 1));
 
-        assertEquals(List.of(Claim.CLAIMED), referrals.claimAllForInvitee(inviter, second.getUniqueId()));
-        assertEquals(Claim.RARE_LIMIT, referrals.claimForInvitee(inviter, second.getUniqueId(), 5));
-        assertEquals(State.RARE_LIMIT, referrals.inviterState(data(inviter), data(second), referrals.act(),
-            ReferralManager.milestone(referrals.act(), 5)));
+        assertEquals(List.of(Claim.CLAIMED, Claim.CLAIMED), referrals.claimAllForInvitee(inviter, second.getUniqueId()),
+            "every invitee pays their own milestones");
+        assertEquals(State.CLAIMED, referrals.inviterState(data(second), ReferralManager.milestone(referrals.act(), 5)));
         assertTrue(referrals.claimAllForInvitee(inviter, UUID.randomUUID()).isEmpty());
     }
 
     @Test
-    void aFailedInviterPayoutTakesTheRareCountBack() throws Exception {
+    void aFailedInviterPayoutStaysClaimable() throws Exception {
         TestPlayer inviter = fixture.join("Inviter", "10.0.0.1");
         TestPlayer invitee = fixture.join("Invitee", "10.0.0.2");
         linked(invitee, inviter);
@@ -396,20 +394,90 @@ class ReferralManagerTest {
         tmpBlocked(true);
         assertEquals(List.of(Claim.FAILED), referrals.claimAllForInvitee(inviter, invitee.getUniqueId()));
         tmpBlocked(false);
-        assertEquals(0, data(inviter).rareClaims("act_1"));
         assertFalse(data(invitee).inviterClaimed().contains(5));
     }
 
     @Test
-    void anUnlimitedRareLimitNeverBlocks() throws Exception {
-        fixture.writeReferral(ReferralFixture.CONFIG.replace("rare-limit: 1", "rare-limit: -1"));
-        referrals.reload();
+    void theRareTrackCountsInviteesWhoReachedTheLastMilestone() throws Exception {
         TestPlayer inviter = fixture.join("Inviter", "10.0.0.1");
-        TestPlayer invitee = fixture.join("Invitee", "10.0.0.2");
+        TestPlayer first = fixture.join("First", "10.0.0.2");
+        TestPlayer second = fixture.join("Second", "10.0.0.3");
+        linked(first, inviter);
+        linked(second, inviter);
+        assertEquals(List.of(), referrals.completedInvitees(inviter.getUniqueId()));
+        assertEquals(Claim.TOO_FEW, referrals.claimRare(inviter, 1));
+        assertEquals(Claim.NO_REWARD, referrals.claimRare(inviter, 9));
+        assertFalse(referrals.hasClaimable(inviter.getUniqueId()));
+
+        data(first).setMinutes(299);
+        assertEquals(List.of(), referrals.completedInvitees(inviter.getUniqueId()), "one minute short of 5h");
+        data(first).setMinutes(300);
+        assertEquals(List.of(first.getUniqueId()), referrals.completedInvitees(inviter.getUniqueId()));
+        data(first).inviterClaimed().addAll(List.of(1, 5));
+        assertTrue(referrals.hasClaimable(inviter.getUniqueId()), "the 1-player step is ready");
+
+        inviter.setLocation(new Location(fixture.server.getWorld("character_selection"), 0, 64, 0));
+        assertEquals(Claim.WRONG_WORLD, referrals.claimRare(inviter, 1));
+        inviter.setLocation(new Location(fixture.server.getWorld("world"), 0, 64, 0));
+        tmpBlocked(true);
+        assertEquals(Claim.FAILED, referrals.claimRare(inviter, 1));
+        tmpBlocked(false);
+        assertTrue(data(inviter).rareClaimed().isEmpty(), "a failed save takes the step back");
+        assertNull(data(first).rareCountedFor(), "and frees the invitee again");
+
+        assertEquals(Claim.CLAIMED, referrals.claimRare(inviter, 1));
+        assertTrue(inviter.getInventory().contains(Material.EMERALD, 2));
+        assertEquals(inviter.getUniqueId(), data(first).rareCountedFor());
+        assertEquals(Claim.ALREADY_CLAIMED, referrals.claimRare(inviter, 1));
+        assertEquals(Claim.TOO_FEW, referrals.claimRare(inviter, 2));
+        assertFalse(referrals.hasClaimable(inviter.getUniqueId()));
+
+        data(second).setMinutes(600);
+        data(second).addIp(data(inviter).ips().iterator().next());
+        assertEquals(1, referrals.completedInvitees(inviter.getUniqueId()).size(), "a shared connection does not count");
+        assertEquals(Claim.TOO_FEW, referrals.claimRare(inviter, 2));
+        referrals.toggleIpPair(inviter.getUniqueId(), second.getUniqueId());
+        assertEquals(2, referrals.completedInvitees(inviter.getUniqueId()).size());
+        assertEquals(Claim.CLAIMED, referrals.claimRare(inviter, 2));
+        assertTrue(inviter.getInventory().contains(Material.DIAMOND, 1));
+        assertEquals(State.CLAIMED, referrals.rareState(data(inviter), 2,
+            ReferralManager.rareStep(referrals.act(), 2)));
+        assertEquals(List.of(1, 2), List.copyOf(data(inviter).rareClaimed()));
+        assertNull(ReferralManager.rareStep(null, 1));
+        assertEquals(List.of(), referrals.completedInvitees(UUID.randomUUID()));
+        assertTrue(fixture.logs.stream().anyMatch(line -> line.contains("at=\"referral rare 2 players\"")
+            && line.contains("result=done")));
+    }
+
+    @Test
+    void anInviteeCountsForOneRareTrackOnlyEvenAfterARelink() {
+        TestPlayer inviter = fixture.join("Inviter", "10.0.0.1");
+        TestPlayer other = fixture.join("Other", "10.0.0.2");
+        TestPlayer invitee = fixture.join("Invitee", "10.0.0.3");
         linked(invitee, inviter);
         data(invitee).setMinutes(300);
-        data(inviter).setRareClaims("act_1", 50);
-        assertEquals(Claim.CLAIMED, referrals.claimForInvitee(inviter, invitee.getUniqueId(), 5));
+        assertEquals(Claim.CLAIMED, referrals.claimRare(inviter, 1));
+        assertTrue(referrals.unlink(invitee.getUniqueId()));
+        linked(invitee, other);
+        assertEquals(List.of(), referrals.completedInvitees(other.getUniqueId()));
+        assertEquals(Claim.TOO_FEW, referrals.claimRare(other, 1));
+        assertTrue(referrals.unlink(invitee.getUniqueId()));
+        linked(invitee, inviter);
+        assertEquals(List.of(invitee.getUniqueId()), referrals.completedInvitees(inviter.getUniqueId()),
+            "it still counts for the inviter it counted for");
+    }
+
+    @Test
+    void theRareTrackRefusesWhenOffOrUnreadable() throws Exception {
+        TestPlayer inviter = fixture.join("Inviter", "10.0.0.1");
+        fixture.writeReferral(ReferralFixture.CONFIG.replace("enabled: true", "enabled: false"));
+        referrals.reload();
+        assertEquals(Claim.DISABLED, referrals.claimRare(inviter, 1));
+        fixture.writeReferral(ReferralFixture.CONFIG);
+        referrals.reload();
+        Files.writeString(fixture.plugin.getDataFolder().toPath().resolve("referrals.yml"), "players: [unclosed");
+        referrals.getStore().load(referrals.getConfiguration().seasonKey());
+        assertEquals(Claim.FAILED, referrals.claimRare(inviter, 1));
     }
 
     @Test

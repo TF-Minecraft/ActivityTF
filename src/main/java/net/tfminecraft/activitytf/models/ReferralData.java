@@ -1,11 +1,9 @@
 package net.tfminecraft.activitytf.models;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
@@ -21,12 +19,13 @@ public class ReferralData {
     private long firstSeen;
     private UUID invitedBy;
     private long linkedAt;
+    private UUID rareCountedFor;
     private long lastSeen;
     private final Set<UUID> ipPartners = new HashSet<>();
     private final Set<Integer> claimed = new TreeSet<>();
     private final Set<Integer> inviterClaimed = new TreeSet<>();
     private final LinkedHashSet<String> ips = new LinkedHashSet<>();
-    private final Map<String, Integer> rareClaims = new HashMap<>();
+    private final Set<Integer> rareClaimed = new TreeSet<>();
 
     public ReferralData(String name, long firstSeen) {
         this.name = name;
@@ -89,6 +88,18 @@ public class ReferralData {
         this.linkedAt = inviter == null ? 0 : at;
     }
 
+    /**
+     * The inviter whose rare-track claim this account already counted towards; after that it never
+     * counts for anyone else, even if staff link it to another inviter.
+     */
+    public UUID rareCountedFor() {
+        return rareCountedFor;
+    }
+
+    public void setRareCountedFor(UUID inviter) {
+        this.rareCountedFor = inviter;
+    }
+
     /** Milestone hours this account has claimed as the invited player. */
     public Set<Integer> claimed() {
         return claimed;
@@ -122,21 +133,9 @@ public class ReferralData {
         return false;
     }
 
-    /** Rare inviter rewards claimed, per act. */
-    public Map<String, Integer> rareClaims() {
-        return rareClaims;
-    }
-
-    public int rareClaims(String act) {
-        return rareClaims.getOrDefault(act, 0);
-    }
-
-    public void setRareClaims(String act, int count) {
-        if (count <= 0) {
-            rareClaims.remove(act);
-        } else {
-            rareClaims.put(act, count);
-        }
+    /** Rare-track steps this account has claimed as an inviter, by their player count. */
+    public Set<Integer> rareClaimed() {
+        return rareClaimed;
     }
 
     public List<String> ipList() {
