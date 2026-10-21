@@ -109,6 +109,7 @@ public class ReferralManager {
         config.load();
         store.load(config.seasonKey());
         seedOnline();
+        noteCompletions();
         stopTimers();
         timer = plugin.getServer().getScheduler().runTaskTimer(plugin, this::tick, MINUTE_TICKS, MINUTE_TICKS);
         sampler = plugin.getServer().getScheduler().runTaskTimer(plugin, this::sample, SAMPLE_TICKS, SAMPLE_TICKS);
@@ -121,6 +122,8 @@ public class ReferralManager {
     }
 
     public void reload() {
+        // Whoever reached the goal before a reload keeps counting if the reload raises it.
+        noteCompletions();
         config.load();
         warnedPools.clear();
         // A file that failed to load is read again, so fixing it by hand needs no restart.
@@ -130,6 +133,24 @@ public class ReferralManager {
             }
             store.load(config.seasonKey());
             seedOnline();
+        }
+        noteCompletions();
+    }
+
+    /**
+     * Notes, for every linked account that has reached the rare-track goal, the inviter it reached it
+     * with: a later milestone that raises the goal doesn't take that back. Unlinking clears it.
+     */
+    public void noteCompletions() {
+        int goal = config.completionMinutes();
+        if (goal <= 0 || !store.isLoaded()) {
+            return;
+        }
+        for (ReferralData data : store.all().values()) {
+            if (data.invitedBy() != null && data.rareReachedWith() == null && data.minutes() >= goal) {
+                data.setRareReachedWith(data.invitedBy());
+                store.markDirty();
+            }
         }
     }
 
@@ -212,6 +233,7 @@ public class ReferralManager {
                 store.markDirty();
             }
         }
+        noteCompletions();
     }
 
     // A move of at least playtime.move-blocks since the last one counts as being at the keyboard.
@@ -355,6 +377,7 @@ public class ReferralManager {
             audit(player, "action=link inviter=" + inviterId + " result=save-failed");
             return Link.FAILED;
         }
+        noteCompletions();
         audit(player, "action=link inviter=" + inviterId + " inviter-name="
             + Utils.quotedForLog(store.peek(inviterId).name()) + " result=done");
         return Link.LINKED;
@@ -477,7 +500,9 @@ public class ReferralManager {
     /**
      * The players this inviter brought in who reached the last milestone, skipping any that share a
      * connection with the inviter or already counted for another inviter's rare track (before staff
-     * re-linked them): they move the inviter along the rare track.
+     * re-linked them): they move the inviter along the rare track. One that reached the goal while
+     * linked to this inviter, or already counted towards its claimed steps, keeps counting even if a
+     * later milestone raised the goal since.
      */
     public List<UUID> completedInvitees(UUID inviter) {
         ReferralData mine = store.peek(inviter);
@@ -489,8 +514,10 @@ public class ReferralManager {
         for (UUID id : invitees(inviter)) {
             ReferralData invitee = store.peek(id);
             UUID countedFor = invitee.rareCountedFor();
-            if (invitee.minutes() >= goal && (countedFor == null || countedFor.equals(inviter))
-                && !sharedConnection(inviter, mine, id, invitee)) {
+            boolean usedElsewhere = countedFor != null && !countedFor.equals(inviter);
+            boolean reached = inviter.equals(countedFor) || inviter.equals(invitee.rareReachedWith())
+                || invitee.minutes() >= goal;
+            if (!usedElsewhere && reached && !sharedConnection(inviter, mine, id, invitee)) {
                 done.add(id);
             }
         }

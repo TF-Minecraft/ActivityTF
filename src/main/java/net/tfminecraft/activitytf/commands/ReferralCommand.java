@@ -168,6 +168,7 @@ public class ReferralCommand implements CommandExecutor, TabCompleter {
         int before = data.minutes();
         data.setMinutes((int) Math.min(Integer.MAX_VALUE, (long) before + minutes));
         referrals().getStore().markDirty();
+        referrals().noteCompletions();
         sender.sendMessage(messages().get("referral.admin.time-added", "%name%", data.name(),
             "%minutes%", data.minutes()));
         audit(sender, "action=addtime target=" + uuid + " minutes=" + before + "->" + data.minutes() + " result=done");

@@ -468,6 +468,80 @@ class ReferralManagerTest {
     }
 
     @Test
+    void aLaterMilestoneRaisesTheGoalOnlyForInviteesWhoHadNotReachedIt() throws Exception {
+        TestPlayer inviter = fixture.join("Inviter", "10.0.0.1");
+        TestPlayer counted = fixture.join("Counted", "10.0.0.2");
+        TestPlayer waiting = fixture.join("Waiting", "10.0.0.3");
+        linked(counted, inviter);
+        linked(waiting, inviter);
+        data(counted).setMinutes(300);
+        data(waiting).setMinutes(299);
+        fixture.tick();
+        assertEquals(inviter.getUniqueId(), data(counted).rareReachedWith(), "reaching the goal notes the inviter");
+        assertNull(data(counted).rareCountedFor(), "only a claim ties it for good");
+        assertNull(data(waiting).rareReachedWith());
+        data(waiting).setMinutes(300);
+
+        fixture.writeReferral(ReferralFixture.CONFIG.replace("""
+              - hours: 5
+            """, """
+              - hours: 9
+                new-player: {items: [{item: DIAMOND}]}
+              - hours: 5
+            """));
+        referrals.reload();
+        assertEquals(9 * 60, referrals.getConfiguration().completionMinutes());
+        assertEquals(List.of(counted.getUniqueId(), waiting.getUniqueId()), referrals.completedInvitees(inviter.getUniqueId()),
+            "both had reached 5h before the reload, so both keep counting");
+
+        TestPlayer late = fixture.join("Late", "10.0.0.4");
+        linked(late, inviter);
+        data(late).setMinutes(300);
+        referrals.noteCompletions();
+        assertNull(data(late).rareReachedWith(), "5h is no longer the goal");
+        assertEquals(2, referrals.completedInvitees(inviter.getUniqueId()).size());
+        data(late).setMinutes(9 * 60);
+        fixture.tick();
+        assertEquals(inviter.getUniqueId(), data(late).rareReachedWith());
+        assertEquals(3, referrals.completedInvitees(inviter.getUniqueId()).size());
+    }
+
+    @Test
+    void aStaffFixOfAWrongLinkMovesAnUnclaimedInviteeToTheRightInviter() throws Exception {
+        TestPlayer wrong = fixture.join("Wrong", "10.0.0.1");
+        TestPlayer right = fixture.join("Right", "10.0.0.2");
+        TestPlayer invitee = fixture.join("Invitee", "10.0.0.3");
+        data(invitee).setMinutes(300);
+        linked(invitee, wrong);
+        assertEquals(wrong.getUniqueId(), data(invitee).rareReachedWith());
+        assertTrue(referrals.unlink(invitee.getUniqueId()));
+        assertNull(data(invitee).rareReachedWith(), "unlinking clears it");
+        linked(invitee, right);
+        assertEquals(List.of(invitee.getUniqueId()), referrals.completedInvitees(right.getUniqueId()));
+        assertEquals(right.getUniqueId(), data(invitee).rareReachedWith());
+
+        fixture.writeReferral(ReferralFixture.CONFIG.replace("""
+              - hours: 5
+            """, """
+              - hours: 9
+                new-player: {items: [{item: DIAMOND}]}
+              - hours: 5
+            """));
+        referrals.reload();
+        assertEquals(List.of(invitee.getUniqueId()), referrals.completedInvitees(right.getUniqueId()),
+            "it reached the old goal with this inviter");
+    }
+
+    @Test
+    void linkingAnAccountAlreadyPastTheGoalNotesItAtOnce() {
+        TestPlayer inviter = fixture.join("Inviter", "10.0.0.1");
+        TestPlayer veteran = fixture.join("Veteran", "10.0.0.2");
+        data(veteran).setMinutes(600);
+        linked(veteran, inviter);
+        assertEquals(inviter.getUniqueId(), data(veteran).rareReachedWith());
+    }
+
+    @Test
     void theRareTrackRefusesWhenOffOrUnreadable() throws Exception {
         TestPlayer inviter = fixture.join("Inviter", "10.0.0.1");
         fixture.writeReferral(ReferralFixture.CONFIG.replace("enabled: true", "enabled: false"));

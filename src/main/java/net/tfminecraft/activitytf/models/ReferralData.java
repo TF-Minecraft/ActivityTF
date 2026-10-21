@@ -20,6 +20,7 @@ public class ReferralData {
     private UUID invitedBy;
     private long linkedAt;
     private UUID rareCountedFor;
+    private UUID rareReachedWith;
     private long lastSeen;
     private final Set<UUID> ipPartners = new HashSet<>();
     private final Set<Integer> claimed = new TreeSet<>();
@@ -86,6 +87,9 @@ public class ReferralData {
     public void link(UUID inviter, long at) {
         this.invitedBy = inviter;
         this.linkedAt = inviter == null ? 0 : at;
+        if (inviter == null) {
+            rareReachedWith = null;
+        }
     }
 
     /**
@@ -98,6 +102,18 @@ public class ReferralData {
 
     public void setRareCountedFor(UUID inviter) {
         this.rareCountedFor = inviter;
+    }
+
+    /**
+     * The inviter this account was linked to when it reached the rare-track goal: it keeps counting for
+     * them if a later milestone raises the goal. Unlinking clears it.
+     */
+    public UUID rareReachedWith() {
+        return rareReachedWith;
+    }
+
+    public void setRareReachedWith(UUID inviter) {
+        this.rareReachedWith = inviter;
     }
 
     /** Milestone hours this account has claimed as the invited player. */

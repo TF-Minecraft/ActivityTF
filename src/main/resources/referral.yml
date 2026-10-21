@@ -63,7 +63,8 @@ playtime:
 # a season: a changed one is new, and everyone who claimed the old one could
 # claim it again. The last milestone (the most hours) is also the goal of the
 # inviter's rare track below, so adding a later milestone mid-season moves
-# that goal too.
+# that goal too - but only for invited players who haven't reached the old
+# goal yet: one that already reached it keeps counting.
 #   hours       the new player's counted playtime it needs (1 to 10000)
 #   new-player  what the invited player gets; inviter: what the inviter gets.
 #               Either one is optional. Each is a pool name (one draw), or a
@@ -90,10 +91,11 @@ milestones:
 
 # The inviter's rare track. Every player you invited who reaches the last
 # milestone above (24h of counted playtime) moves you one step along it.
-# Players who share a connection with you don't count, and a player counts
-# for one inviter's track only (staff re-linking them doesn't count them
-# again). Each step is claimed once per season, by the inviter only, and is
-# remembered by its player count - don't change 'players' during a season.
+# Players who share a connection with you don't count, and once you claim a
+# step with a player they count for your track only (staff re-linking them
+# doesn't count them again for someone else). Each step is claimed once
+# per season, by the inviter only, and is remembered by its player count -
+# don't change 'players' during a season.
 # Up to 28 steps; a step above link.max-invitees can never be reached.
 #   players  how many of your invited players must have reached it (1 to 1000)
 #   reward   the same as a milestone reward: a pool name, or a block with

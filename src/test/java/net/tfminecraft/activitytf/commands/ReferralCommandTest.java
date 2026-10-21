@@ -121,9 +121,12 @@ class ReferralCommandTest {
         run(console, "referral addtime Newbie 100001");
         assertEquals(3, said(console).stream().filter(line -> line.contains("Staff")).count());
         run(console, "referral addtime nobody 5");
+        run(console, "referral addtime Newbie 300");
+        assertEquals(inviter.getUniqueId(), data(player).rareReachedWith(), "added time past the goal is noted");
 
         run(console, "referral unlink Newbie");
         assertNull(data(player).invitedBy());
+        assertNull(data(player).rareReachedWith());
         said(console);
         run(console, "referral unlink Newbie");
         assertTrue(said(console).stream().anyMatch(line -> line.contains("not linked")));

@@ -135,6 +135,7 @@ public class ReferralStore {
             data.link(inviter, entry.getLong("linked-at"));
         }
         data.setRareCountedFor(uuid(entry.getString("rare-counted-for", "")));
+        data.setRareReachedWith(uuid(entry.getString("rare-reached-with", "")));
         data.claimed().addAll(entry.getIntegerList("claimed"));
         data.inviterClaimed().addAll(entry.getIntegerList("inviter-claimed"));
         for (String ip : entry.getStringList("ips")) {
@@ -260,6 +261,9 @@ public class ReferralStore {
             }
             if (data.rareCountedFor() != null) {
                 yaml.set(path + ".rare-counted-for", data.rareCountedFor().toString());
+            }
+            if (data.rareReachedWith() != null) {
+                yaml.set(path + ".rare-reached-with", data.rareReachedWith().toString());
             }
             yaml.set(path + ".claimed", new ArrayList<>(data.claimed()));
             yaml.set(path + ".inviter-claimed", new ArrayList<>(data.inviterClaimed()));

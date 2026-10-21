@@ -73,6 +73,7 @@ class ReferralStoreTest {
         UUID invitee = UUID.randomUUID();
         store.get(inviter, "Inviter").rareClaimed().addAll(List.of(3, 1));
         store.get(inviter, "Inviter").setRareCountedFor(invitee);
+        store.get(inviter, "Inviter").setRareReachedWith(invitee);
         ReferralData data = store.get(invitee, "Invitee");
         data.setMinutes(125);
         data.setFirstSeen(42);
@@ -100,6 +101,8 @@ class ReferralStoreTest {
         assertEquals(List.of(1, 3), new ArrayList<>(again.peek(inviter).rareClaimed()));
         assertTrue(again.peek(invitee).rareClaimed().isEmpty());
         assertEquals(invitee, again.peek(inviter).rareCountedFor());
+        assertEquals(invitee, again.peek(inviter).rareReachedWith());
+        assertNull(again.peek(invitee).rareReachedWith());
         assertNull(again.peek(invitee).rareCountedFor());
         assertEquals(77, read.lastSeen());
         assertEquals(java.util.Set.of(inviter), read.ipPartners());

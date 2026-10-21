@@ -418,7 +418,7 @@ class ReferralGuiTest {
         Inventory rare = top(inviter);
         assertEquals(ReferralGui.SIZE, rare.getSize());
         assertTrue(lore(rare.getItem(ReferralGui.RARE_HEADER_SLOT)).stream()
-            .anyMatch(line -> line.contains("Reached 5h") && line.contains("Alpha")));
+            .anyMatch(line -> line.contains("Counted") && line.contains("Alpha")));
         ItemStack one = rare.getItem(ReferralGui.rareStepSlot(0));
         ItemStack two = rare.getItem(ReferralGui.rareStepSlot(1));
         assertEquals(Material.CHEST, one.getType(), "a pool step without an icon");

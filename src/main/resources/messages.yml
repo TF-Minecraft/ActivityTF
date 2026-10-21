@@ -152,7 +152,7 @@ referral:
     milestones-next: "&7Later milestones"
     player-one: "%count% player"
     player-many: "%count% players"
-    rare-track: "#c26ef0&lRare track&e: &6%count% &7reached &f%hours%"
+    rare-track: "#c26ef0&lRare track&e: &6%count% &7counted"
     rare-track-lore:
       - "&7Every player you invited who reaches &f%hours%"
       - "&7of counted playtime moves you one step along."
@@ -163,7 +163,7 @@ referral:
     rare-empty: "&7No rare track is set up"
     rare-title: "&8Referral - rare track"
     rare-nobody: "&8Nobody you invited has reached %hours% yet."
-    rare-reached: "&7Reached %hours%&e: &f%names%"
+    rare-reached: "&7Counted&e: &f%names%"
     rare-step-claimed: "&a✔ %players% &7- %reward%"
     rare-step-claimable: "&a&l%players% &a- %reward%"
     rare-step-locked: "&7%players% - %reward%"
