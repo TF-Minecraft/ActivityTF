@@ -138,8 +138,9 @@ pools:
 #               rare track use
 # Act I: the new player's milestones add up to 64 Ignitium (plus four steel
 # tools), and the inviter's to half that, 32 per invited player. Tin and
-# fragments stay 1:1: 2 + 2 for the new player at 24h, and 16 + 16 over the
-# whole rare track against 320 Ignitium for 10 invitees.
+# fragments stay 1:1 and about 40 times rarer than Ignitium, as in the Act
+# System's Activity trickle: 2 + 2 for the new player at 24h, and 8 + 8 over
+# the whole rare track against 320 Ignitium for 10 invitees.
 acts:
   act_1:
     display: "Act I"
@@ -203,30 +204,30 @@ acts:
             - item: m.materials.abyssalite_fragment
               amount: 1
       pool_ref_rare_4:
+        - display: "#50d990x1 #3b4e60Tin #7f7d80+ #50d990x1 #3b4e60Abyssalite Fragment"
+          items:
+            - item: m.materials.raw_tin
+              amount: 1
+            - item: m.materials.abyssalite_fragment
+              amount: 1
+      pool_ref_rare_6:
         - display: "#50d990x2 #3b4e60Tin #7f7d80+ #50d990x2 #3b4e60Abyssalite Fragment"
           items:
             - item: m.materials.raw_tin
               amount: 2
             - item: m.materials.abyssalite_fragment
               amount: 2
-      pool_ref_rare_6:
-        - display: "#50d990x3 #3b4e60Tin #7f7d80+ #50d990x3 #3b4e60Abyssalite Fragment"
-          items:
-            - item: m.materials.raw_tin
-              amount: 3
-            - item: m.materials.abyssalite_fragment
-              amount: 3
       pool_ref_rare_8:
-        - display: "#50d990x4 #3b4e60Tin #7f7d80+ #50d990x4 #3b4e60Abyssalite Fragment"
+        - display: "#50d990x2 #3b4e60Tin #7f7d80+ #50d990x2 #3b4e60Abyssalite Fragment"
           items:
             - item: m.materials.raw_tin
-              amount: 4
+              amount: 2
             - item: m.materials.abyssalite_fragment
-              amount: 4
+              amount: 2
       pool_ref_rare_10:
-        - display: "#50d990x6 #3b4e60Tin #7f7d80+ #50d990x6 #3b4e60Abyssalite Fragment"
+        - display: "#50d990x2 #3b4e60Tin #7f7d80+ #50d990x2 #3b4e60Abyssalite Fragment"
           items:
             - item: m.materials.raw_tin
-              amount: 6
+              amount: 2
             - item: m.materials.abyssalite_fragment
-              amount: 6
+              amount: 2

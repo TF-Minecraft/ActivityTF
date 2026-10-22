@@ -371,7 +371,7 @@ class ReferralConfigurationTest {
             assertEquals(pool.get(0).items().get(0).amount(), pool.get(0).items().get(1).amount(), "tin and fragments 1:1");
             tin += pool.get(0).items().get(0).amount();
         }
-        assertEquals(16, tin, "the whole track adds up to 16 of each");
+        assertEquals(8, tin, "the whole track adds up to 8 of each");
         int ignitium = 0;
         for (Milestone milestone : config.milestones()) {
             List<RewardEntry> pool = config.pool(act, milestone.inviter().pool());
