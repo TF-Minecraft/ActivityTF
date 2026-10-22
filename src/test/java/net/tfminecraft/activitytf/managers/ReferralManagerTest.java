@@ -17,6 +17,7 @@ import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -609,6 +610,32 @@ class ReferralManagerTest {
 
         referrals.reload();
         assertEquals(1, fixture.plugin.getDataFolder().listFiles((dir, name) -> name.startsWith("referrals-")).length);
+    }
+
+    @Test
+    void aSeasonChangeWaitsWhileUnsavedProgressCannotBeSaved() throws Exception {
+        TestPlayer inviter = fixture.join("Inviter", "10.0.0.1");
+        TestPlayer invitee = fixture.join("Invitee", "10.0.0.2");
+        linked(invitee, inviter);
+        tmpBlocked(true);
+        data(invitee).setMinutes(90);
+        referrals.getStore().markDirty();
+        LocalDateTime start = referrals.getConfiguration().seasonStart();
+        fixture.writeReferral(ReferralFixture.CONFIG.replace("2026-10-15", "2026-10-18"));
+        referrals.reload();
+        assertEquals(inviter.getUniqueId(), data(invitee).invitedBy(), "the unsaved season is kept");
+        assertEquals(90, data(invitee).minutes());
+        assertEquals(start, referrals.getConfiguration().seasonStart(), "the old season start stays in use");
+        assertEquals(referrals.getStore().season(), referrals.getConfiguration().seasonKey());
+        assertTrue(fixture.logs.stream().anyMatch(line -> line.contains("the referral season did not change")));
+        assertEquals(0, fixture.plugin.getDataFolder().listFiles((dir, name) -> name.startsWith("referrals-")).length);
+
+        tmpBlocked(false);
+        referrals.reload();
+        assertNull(data(invitee).invitedBy(), "the next reload saves and starts the new season");
+        File[] archived = fixture.plugin.getDataFolder().listFiles((dir, name) -> name.startsWith("referrals-2026-10-15"));
+        assertEquals(1, archived.length);
+        assertTrue(Files.readString(archived[0].toPath()).contains("minutes: 90"));
     }
 
     @Test

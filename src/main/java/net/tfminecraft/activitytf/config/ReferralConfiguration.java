@@ -375,6 +375,12 @@ public class ReferralConfiguration {
         return seasonStart;
     }
 
+    /** Puts back the season start from before a reload, when the stored links could not be saved first. */
+    public void keepSeason(LocalDateTime start) {
+        seasonStart = start;
+        seasonKey = start == null ? "" : start.toString();
+    }
+
     /** Identifies the season the stored links belong to; a change starts a fresh referrals file. */
     public String seasonKey() {
         return seasonKey;

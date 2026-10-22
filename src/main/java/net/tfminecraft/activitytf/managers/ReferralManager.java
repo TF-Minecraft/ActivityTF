@@ -134,15 +134,20 @@ public class ReferralManager {
     public void reload() {
         // Whoever reached the goal before a reload keeps counting if the reload raises it.
         noteCompletions();
+        LocalDateTime start = config.seasonStart();
         config.load();
         warnedPools.clear();
         // A file that failed to load is read again, so fixing it by hand needs no restart.
         if (!store.isLoaded() || !Objects.equals(store.season(), config.seasonKey())) {
-            if (store.isLoaded()) {
-                store.saveNow();
+            if (store.isLoaded() && !store.saveNow()) {
+                // Loading would drop what is not on disk yet, so the old season stays until a save works.
+                config.keepSeason(start);
+                plugin.getLogger().severe(ReferralStore.FILE + " could not be saved, so the referral season did"
+                    + " not change - the next /activity reload tries again.");
+            } else {
+                store.load(config.seasonKey());
+                seedOnline();
             }
-            store.load(config.seasonKey());
-            seedOnline();
         }
         noteCompletions();
     }
