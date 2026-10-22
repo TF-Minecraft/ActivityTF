@@ -644,4 +644,43 @@ class ReferralGuiTest {
         player.openInventory(gui.buildConfirm(UUID.randomUUID()));
         assertEquals(Material.PLAYER_HEAD, top(player).getItem(ReferralGui.CONFIRM_HEAD_SLOT).getType());
     }
+
+    @Test
+    void heldAndExcludedAccountsShowNothingToClaim() {
+        TestPlayer inviter = fixture.join("Inviter", "10.0.0.1");
+        TestPlayer invitee = fixture.join("Invitee", "10.0.0.2");
+        link(invitee, inviter);
+        data(invitee).setMinutes(300);
+        referrals.setHeld(invitee.getUniqueId(), true);
+        gui.open(invitee);
+        ItemStack first = top(invitee).getItem(11);
+        assertEquals(Boolean.FALSE, first.getItemMeta().getEnchantmentGlintOverride());
+        assertTrue(lore(first).stream().anyMatch(line -> line.contains("On hold")), String.valueOf(lore(first)));
+
+        gui.open(inviter);
+        ItemStack head = top(inviter).getItem(ReferralGui.FIRST_INVITEE_SLOT);
+        assertFalse(head.getItemMeta().hasEnchantmentGlintOverride() && head.getItemMeta().getEnchantmentGlintOverride());
+        assertTrue(lore(head).stream().anyMatch(line -> line.contains("On hold")));
+        assertTrue(lore(head).stream().anyMatch(line -> line.contains("staff decision")));
+        referrals.setHeld(invitee.getUniqueId(), false);
+        referrals.setRareExcluded(invitee.getUniqueId(), true);
+        gui.open(inviter);
+        head = top(inviter).getItem(ReferralGui.FIRST_INVITEE_SLOT);
+        assertTrue(lore(head).stream().anyMatch(line -> line.contains("staff decision")));
+        assertFalse(lore(head).stream().anyMatch(line -> line.contains("On hold")));
+        referrals.setRareExcluded(invitee.getUniqueId(), false);
+
+        referrals.setHeld(inviter.getUniqueId(), true);
+        gui.open(inviter);
+        assertEquals(Boolean.FALSE, top(inviter).getItem(ReferralGui.RARE_SLOT).getItemMeta().getEnchantmentGlintOverride());
+        head = top(inviter).getItem(ReferralGui.FIRST_INVITEE_SLOT);
+        assertTrue(lore(head).stream().anyMatch(line -> line.contains("On hold")), "a held inviter claims nothing for them");
+        assertTrue(lore(head).stream().anyMatch(line -> line.contains("(on hold)")));
+        assertFalse(lore(head).stream().anyMatch(line -> line.contains("(claim)")));
+        Inventory rare = gui.buildRare(inviter);
+        ItemStack step = rare.getItem(10);
+        assertEquals(Boolean.FALSE, step.getItemMeta().getEnchantmentGlintOverride());
+        assertTrue(lore(step).stream().anyMatch(line -> line.contains("On hold")));
+    }
 }
+

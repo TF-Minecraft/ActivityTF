@@ -21,6 +21,9 @@ public class ReferralData {
     private long linkedAt;
     private UUID rareCountedFor;
     private UUID rareReachedWith;
+    private int rareReachedGoal;
+    private boolean held;
+    private boolean rareExcluded;
     private long lastSeen;
     private final Set<UUID> ipPartners = new HashSet<>();
     private final Set<Integer> claimed = new TreeSet<>();
@@ -89,6 +92,7 @@ public class ReferralData {
         this.linkedAt = inviter == null ? 0 : at;
         if (inviter == null) {
             rareReachedWith = null;
+            rareReachedGoal = 0;
         }
     }
 
@@ -114,6 +118,36 @@ public class ReferralData {
 
     public void setRareReachedWith(UUID inviter) {
         this.rareReachedWith = inviter;
+    }
+
+    /** The rare-track goal, in counted minutes, this account reached it at (0 = not noted). */
+    public int rareReachedGoal() {
+        return rareReachedGoal;
+    }
+
+    public void setRareReachedGoal(int minutes) {
+        this.rareReachedGoal = Math.max(0, minutes);
+    }
+
+    /**
+     * Staff hold: this account claims nothing, and its inviter claims nothing for it, until staff
+     * release it. Playtime still counts.
+     */
+    public boolean held() {
+        return held;
+    }
+
+    public void setHeld(boolean held) {
+        this.held = held;
+    }
+
+    /** Staff exclusion: this account never counts on anyone's rare track. */
+    public boolean rareExcluded() {
+        return rareExcluded;
+    }
+
+    public void setRareExcluded(boolean rareExcluded) {
+        this.rareExcluded = rareExcluded;
     }
 
     /** Milestone hours this account has claimed as the invited player. */

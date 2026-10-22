@@ -74,6 +74,7 @@ class ReferralStoreTest {
         store.get(inviter, "Inviter").rareClaimed().addAll(List.of(3, 1));
         store.get(inviter, "Inviter").setRareCountedFor(invitee);
         store.get(inviter, "Inviter").setRareReachedWith(invitee);
+        store.get(inviter, "Inviter").setRareReachedGoal(1440);
         ReferralData data = store.get(invitee, "Invitee");
         data.setMinutes(125);
         data.setFirstSeen(42);
@@ -83,6 +84,8 @@ class ReferralStoreTest {
         data.addIp(store.ipHash("10.0.0.1"));
         data.setLastSeen(77);
         data.ipPartners().add(inviter);
+        data.setHeld(true);
+        data.setRareExcluded(true);
         assertTrue(store.isDirty());
         assertTrue(store.saveNow());
         assertFalse(store.isDirty());
@@ -102,9 +105,15 @@ class ReferralStoreTest {
         assertTrue(again.peek(invitee).rareClaimed().isEmpty());
         assertEquals(invitee, again.peek(inviter).rareCountedFor());
         assertEquals(invitee, again.peek(inviter).rareReachedWith());
+        assertEquals(1440, again.peek(inviter).rareReachedGoal());
+        assertEquals(0, again.peek(invitee).rareReachedGoal());
         assertNull(again.peek(invitee).rareReachedWith());
         assertNull(again.peek(invitee).rareCountedFor());
         assertEquals(77, read.lastSeen());
+        assertTrue(read.held());
+        assertTrue(read.rareExcluded());
+        assertFalse(again.peek(inviter).held());
+        assertFalse(again.peek(inviter).rareExcluded());
         assertEquals(java.util.Set.of(inviter), read.ipPartners());
         assertTrue(again.peek(inviter).ipPartners().isEmpty());
         assertNull(again.peek(inviter).invitedBy());

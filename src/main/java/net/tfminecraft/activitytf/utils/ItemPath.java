@@ -27,6 +27,51 @@ public final class ItemPath {
         return v;
     }
 
+    /**
+     * A Cooking food, made through TLibs: {@code c.<category>(type=<food>;quality=<n>)}. Only reward
+     * items take it; everywhere else it is still an unsupported path.
+     */
+    public static boolean isCookingPath(String value) {
+        if (value == null) {
+            return false;
+        }
+        String v = value.strip();
+        return v.length() >= 2 && v.regionMatches(true, 0, "c.", 0, 2);
+    }
+
+    public static String cookingPath(String value) {
+        if (!isCookingPath(value)) {
+            return null;
+        }
+        String v = value.strip();
+        int open = v.indexOf('(');
+        if (open <= 2 || !v.endsWith(")") || hasWhitespace(v)
+            || !v.substring(2, open).chars().allMatch(c -> Character.isLetterOrDigit(c) || c == '_')) {
+            return null;
+        }
+        return cookingType(v) == null ? null : v;
+    }
+
+    /** The food id in a Cooking path's {@code type=} field, or null when it has none. */
+    public static String cookingType(String value) {
+        if (!isCookingPath(value)) {
+            return null;
+        }
+        String v = value.strip();
+        int open = v.indexOf('(');
+        if (open < 0 || !v.endsWith(")")) {
+            return null;
+        }
+        for (String field : v.substring(open + 1, v.length() - 1).split(";")) {
+            int equals = field.indexOf('=');
+            if (equals > 0 && field.substring(0, equals).strip().equalsIgnoreCase("type")) {
+                String type = field.substring(equals + 1).strip();
+                return type.isEmpty() ? null : type;
+            }
+        }
+        return null;
+    }
+
     public static boolean isItemsAdderPath(String value) {
         if (value == null) {
             return false;

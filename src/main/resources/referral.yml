@@ -36,7 +36,8 @@ link:
   # /referral allowip <player> <player> (that pair only, not their alts).
   same-ip-check: true
   # Most players one account can have linked to it this season; 0 = no limit.
-  max-invitees: 10
+  # The rare track still ends at its last step however many are linked.
+  max-invitees: 0
   # Most new links one inviter can receive in 24 hours; 0 = no limit. Stops
   # one account collecting a burst of throwaway accounts in an afternoon.
   max-links-per-day: 3
@@ -75,18 +76,21 @@ playtime:
 #               (acts.<act>.pools), then in the shared pools below, then in
 #               the activity rewards pools (the ones locked for this activity
 #               week) - so what a pool hands over follows the act.
+#               Reward items can be bare Material names, v.<material>,
+#               m.<type>.<id> (MMOItems), ia.<namespace:id> (ItemsAdder) or
+#               c.<category>(type=<food>;quality=<n>) (Cooking food).
 milestones:
   - hours: 1
-    new-player: {display: "Starter kit", icon: BUNDLE, pool: pool_ref_starter}
-    inviter: {display: "Coin", icon: m.currency.silver_coin, pool: pool_ref_coin}
+    new-player: {display: "Steel tools and rations", icon: m.tools.steel_pickaxe, pool: pool_ref_tools}
+    inviter: {display: "Gold Denars", icon: m.currency.gold_coin, pool: pool_ref_coin}
   - hours: 4
-    new-player: {display: "Act materials (small)", icon: m.materials.ignitium, pool: pool_ref_small}
+    new-player: {display: "Act materials and denars (small)", icon: m.materials.ignitium, pool: pool_ref_new_small}
     inviter: {display: "Act materials (small)", icon: m.materials.ignitium, pool: pool_ref_small}
   - hours: 12
-    new-player: {display: "Act materials (medium)", icon: m.materials.ignitium, pool: pool_ref_medium}
+    new-player: {display: "Act materials and denars (medium)", icon: m.materials.ignitium, pool: pool_ref_new_medium}
     inviter: {display: "Act materials (medium)", icon: m.materials.ignitium, pool: pool_ref_medium}
   - hours: 24
-    new-player: {display: "Act materials (large)", icon: m.materials.ignitium, pool: pool_ref_large}
+    new-player: {display: "Act materials and denars (large)", icon: m.materials.raw_tin, pool: pool_ref_new_large}
     inviter: {display: "Act materials (large)", icon: m.materials.ignitium, pool: pool_ref_large}
 
 # The inviter's rare track. Every player you invited who reaches the last
@@ -95,7 +99,8 @@ milestones:
 # step with a player they count for your track only (staff re-linking them
 # doesn't count them again for someone else). Each step is claimed once
 # per season, by the inviter only, and is remembered by its player count -
-# don't change 'players' during a season.
+# don't change 'players' during a season. The track ends at its last step:
+# inviting more players after that pays their milestones, not more steps.
 # Up to 28 steps; a step above link.max-invitees can never be reached.
 #   players  how many of your invited players must have reached it (1 to 1000)
 #   reward   the same as a milestone reward: a pool name, or a block with
@@ -104,80 +109,122 @@ milestones:
 #            menu lists them), and like every pool it can differ per act;
 #            fixed items are the same in every act.
 rare-track:
-  - players: 1
-    reward: {display: "Rare act reward", icon: m.materials.abyssalite_fragment, pool: pool_ref_rare}
-  - players: 3
-    reward: {display: "Rare materials bundle", icon: m.materials.abyssalite_fragment, pool: pool_ref_rare_3}
-  - players: 5
-    reward: {display: "Recruiter's chest", icon: CHEST, pool: pool_ref_rare_5}
+  - players: 2
+    reward: {display: "Rare act materials I", icon: m.materials.abyssalite_fragment, pool: pool_ref_rare_2}
+  - players: 4
+    reward: {display: "Rare act materials II", icon: m.materials.abyssalite_fragment, pool: pool_ref_rare_4}
+  - players: 6
+    reward: {display: "Rare act materials III", icon: m.materials.abyssalite_fragment, pool: pool_ref_rare_6}
+  - players: 8
+    reward: {display: "Rare act materials IV", icon: m.materials.abyssalite_fragment, pool: pool_ref_rare_8}
+  - players: 10
+    reward: {display: "Rare act materials V", icon: m.materials.abyssalite_fragment, pool: pool_ref_rare_10}
 
 # Pools every act can use, in the same format as the activity rewards.pools.
 # An act's own pool of the same name wins.
 pools:
-  pool_ref_starter:
-    - display: "Starter kit"
-      items:
-        - item: COOKED_BEEF
-          amount: 16
-        - item: TORCH
-          amount: 32
-        - item: OAK_LOG
-          amount: 32
   pool_ref_coin:
-    - display: "#50d990x5 #b8906eSilver Coin"
+    - display: "#50d990x10 #e6ca40Gold Denar"
       items:
-        - item: m.currency.silver_coin
-          amount: 5
+        - item: m.currency.gold_coin
+          amount: 10
 
 # The acts. The act in use is the one with the latest 'starts' that is not in
 # the future, so the loot changes by itself on the day an act starts.
 #   display     the act's name in the menu
 #   pools       this act's loot, by the pool names the milestones and the
 #               rare track use
+# Act I: the inviter's milestones add up to 64 Ignitium per invited player,
+# and so do the new player's (plus four steel tools, about 16 Ignitium more).
+# Tin and fragments stay 1:1 and about 40 times rarer than Ignitium, as in
+# the Act System's Activity trickle: 2 + 2 for the new player at 24h, and
+# 16 + 16 over the whole rare track against 640 Ignitium for 10 invitees.
 acts:
   act_1:
     display: "Act I"
     starts: "2026-10-10T06:00"
     pools:
-      pool_ref_small:
-        - display: "#50d990x10 #7f7d80Ignitium"
+      pool_ref_tools:
+        - display: "#7f7d80Steel Pickaxe, Hatchet, Shovel and Hoe #7f7d80+ #50d990x64 #b8906eDry Ration"
+          items:
+            - item: m.tools.steel_pickaxe
+            - item: m.tools.steel_axe
+            - item: m.tools.steel_shovel
+            - item: m.tools.steel_hoe
+            - item: c.dry_ration(type=dry_ration;quality=1)
+              amount: 64
+      pool_ref_new_small:
+        - display: "#50d990x12 #7f7d80Ignitium #7f7d80+ #50d990x10 #e6ca40Gold Denar"
           items:
             - item: m.materials.ignitium
+              amount: 12
+            - item: m.currency.gold_coin
               amount: 10
+      pool_ref_new_medium:
+        - display: "#50d990x20 #7f7d80Ignitium #7f7d80+ #50d990x15 #e6ca40Gold Denar"
+          items:
+            - item: m.materials.ignitium
+              amount: 20
+            - item: m.currency.gold_coin
+              amount: 15
+      pool_ref_new_large:
+        - display: "#50d990x32 #7f7d80Ignitium #7f7d80+ #50d990x2 #3b4e60Tin #7f7d80+ #50d990x2 #3b4e60Abyssalite Fragment #7f7d80+ #50d990x25 #e6ca40Gold Denar"
+          items:
+            - item: m.materials.ignitium
+              amount: 32
+            - item: m.materials.raw_tin
+              amount: 2
+            - item: m.materials.abyssalite_fragment
+              amount: 2
+            - item: m.currency.gold_coin
+              amount: 25
+      pool_ref_small:
+        - display: "#50d990x12 #7f7d80Ignitium"
+          items:
+            - item: m.materials.ignitium
+              amount: 12
       pool_ref_medium:
         - display: "#50d990x20 #7f7d80Ignitium"
           items:
             - item: m.materials.ignitium
               amount: 20
       pool_ref_large:
-        - display: "#50d990x30 #7f7d80Ignitium"
+        - display: "#50d990x32 #7f7d80Ignitium"
           items:
             - item: m.materials.ignitium
-              amount: 30
-      pool_ref_rare:
-        - weight: 50
-          display: "#50d990x1 #3b4e60Abyssalite Fragment"
-          items:
-            - item: m.materials.abyssalite_fragment
-              amount: 1
-        - weight: 50
-          display: "#50d990x1 #3b4e60Tin"
+              amount: 32
+      pool_ref_rare_2:
+        - display: "#50d990x1 #3b4e60Tin #7f7d80+ #50d990x1 #3b4e60Abyssalite Fragment"
           items:
             - item: m.materials.raw_tin
               amount: 1
-      pool_ref_rare_3:
-        - display: "#50d990x2 #3b4e60Abyssalite Fragment #7f7d80+ #50d990x2 #3b4e60Tin"
-          items:
             - item: m.materials.abyssalite_fragment
-              amount: 2
+              amount: 1
+      pool_ref_rare_4:
+        - display: "#50d990x2 #3b4e60Tin #7f7d80+ #50d990x2 #3b4e60Abyssalite Fragment"
+          items:
             - item: m.materials.raw_tin
               amount: 2
-      pool_ref_rare_5:
-        - display: "Recruiter's chest"
-          items:
             - item: m.materials.abyssalite_fragment
-              amount: 3
+              amount: 2
+      pool_ref_rare_6:
+        - display: "#50d990x3 #3b4e60Tin #7f7d80+ #50d990x3 #3b4e60Abyssalite Fragment"
+          items:
             - item: m.materials.raw_tin
               amount: 3
-            - item: m.currency.silver_coin
-              amount: 25
+            - item: m.materials.abyssalite_fragment
+              amount: 3
+      pool_ref_rare_8:
+        - display: "#50d990x4 #3b4e60Tin #7f7d80+ #50d990x4 #3b4e60Abyssalite Fragment"
+          items:
+            - item: m.materials.raw_tin
+              amount: 4
+            - item: m.materials.abyssalite_fragment
+              amount: 4
+      pool_ref_rare_10:
+        - display: "#50d990x6 #3b4e60Tin #7f7d80+ #50d990x6 #3b4e60Abyssalite Fragment"
+          items:
+            - item: m.materials.raw_tin
+              amount: 6
+            - item: m.materials.abyssalite_fragment
+              amount: 6

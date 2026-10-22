@@ -521,6 +521,12 @@ class ActivityManagerRewardItemsTest {
     }
 
     @Test
+    void aCookingRewardPathIsMadeThroughTLibs() {
+        assertEquals(Material.IRON_INGOT, resolveReward("c.dry_ration(type=dry_ration;quality=1)", true, false).getType());
+        assertNull(resolveReward("c.dry_ration(type=dry_ration;quality=1)", false, true));
+    }
+
+    @Test
     void aMalformedItemsAdderRewardPathResolvesToNothing() {
         assertNull(resolveReward("ia.saucepan", true, true));
     }

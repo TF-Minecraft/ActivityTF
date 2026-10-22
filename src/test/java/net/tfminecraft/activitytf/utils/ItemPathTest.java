@@ -87,6 +87,29 @@ class ItemPathTest {
     }
 
     @Test
+    void aCookingPathIsRecognisedButStaysUnsupportedOutsideRewards() {
+        String ration = "c.dry_ration(type=dry_ration;quality=1)";
+        assertTrue(ItemPath.isCookingPath(ration));
+        assertTrue(ItemPath.isCookingPath("  C.x  "));
+        assertEquals(ration, ItemPath.cookingPath("  " + ration + " "));
+        assertTrue(ItemPath.isUnsupportedPath(ration), "craft keys and icons don't take it");
+        assertFalse(ItemPath.isPluginPath(ration));
+        for (String broken : new String[]{"c.", "c.x", "c.(type=x)", "c.x(", "c.x()", "c.x (type=a)",
+                                          "c.x(type=a b)", "c.x-y(type=a)", "c.x(type=a", "c.x(quality=1)", "c.x(type=)"}) {
+            assertNull(ItemPath.cookingPath(broken), broken);
+        }
+        assertFalse(ItemPath.isCookingPath(null));
+        assertFalse(ItemPath.isCookingPath("c"));
+        assertFalse(ItemPath.isCookingPath("m.material.steel"));
+        assertNull(ItemPath.cookingPath("m.material.steel"));
+        assertEquals("dry_ration", ItemPath.cookingType(ration));
+        assertEquals("stew", ItemPath.cookingType("c.soup(quality=2; TYPE = stew)"));
+        assertNull(ItemPath.cookingType("c.soup"));
+        assertNull(ItemPath.cookingType("c.soup(type=x"));
+        assertNull(ItemPath.cookingType("m.material.steel"));
+    }
+
+    @Test
     void anItemsAdderPathIsAPathNotAMaterialAndNotUnsupported() {
         assertTrue(ItemPath.isItemsAdderPath("ia.tfmc:saucepan"));
         assertFalse(ItemPath.isUnsupportedPath("ia.tfmc:saucepan"));

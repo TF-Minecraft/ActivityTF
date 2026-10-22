@@ -58,7 +58,7 @@ class ReferralConfigurationTest {
         assertEquals("", config.seasonKey());
         assertEquals(14, config.openDays());
         assertEquals(7, config.newAccountDays());
-        assertEquals(10, config.maxInvitees());
+        assertEquals(0, config.maxInvitees(), "no limit by default");
         assertEquals(3, config.maxLinksPerDay());
         assertTrue(config.ipCheck());
         assertEquals(5, config.afkMinutes());
@@ -217,6 +217,7 @@ class ReferralConfigurationTest {
             many.append("  - {players: ").append(players).append(", reward: pool_x}\n");
         }
         ReferralConfiguration config = config("""
+            link: {max-invitees: 10}
             milestones:
               - {hours: 24, new-player: pool_x, rare: true}
             rare-track:
@@ -360,12 +361,26 @@ class ReferralConfigurationTest {
         assertEquals(1, config.acts().size());
         assertEquals(List.of(1, 4, 12, 24), config.milestones().stream().map(Milestone::hours).toList());
         assertEquals(24 * 60, config.completionMinutes());
-        assertEquals(List.of(1, 3, 5), config.rareTrack().stream().map(RareStep::players).toList());
-        assertEquals("pool_ref_rare", config.rareTrack().get(0).reward().pool());
+        assertEquals(List.of(2, 4, 6, 8, 10), config.rareTrack().stream().map(RareStep::players).toList());
+        assertEquals(0, config.maxInvitees());
         Act act = config.acts().get(0);
-        assertEquals(1, config.pool(act, config.rareTrack().get(1).reward().pool()).size(),
-            "later steps are one-entry act pools, so they hand over specific items");
-        assertEquals(3, config.pool(act, "pool_ref_rare_5").get(0).items().size());
+        int tin = 0;
+        for (RareStep step : config.rareTrack()) {
+            List<RewardEntry> pool = config.pool(act, step.reward().pool());
+            assertEquals(1, pool.size(), "every step is a one-entry act pool, so it hands over specific items");
+            assertEquals(pool.get(0).items().get(0).amount(), pool.get(0).items().get(1).amount(), "tin and fragments 1:1");
+            tin += pool.get(0).items().get(0).amount();
+        }
+        assertEquals(16, tin, "the whole track adds up to 16 of each");
+        int ignitium = 0;
+        for (Milestone milestone : config.milestones()) {
+            List<RewardEntry> pool = config.pool(act, milestone.inviter().pool());
+            ignitium += pool.get(0).items().stream().filter(item -> item.path().equals("m.materials.ignitium"))
+                .mapToInt(RewardEntry.Item::amount).sum();
+        }
+        assertEquals(64, ignitium, "the inviter's milestones add up to a stack");
+        assertEquals("c.dry_ration(type=dry_ration;quality=1)",
+            config.pool(act, "pool_ref_tools").get(0).items().get(4).path());
         assertTrue(config.ignoredWorld("character_selection"));
         assertTrue(logged.isEmpty(), "shipped referral.yml warns: " + logged);
     }

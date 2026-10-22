@@ -294,7 +294,7 @@ public class ReferralGui implements Listener {
         ItemStack star = item(Material.NETHER_STAR, messages.get("referral.gui.rare-track", "%count%", players(completed),
             "%hours%", goal), lore);
         // A nether star glints by default, so its glint is set either way.
-        glint(star, claimable);
+        glint(star, claimable && !data.held());
         return star;
     }
 
@@ -349,9 +349,13 @@ public class ReferralGui implements Listener {
     private ItemStack rareStepItem(ReferralData data, int completed, RareStep step, String goal) {
         Messages messages = messages();
         State state = referrals().rareState(data, completed, step);
+        boolean held = data.held() && state == State.CLAIMABLE;
+        if (held) {
+            state = State.LOCKED;
+        }
         List<String> lore = rewardLore(step.reward());
         lore.add(" ");
-        lore.add(switch (state) {
+        lore.add(held ? messages.get("referral.gui.status-held") : switch (state) {
             case CLAIMED -> messages.get("referral.gui.status-claimed");
             case CLAIMABLE -> messages.get("referral.gui.status-claim");
             default -> messages.get("referral.gui.rare-status-locked", "%left%", players(step.players() - completed),
@@ -379,9 +383,13 @@ public class ReferralGui implements Listener {
                 messages.get("referral.gui.milestone-none", "%hours%", milestone.hours()), List.of());
         }
         State state = referrals().ownState(data, milestone);
+        boolean held = data.held() && state == State.CLAIMABLE;
+        if (held) {
+            state = State.LOCKED;
+        }
         List<String> lore = rewardLore(reward);
         lore.add(" ");
-        lore.add(switch (state) {
+        lore.add(held ? messages.get("referral.gui.status-held") : switch (state) {
             case CLAIMED -> messages.get("referral.gui.status-claimed");
             case CLAIMABLE -> messages.get("referral.gui.status-claim");
             default -> data.invitedBy() == null ? messages.get("referral.gui.status-unlinked")
@@ -394,6 +402,8 @@ public class ReferralGui implements Listener {
     private ItemStack inviteeItem(UUID inviteeId, Act act, List<UUID> completed) {
         Messages messages = messages();
         ReferralData invitee = referrals().getStore().peek(inviteeId);
+        ReferralData inviter = invitee.invitedBy() == null ? null : referrals().getStore().peek(invitee.invitedBy());
+        boolean held = invitee.held() || inviter != null && inviter.held();
         List<String> lore = new ArrayList<>();
         lore.add(messages.get("referral.gui.invitee-played", "%played%", duration(invitee.minutes())));
         Integer next = null;
@@ -407,20 +417,27 @@ public class ReferralGui implements Listener {
                 if (state == State.CLAIMABLE && next == null) {
                     next = milestone.hours();
                 }
-                lore.add(messages.get("referral.gui.invitee-line-" + state.name().toLowerCase(Locale.ROOT),
+                String line = held && state == State.CLAIMABLE ? "held" : state.name().toLowerCase(Locale.ROOT);
+                lore.add(messages.get("referral.gui.invitee-line-" + line,
                     "%hours%", milestone.hours(), "%reward%", Utils.colorize(reward.display()),
                     "%left%", duration(milestone.minutes() - invitee.minutes())));
             }
             if (!act.rareTrack().isEmpty()) {
                 int goal = referrals().getConfiguration().completionMinutes();
                 String key = completed.contains(inviteeId) ? "referral.gui.invitee-rare-counts"
+                    : invitee.held() || invitee.rareExcluded() ? "referral.gui.invitee-rare-barred"
                     : invitee.minutes() >= goal ? "referral.gui.invitee-rare-not-counted"
                     : "referral.gui.invitee-rare-pending";
                 lore.add(messages.get(key, "%hours%", duration(goal)));
             }
         }
         lore.add(" ");
-        lore.add(messages.get(next == null ? "referral.gui.invitee-nothing" : "referral.gui.invitee-click"));
+        if (held && next != null) {
+            next = null;
+            lore.add(messages.get("referral.gui.invitee-held"));
+        } else {
+            lore.add(messages.get(next == null ? "referral.gui.invitee-nothing" : "referral.gui.invitee-click"));
+        }
         String name = next == null
             ? messages.get("referral.gui.invitee", "%name%", invitee.name(), "%played%", duration(invitee.minutes()))
             : messages.get("referral.gui.invitee-claimable", "%name%", invitee.name(),

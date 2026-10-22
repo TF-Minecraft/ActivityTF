@@ -19,6 +19,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -457,11 +458,11 @@ class ReferralManagerTest {
         linked(invitee, inviter);
         data(invitee).setMinutes(300);
         assertEquals(Claim.CLAIMED, referrals.claimRare(inviter, 1));
-        assertTrue(referrals.unlink(invitee.getUniqueId()));
+        assertEquals(1, referrals.unlink(invitee.getUniqueId()));
         linked(invitee, other);
         assertEquals(List.of(), referrals.completedInvitees(other.getUniqueId()));
         assertEquals(Claim.TOO_FEW, referrals.claimRare(other, 1));
-        assertTrue(referrals.unlink(invitee.getUniqueId()));
+        assertEquals(1, referrals.unlink(invitee.getUniqueId()));
         linked(invitee, inviter);
         assertEquals(List.of(invitee.getUniqueId()), referrals.completedInvitees(inviter.getUniqueId()),
             "it still counts for the inviter it counted for");
@@ -514,7 +515,7 @@ class ReferralManagerTest {
         data(invitee).setMinutes(300);
         linked(invitee, wrong);
         assertEquals(wrong.getUniqueId(), data(invitee).rareReachedWith());
-        assertTrue(referrals.unlink(invitee.getUniqueId()));
+        assertEquals(1, referrals.unlink(invitee.getUniqueId()));
         assertNull(data(invitee).rareReachedWith(), "unlinking clears it");
         linked(invitee, right);
         assertEquals(List.of(invitee.getUniqueId()), referrals.completedInvitees(right.getUniqueId()));
@@ -580,6 +581,7 @@ class ReferralManagerTest {
         assertEquals(Claim.FAILED, referrals.claimForInvitee(inviter, invitee.getUniqueId(), 1));
         referrals.getStore().get(inviter.getUniqueId(), "Inviter");
         assertEquals(Link.FAILED, referrals.link(invitee, inviter.getUniqueId()));
+        assertEquals(Link.FAILED, referrals.staffLink(invitee.getUniqueId(), inviter.getUniqueId()));
     }
 
     @Test
@@ -590,9 +592,9 @@ class ReferralManagerTest {
         assertEquals(inviter.getUniqueId(), referrals.find("Inviter"));
         assertNull(referrals.find("nobody"));
         linked(invitee, inviter);
-        assertTrue(referrals.unlink(invitee.getUniqueId()));
-        assertFalse(referrals.unlink(invitee.getUniqueId()));
-        assertFalse(referrals.unlink(UUID.randomUUID()));
+        assertEquals(1, referrals.unlink(invitee.getUniqueId()));
+        assertEquals(0, referrals.unlink(invitee.getUniqueId()));
+        assertEquals(0, referrals.unlink(UUID.randomUUID()));
         assertNull(referrals.linkable(invitee.getUniqueId()));
 
         linked(invitee, inviter);
@@ -672,14 +674,14 @@ class ReferralManagerTest {
         TestPlayer a = fixture.join("Aa", "10.0.0.1");
         TestPlayer twin = fixture.join("Twin", "10.0.0.1");
         assertEquals(Link.SAME_IP, referrals.link(twin, a.getUniqueId()));
-        assertTrue(referrals.toggleIpPair(twin.getUniqueId(), a.getUniqueId()));
+        assertEquals(1, referrals.toggleIpPair(twin.getUniqueId(), a.getUniqueId()));
         linked(twin, a);
         data(twin).setMinutes(60);
         assertEquals(Claim.CLAIMED, referrals.claimOwn(twin, 1));
         assertEquals(Claim.CLAIMED, referrals.claimForInvitee(a, twin.getUniqueId(), 1));
         TestPlayer alt = fixture.join("Alt", "10.0.0.1");
         assertEquals(Link.SAME_IP, referrals.link(alt, a.getUniqueId()), "the pairing covers only that pair");
-        assertFalse(referrals.toggleIpPair(a.getUniqueId(), twin.getUniqueId()));
+        assertEquals(0, referrals.toggleIpPair(a.getUniqueId(), twin.getUniqueId()));
         assertTrue(data(a).ipPartners().isEmpty() && data(twin).ipPartners().isEmpty());
         assertTrue(referrals.sharedConnection(a.getUniqueId(), data(a), twin.getUniqueId(), data(twin)));
         assertFalse(referrals.sharedConnection(a.getUniqueId(), data(a), alt.getUniqueId(),
@@ -716,5 +718,267 @@ class ReferralManagerTest {
         assertEquals(ReferralFixture.NOW, referrals.now());
         assertEquals(fixture.clock.get(), referrals.millis());
         assertTrue(referrals.seasonStarted());
+    }
+
+    @Test
+    void aHeldAccountClaimsNothingAndItsInviterClaimsNothingForIt() {
+        TestPlayer inviter = fixture.join("Inviter", "10.0.0.1");
+        TestPlayer invitee = fixture.join("Invitee", "10.0.0.2");
+        linked(invitee, inviter);
+        data(invitee).setMinutes(300);
+        assertEquals(1, referrals.setHeld(invitee.getUniqueId(), true));
+        assertEquals(0, referrals.setHeld(invitee.getUniqueId(), true), "already held");
+        assertEquals(ReferralManager.NOT_FOUND, referrals.setHeld(UUID.randomUUID(), true), "unknown account");
+        assertEquals(Claim.HELD, referrals.claimOwn(invitee, 1));
+        assertEquals(Claim.INVITEE_HELD, referrals.claimForInvitee(inviter, invitee.getUniqueId(), 1));
+        assertFalse(referrals.hasClaimable(invitee.getUniqueId()));
+        assertTrue(referrals.completedInvitees(inviter.getUniqueId()).isEmpty(), "a held invitee doesn't count");
+        assertFalse(referrals.hasClaimable(inviter.getUniqueId()));
+
+        assertEquals(1, referrals.setHeld(invitee.getUniqueId(), false));
+        assertTrue(referrals.hasClaimable(invitee.getUniqueId()));
+        assertEquals(Claim.CLAIMED, referrals.claimOwn(invitee, 1));
+
+        assertEquals(1, referrals.setHeld(inviter.getUniqueId(), true));
+        assertEquals(Claim.HELD, referrals.claimForInvitee(inviter, invitee.getUniqueId(), 1));
+        assertEquals(Claim.HELD, referrals.claimRare(inviter, 1));
+        assertFalse(referrals.hasClaimable(inviter.getUniqueId()));
+        assertEquals(Claim.CLAIMED, referrals.claimOwn(invitee, 5), "the inviter's hold doesn't touch the invitee");
+    }
+
+    @Test
+    void anExcludedInviteeNeverCountsOnARareTrack() {
+        TestPlayer inviter = fixture.join("Inviter", "10.0.0.1");
+        TestPlayer invitee = fixture.join("Invitee", "10.0.0.2");
+        linked(invitee, inviter);
+        data(invitee).setMinutes(300);
+        assertEquals(List.of(invitee.getUniqueId()), referrals.completedInvitees(inviter.getUniqueId()));
+        assertEquals(1, referrals.setRareExcluded(invitee.getUniqueId(), true));
+        assertEquals(0, referrals.setRareExcluded(invitee.getUniqueId(), true));
+        assertEquals(ReferralManager.NOT_FOUND, referrals.setRareExcluded(UUID.randomUUID(), true));
+        assertTrue(referrals.completedInvitees(inviter.getUniqueId()).isEmpty());
+        assertEquals(Claim.TOO_FEW, referrals.claimRare(inviter, 1));
+        assertEquals(Claim.CLAIMED, referrals.claimForInvitee(inviter, invitee.getUniqueId(), 1),
+            "milestones still pay");
+        assertEquals(1, referrals.setRareExcluded(invitee.getUniqueId(), false));
+        assertEquals(Claim.CLAIMED, referrals.claimRare(inviter, 1));
+    }
+
+    @Test
+    void staffUnclaimAndMarkMilestonesOnEitherSide() {
+        TestPlayer inviter = fixture.join("Inviter", "10.0.0.1");
+        TestPlayer invitee = fixture.join("Invitee", "10.0.0.2");
+        linked(invitee, inviter);
+        data(invitee).setMinutes(300);
+        UUID id = invitee.getUniqueId();
+        assertEquals(Claim.CLAIMED, referrals.claimOwn(invitee, 1));
+        assertEquals(Claim.CLAIMED, referrals.claimForInvitee(inviter, id, 1));
+
+        assertEquals(1, referrals.unclaim(id, 1, ReferralManager.Side.NEW));
+        assertEquals(Set.of(), data(invitee).claimed());
+        assertEquals(Set.of(1), data(invitee).inviterClaimed(), "the inviter's claim stays");
+        assertEquals(0, referrals.unclaim(id, 1, ReferralManager.Side.NEW), "nothing left to remove");
+        assertEquals(Claim.CLAIMED, referrals.claimOwn(invitee, 1), "claimable again");
+        assertEquals(2, referrals.unclaim(id, null, ReferralManager.Side.BOTH));
+        assertEquals(ReferralManager.NOT_FOUND, referrals.unclaim(UUID.randomUUID(), null, ReferralManager.Side.BOTH));
+
+        assertEquals(2, referrals.markClaimed(id, 5, ReferralManager.Side.BOTH));
+        assertEquals(Claim.ALREADY_CLAIMED, referrals.claimOwn(invitee, 5));
+        assertEquals(0, referrals.markClaimed(id, 5, ReferralManager.Side.BOTH), "already marked");
+        assertEquals(0, referrals.markClaimed(id, 3, ReferralManager.Side.INVITER), "3h pays only the new player");
+        assertEquals(-1, referrals.markClaimed(id, 7, ReferralManager.Side.BOTH), "no 7h milestone");
+        assertEquals(-1, referrals.markClaimed(UUID.randomUUID(), 1, ReferralManager.Side.BOTH));
+        assertEquals(2, referrals.markClaimed(id, null, ReferralManager.Side.NEW), "1h and 3h");
+        assertEquals(Set.of(1, 3, 5), data(invitee).claimed());
+        assertEquals(1, referrals.markClaimed(id, null, ReferralManager.Side.INVITER), "1h; 5h was marked");
+        assertEquals(Set.of(1, 5), data(invitee).inviterClaimed());
+    }
+
+    @Test
+    void staffUnclaimAndMarkRareStepsAndFreeTiedInvitees() {
+        TestPlayer inviter = fixture.join("Inviter", "10.0.0.1");
+        TestPlayer invitee = fixture.join("Invitee", "10.0.0.2");
+        linked(invitee, inviter);
+        data(invitee).setMinutes(300);
+        UUID id = inviter.getUniqueId();
+        assertEquals(Claim.CLAIMED, referrals.claimRare(inviter, 1));
+        assertEquals(id, data(invitee).rareCountedFor());
+
+        assertEquals(1, referrals.rareUnclaim(id, 1));
+        assertEquals(id, data(invitee).rareCountedFor(), "one step keeps the ties");
+        assertEquals(0, referrals.rareUnclaim(id, 1));
+        assertEquals(Claim.CLAIMED, referrals.claimRare(inviter, 1));
+        assertEquals(2, referrals.rareUnclaim(id, null), "one step and one tie");
+        assertNull(data(invitee).rareCountedFor());
+        assertEquals(ReferralManager.NOT_FOUND, referrals.rareUnclaim(UUID.randomUUID(), null));
+
+        assertEquals(1, referrals.rareMarkClaimed(id, 2));
+        assertEquals(id, data(invitee).rareCountedFor(), "marking ties the invitees it stands on, as a claim does");
+        assertEquals(Claim.ALREADY_CLAIMED, referrals.claimRare(inviter, 2));
+        assertEquals(-1, referrals.rareMarkClaimed(id, 3), "no 3-player step");
+        assertEquals(-1, referrals.rareMarkClaimed(UUID.randomUUID(), 1));
+        assertEquals(1, referrals.rareMarkClaimed(id, null), "1; 2 was marked");
+        assertEquals(Set.of(1, 2), data(inviter).rareClaimed());
+    }
+
+    @Test
+    void staffLinksSkipTheWindowAndConnectionChecksButNotLoops() {
+        TestPlayer wrong = fixture.join("Wrong", "10.0.0.1");
+        TestPlayer right = fixture.join("Right", "10.0.0.2");
+        TestPlayer invitee = fixture.join("Invitee", "10.0.0.2");
+        fixture.advanceDays(60);
+        assertEquals(Link.CLOSED, referrals.link(invitee, right.getUniqueId()));
+        assertEquals(Link.LINKED, referrals.staffLink(invitee.getUniqueId(), right.getUniqueId()),
+            "outside the window and on the same connection");
+        assertEquals(0, data(invitee).linkedAt(), "a staff link doesn't count towards links per day");
+        assertEquals(Link.ALREADY_LINKED, referrals.staffLink(invitee.getUniqueId(), right.getUniqueId()));
+        data(invitee).setMinutes(300);
+        referrals.noteCompletions();
+        assertEquals(right.getUniqueId(), data(invitee).rareReachedWith());
+        assertEquals(Link.LINKED, referrals.staffLink(invitee.getUniqueId(), wrong.getUniqueId()), "re-link");
+        assertEquals(wrong.getUniqueId(), data(invitee).invitedBy());
+        assertEquals(wrong.getUniqueId(), data(invitee).rareReachedWith(), "it moves with the link");
+        assertEquals(Link.SELF, referrals.staffLink(invitee.getUniqueId(), invitee.getUniqueId()));
+        assertEquals(Link.LOOP, referrals.staffLink(wrong.getUniqueId(), invitee.getUniqueId()));
+        assertEquals(Link.UNKNOWN, referrals.staffLink(invitee.getUniqueId(), UUID.randomUUID()));
+        assertEquals(Link.UNKNOWN, referrals.staffLink(UUID.randomUUID(), wrong.getUniqueId()));
+    }
+
+    @Test
+    void aStaffLinkThatCannotBeSavedPutsTheOldOneBack() throws Exception {
+        TestPlayer old = fixture.join("Old", "10.0.0.1");
+        TestPlayer other = fixture.join("Other", "10.0.0.2");
+        TestPlayer invitee = fixture.join("Invitee", "10.0.0.3");
+        linked(invitee, old);
+        data(invitee).setMinutes(300);
+        referrals.noteCompletions();
+        long linkedAt = data(invitee).linkedAt();
+        tmpBlocked(true);
+        assertEquals(Link.FAILED, referrals.staffLink(invitee.getUniqueId(), other.getUniqueId()));
+        tmpBlocked(false);
+        assertEquals(old.getUniqueId(), data(invitee).invitedBy());
+        assertEquals(linkedAt, data(invitee).linkedAt());
+        assertEquals(old.getUniqueId(), data(invitee).rareReachedWith());
+    }
+
+    @Test
+    void setMinutesNotesAReachedGoal() {
+        TestPlayer inviter = fixture.join("Inviter", "10.0.0.1");
+        TestPlayer invitee = fixture.join("Invitee", "10.0.0.2");
+        linked(invitee, inviter);
+        assertEquals(300, referrals.setMinutes(invitee.getUniqueId(), 300));
+        assertEquals(inviter.getUniqueId(), data(invitee).rareReachedWith());
+        assertEquals(400, referrals.setMinutes(invitee.getUniqueId(), 400));
+        assertEquals(299, referrals.setMinutes(invitee.getUniqueId(), 299));
+        assertNull(data(invitee).rareReachedWith(), "taken back below the goal, the note goes too");
+        assertEquals(ReferralManager.NOT_FOUND, referrals.setMinutes(UUID.randomUUID(), 5));
+
+        assertEquals(300, referrals.setMinutes(invitee.getUniqueId(), 300));
+        assertEquals(Claim.CLAIMED, referrals.claimRare(inviter, 1));
+        assertEquals(0, referrals.setMinutes(invitee.getUniqueId(), -5));
+        assertEquals(inviter.getUniqueId(), data(invitee).rareReachedWith(), "a claim already counted it");
+        assertEquals(0, referrals.setMinutes(invitee.getUniqueId(), 0), "not lower than before");
+    }
+
+    @Test
+    void loweringPlaytimeKeepsAnInviteeThatIsStillPastTheGoalItReached() throws Exception {
+        TestPlayer inviter = fixture.join("Inviter", "10.0.0.1");
+        TestPlayer invitee = fixture.join("Invitee", "10.0.0.2");
+        linked(invitee, inviter);
+        referrals.setMinutes(invitee.getUniqueId(), 360);
+        assertEquals(300, data(invitee).rareReachedGoal(), "reached at the 5h goal");
+        fixture.writeReferral(ReferralFixture.CONFIG.replace("""
+              - hours: 5
+            """, """
+              - hours: 9
+                new-player: {items: [{item: DIAMOND}]}
+              - hours: 5
+            """));
+        referrals.reload();
+        assertEquals(330, referrals.setMinutes(invitee.getUniqueId(), 330));
+        assertEquals(inviter.getUniqueId(), data(invitee).rareReachedWith(), "still past the 5h it reached");
+        assertEquals(1, referrals.completedInvitees(inviter.getUniqueId()).size());
+        assertEquals(200, referrals.setMinutes(invitee.getUniqueId(), 200));
+        assertNull(data(invitee).rareReachedWith(), "below the 5h it reached");
+        assertEquals(0, data(invitee).rareReachedGoal());
+    }
+
+    @Test
+    void failedSavesUndoTheNoteUnlinksAndConnectionPairs() throws Exception {
+        TestPlayer inviter = fixture.join("Inviter", "10.0.0.1");
+        TestPlayer invitee = fixture.join("Invitee", "10.0.0.2");
+        TestPlayer fresh = fixture.join("Fresh", "10.0.0.3");
+        linked(invitee, inviter);
+        referrals.setMinutes(invitee.getUniqueId(), 300);
+        tmpBlocked(true);
+        assertEquals(ReferralManager.SAVE_FAILED, referrals.setMinutes(invitee.getUniqueId(), 10));
+        assertEquals(inviter.getUniqueId(), data(invitee).rareReachedWith(), "the cleared note comes back");
+        assertEquals(300, data(invitee).rareReachedGoal());
+        assertEquals(ReferralManager.SAVE_FAILED, referrals.unlink(invitee.getUniqueId()));
+        assertEquals(inviter.getUniqueId(), data(invitee).invitedBy());
+        assertEquals(inviter.getUniqueId(), data(invitee).rareReachedWith());
+        assertEquals(ReferralManager.SAVE_FAILED, referrals.toggleIpPair(inviter.getUniqueId(), invitee.getUniqueId()));
+        assertTrue(data(inviter).ipPartners().isEmpty());
+        assertTrue(data(invitee).ipPartners().isEmpty());
+        assertEquals(Link.FAILED, referrals.staffLink(fresh.getUniqueId(), inviter.getUniqueId()));
+        assertNull(data(fresh).invitedBy(), "an account that had no link keeps none");
+        tmpBlocked(false);
+    }
+
+    @Test
+    void raisingPlaytimeKeepsAnInviteeThatReachedAnOlderGoal() throws Exception {
+        TestPlayer inviter = fixture.join("Inviter", "10.0.0.1");
+        TestPlayer invitee = fixture.join("Invitee", "10.0.0.2");
+        linked(invitee, inviter);
+        referrals.setMinutes(invitee.getUniqueId(), 300);
+        fixture.writeReferral(ReferralFixture.CONFIG.replace("""
+              - hours: 5
+            """, """
+              - hours: 9
+                new-player: {items: [{item: DIAMOND}]}
+              - hours: 5
+            """));
+        referrals.reload();
+        assertEquals(310, referrals.setMinutes(invitee.getUniqueId(), 310));
+        assertEquals(inviter.getUniqueId(), data(invitee).rareReachedWith(), "more time never takes the note back");
+    }
+
+    @Test
+    void staffChangesThatCannotBeSavedAreUndone() throws Exception {
+        TestPlayer inviter = fixture.join("Inviter", "10.0.0.1");
+        TestPlayer invitee = fixture.join("Invitee", "10.0.0.2");
+        linked(invitee, inviter);
+        data(invitee).setMinutes(300);
+        referrals.noteCompletions();
+        assertEquals(Claim.CLAIMED, referrals.claimOwn(invitee, 1));
+        assertEquals(Claim.CLAIMED, referrals.claimRare(inviter, 1));
+        UUID id = invitee.getUniqueId();
+        UUID me = inviter.getUniqueId();
+        TestPlayer other = fixture.join("Other", "10.0.0.3");
+        TestPlayer second = fixture.join("Second", "10.0.0.4");
+        assertEquals(Link.LINKED, referrals.link(second, other.getUniqueId()));
+        data(second).setMinutes(300);
+        tmpBlocked(true);
+        int failed = ReferralManager.SAVE_FAILED;
+        assertEquals(failed, referrals.setHeld(id, true));
+        assertFalse(data(invitee).held());
+        assertEquals(failed, referrals.setRareExcluded(id, true));
+        assertFalse(data(invitee).rareExcluded());
+        assertEquals(failed, referrals.setMinutes(id, 10));
+        assertEquals(300, data(invitee).minutes());
+        assertEquals(me, data(invitee).rareReachedWith());
+        assertEquals(failed, referrals.unclaim(id, null, ReferralManager.Side.BOTH));
+        assertEquals(Set.of(1), data(invitee).claimed());
+        assertEquals(failed, referrals.markClaimed(id, null, ReferralManager.Side.BOTH));
+        assertEquals(Set.of(1), data(invitee).claimed());
+        assertTrue(data(invitee).inviterClaimed().isEmpty());
+        assertEquals(failed, referrals.rareUnclaim(me, null));
+        assertEquals(Set.of(1), data(inviter).rareClaimed());
+        assertEquals(me, data(invitee).rareCountedFor());
+        assertEquals(failed, referrals.rareMarkClaimed(other.getUniqueId(), 1));
+        assertTrue(data(other).rareClaimed().isEmpty());
+        assertNull(data(second).rareCountedFor(), "the tie is undone too");
+        tmpBlocked(false);
+        assertEquals(0, referrals.setHeld(id, false), "nothing changed, nothing saved");
     }
 }

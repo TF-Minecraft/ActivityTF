@@ -634,7 +634,7 @@ public class ActivityManager {
     public static ItemStack resolveRewardItem(String path, boolean tlibs, boolean ia,
                                        Function<String, ItemStack> tlibsItems,
                                        Function<String, ItemStack> iaItems) {
-        if (ItemPath.isPluginPath(path)) {
+        if (ItemPath.isPluginPath(path) || ItemPath.isCookingPath(path)) {
             return tlibs ? tlibsItems.apply(path) : null;
         }
         if (ItemPath.isItemsAdderPath(path)) {

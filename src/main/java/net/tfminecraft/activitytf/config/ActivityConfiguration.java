@@ -886,10 +886,23 @@ public class ActivityConfiguration {
     }
 
     private boolean validItemPath(String value, String at) {
+        if (ItemPath.isCookingPath(value)) {
+            if (ItemPath.cookingPath(value) == null) {
+                log().warning("Malformed item path '" + Utils.safeForLog(value) + "' at " + at
+                    + " - expected c.<category>(type=<food>;...) - ignored.");
+                return false;
+            }
+            pluginPathConfigured = true;
+            if (!pluginEnabled("Cooking")) {
+                log().warning("Cooking item path '" + Utils.safeForLog(value) + "' at " + at
+                    + " but Cooking is not enabled - it hands over nothing.");
+            }
+            return true;
+        }
         if (ItemPath.isUnsupportedPath(value)) {
             log().warning("Unsupported item path '" + Utils.safeForLog(value) + "' at " + at
-                + " - only bare Material names, v.<material>, m.<type>.<id> and ia.<namespace:id>"
-                + " are supported - ignored.");
+                + " - only bare Material names, v.<material>, m.<type>.<id>, ia.<namespace:id> and"
+                + " c.<category>(...) are supported - ignored.");
             return false;
         }
         if (ItemPath.isItemsAdderPath(value)) {
@@ -1139,7 +1152,9 @@ public class ActivityConfiguration {
     }
 
     public static String itemName(String path) {
-        String last = path.substring(Math.max(path.lastIndexOf('.'), path.lastIndexOf(':')) + 1);
+        String type = ItemPath.cookingType(path);
+        String last = type != null ? type
+            : path.substring(Math.max(path.lastIndexOf('.'), path.lastIndexOf(':')) + 1);
         StringBuilder name = new StringBuilder();
         for (String word : last.toLowerCase(Locale.ROOT).split("_")) {
             if (!word.isEmpty()) {
@@ -1505,6 +1520,15 @@ public class ActivityConfiguration {
 
     public boolean itemsAdderUsable() {
         return itemsAdderUsable;
+    }
+
+    // Whether a plugin is on; without a running server (unit tests) it counts as on, so nothing warns.
+    static boolean pluginEnabled(String name) {
+        try {
+            return Bukkit.getPluginManager().isPluginEnabled(name);
+        } catch (RuntimeException e) {
+            return true;
+        }
     }
 
     static String itemPathWarning(boolean configured, boolean usable, String missing) {
