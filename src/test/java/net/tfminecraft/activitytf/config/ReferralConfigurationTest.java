@@ -378,7 +378,9 @@ class ReferralConfigurationTest {
             ignitium += pool.get(0).items().stream().filter(item -> item.path().equals("m.materials.ignitium"))
                 .mapToInt(RewardEntry.Item::amount).sum();
         }
-        assertEquals(64, ignitium, "the inviter's milestones add up to a stack");
+        assertEquals(32, ignitium, "the inviter's milestones add up to half a stack");
+        assertEquals("Steel Hatchet", ActivityConfiguration.itemName(config.pool(act, "pool_ref_tools").get(0).items().get(1)));
+        assertEquals("Steel Pickaxe", ActivityConfiguration.itemName(config.pool(act, "pool_ref_tools").get(0).items().get(0)));
         assertEquals("c.dry_ration(type=dry_ration;quality=1)",
             config.pool(act, "pool_ref_tools").get(0).items().get(4).path());
         assertTrue(config.ignoredWorld("character_selection"));

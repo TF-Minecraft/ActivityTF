@@ -78,7 +78,9 @@ playtime:
 #               week) - so what a pool hands over follows the act.
 #               Reward items can be bare Material names, v.<material>,
 #               m.<type>.<id> (MMOItems), ia.<namespace:id> (ItemsAdder) or
-#               c.<category>(type=<food>;quality=<n>) (Cooking food).
+#               c.<category>(type=<food>;quality=<n>) (Cooking food). An
+#               item can set 'name:' for what the menu calls it, when the
+#               name built from its path is wrong (steel_axe is a Hatchet).
 milestones:
   - hours: 1
     new-player: {display: "Steel tools and rations", icon: m.tools.steel_pickaxe, pool: pool_ref_tools}
@@ -134,11 +136,10 @@ pools:
 #   display     the act's name in the menu
 #   pools       this act's loot, by the pool names the milestones and the
 #               rare track use
-# Act I: the inviter's milestones add up to 64 Ignitium per invited player,
-# and so do the new player's (plus four steel tools, about 16 Ignitium more).
-# Tin and fragments stay 1:1 and about 40 times rarer than Ignitium, as in
-# the Act System's Activity trickle: 2 + 2 for the new player at 24h, and
-# 16 + 16 over the whole rare track against 640 Ignitium for 10 invitees.
+# Act I: the new player's milestones add up to 64 Ignitium (plus four steel
+# tools), and the inviter's to half that, 32 per invited player. Tin and
+# fragments stay 1:1: 2 + 2 for the new player at 24h, and 16 + 16 over the
+# whole rare track against 320 Ignitium for 10 invitees.
 acts:
   act_1:
     display: "Act I"
@@ -149,6 +150,7 @@ acts:
           items:
             - item: m.tools.steel_pickaxe
             - item: m.tools.steel_axe
+              name: Steel Hatchet
             - item: m.tools.steel_shovel
             - item: m.tools.steel_hoe
             - item: c.dry_ration(type=dry_ration;quality=1)
@@ -179,20 +181,20 @@ acts:
             - item: m.currency.gold_coin
               amount: 25
       pool_ref_small:
-        - display: "#50d990x12 #7f7d80Ignitium"
+        - display: "#50d990x6 #7f7d80Ignitium"
           items:
             - item: m.materials.ignitium
-              amount: 12
+              amount: 6
       pool_ref_medium:
-        - display: "#50d990x20 #7f7d80Ignitium"
+        - display: "#50d990x10 #7f7d80Ignitium"
           items:
             - item: m.materials.ignitium
-              amount: 20
+              amount: 10
       pool_ref_large:
-        - display: "#50d990x32 #7f7d80Ignitium"
+        - display: "#50d990x16 #7f7d80Ignitium"
           items:
             - item: m.materials.ignitium
-              amount: 32
+              amount: 16
       pool_ref_rare_2:
         - display: "#50d990x1 #3b4e60Tin #7f7d80+ #50d990x1 #3b4e60Abyssalite Fragment"
           items:

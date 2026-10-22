@@ -880,7 +880,9 @@ public class ActivityConfiguration {
             if (!validItemPath(value, at)) {
                 continue;
             }
-            items.add(new RewardEntry.Item(value, rewardAmount(map.get("amount"), at)));
+            Object name = map.get("name");
+            String label = name == null || String.valueOf(name).isBlank() ? null : String.valueOf(name).strip();
+            items.add(new RewardEntry.Item(value, rewardAmount(map.get("amount"), at), label));
         }
         return items;
     }
@@ -1149,6 +1151,11 @@ public class ActivityConfiguration {
     static boolean poolNeededButEmpty(List<RewardEntry> pool, Map<Integer, RewardEntry> drops,
                                       List<Integer> milestones) {
         return pool.isEmpty() && ActivityManager.neededPools(milestones, drops).contains(DEFAULT_POOL);
+    }
+
+    /** The item's configured name, or one built from its path. */
+    public static String itemName(RewardEntry.Item item) {
+        return item.name() != null ? item.name() : itemName(item.path());
     }
 
     public static String itemName(String path) {

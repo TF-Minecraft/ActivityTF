@@ -794,6 +794,8 @@ rewards:
   #       items:
   #         - item: NETHERITE_INGOT
   #           amount: 1
+  # An item may also set 'name:', what menus call it instead of a name
+  # built from its path.
   # Direct rewards.pool_<name> lists are also supported. Nested pools win
   # if both locations define the same name. Names are case-insensitive.
   # Missing/empty pools pay nothing and leave the claim available.

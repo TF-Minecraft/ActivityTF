@@ -4,7 +4,11 @@ import java.util.List;
 
 public record RewardEntry(int weight, String display, List<String> commands, List<Item> items) {
 
-    public record Item(String path, int amount) {
+    /** One handed-over item; name, when set, is what menus call it instead of a name built from the path. */
+    public record Item(String path, int amount, String name) {
+        public Item(String path, int amount) {
+            this(path, amount, null);
+        }
     }
 
     public static int totalWeight(List<RewardEntry> pool) {

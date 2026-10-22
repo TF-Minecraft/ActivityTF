@@ -486,7 +486,7 @@ public class ReferralGui implements Listener {
     private void contents(List<String> lore, RewardEntry entry) {
         lore.add(messages().get("referral.gui.contents"));
         for (RewardEntry.Item item : entry.items()) {
-            lore.add(Utils.colorize("#50d990x" + item.amount() + " &f" + ActivityConfiguration.itemName(item.path())));
+            lore.add(Utils.colorize("#50d990x" + item.amount() + " &f" + ActivityConfiguration.itemName(item)));
         }
         if (!entry.commands().isEmpty() && !entry.display().isBlank()) {
             lore.add(Utils.colorize("&f" + entry.display()));

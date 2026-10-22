@@ -315,7 +315,7 @@ public class ReferralConfiguration {
 
     private static String fixedName(RewardEntry fixed) {
         RewardEntry.Item first = fixed.items().isEmpty() ? null : fixed.items().get(0);
-        return first == null ? "Reward" : ActivityConfiguration.itemName(first.path());
+        return first == null ? "Reward" : ActivityConfiguration.itemName(first);
     }
 
     /**
