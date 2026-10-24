@@ -3,7 +3,9 @@ package net.tfminecraft.activitytf;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.java.JavaPlugin;
 import net.tfminecraft.activitytf.commands.ActivityCommand;
+import net.tfminecraft.activitytf.commands.ReferralCommand;
 import net.tfminecraft.activitytf.gui.ActivityGui;
+import net.tfminecraft.activitytf.gui.ReferralGui;
 import net.tfminecraft.activitytf.hooks.PlaceholderHook;
 import net.tfminecraft.activitytf.listeners.AdvancedCraftListener;
 import net.tfminecraft.activitytf.listeners.ArchaeologyListener;
@@ -22,6 +24,7 @@ import net.tfminecraft.activitytf.listeners.MarketSaleListener;
 import net.tfminecraft.activitytf.listeners.MmoItemsStationListener;
 import net.tfminecraft.activitytf.listeners.ProfessionUpgradeListener;
 import net.tfminecraft.activitytf.listeners.ProfessionXpListener;
+import net.tfminecraft.activitytf.listeners.ReferralListener;
 import net.tfminecraft.activitytf.listeners.VehicleBuildListener;
 import net.tfminecraft.activitytf.listeners.VoteListener;
 import net.tfminecraft.activitytf.managers.ActivityManager;
@@ -38,6 +41,8 @@ public class ActivityPlugin extends JavaPlugin {
         manager.initialize();
 
         ActivityGui gui = new ActivityGui(manager);
+        ReferralGui referralGui = new ReferralGui(manager, gui::open);
+        gui.setReferralOpener(referralGui::open);
 
         ActivityCommand command = new ActivityCommand(manager, gui);
         command.loadKnownPlayers();
@@ -48,6 +53,12 @@ public class ActivityPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new JoinListener(manager), this);
         getServer().getPluginManager().registerEvents(new CraftListener(manager), this);
         getServer().getPluginManager().registerEvents(gui, this);
+
+        ReferralCommand referralCommand = new ReferralCommand(manager, referralGui);
+        getCommand("referral").setExecutor(referralCommand);
+        getCommand("referral").setTabCompleter(referralCommand);
+        getServer().getPluginManager().registerEvents(new ReferralListener(manager.referrals()), this);
+        getServer().getPluginManager().registerEvents(referralGui, this);
 
         // Paper can enable soft dependencies after this plugin when their own dependencies form
         // a cycle, so re-check them once every plugin has finished enabling.

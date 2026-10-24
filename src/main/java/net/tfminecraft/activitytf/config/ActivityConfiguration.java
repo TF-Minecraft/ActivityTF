@@ -809,43 +809,49 @@ public class ActivityConfiguration {
         return Map.copyOf(pools);
     }
 
-    private List<RewardEntry> loadRewardPool(ConfigurationSection config, String path) {
+    List<RewardEntry> loadRewardPool(ConfigurationSection config, String path) {
         List<RewardEntry> pool = new ArrayList<>();
         if (!set(config, path)) {
             return List.of();
         }
         int index = 0;
         for (Map<?, ?> entry : config.getMapList(path)) {
-            String where = path + "[" + index++ + "]";
-
-            int weight = entry.get("weight") instanceof Number number ? number.intValue() : 1;
-            if (weight <= 0) {
-                log().warning(where + " has weight " + weight + " - a weight must be above 0,"
-                    + " so this reward is skipped and can never be drawn.");
-                continue;
+            RewardEntry reward = rewardEntry(entry, path + "[" + index++ + "]");
+            if (reward != null) {
+                pool.add(reward);
             }
-
-            List<String> commands = new ArrayList<>();
-            if (entry.get("commands") instanceof List<?> raw) {
-                for (Object command : raw) {
-                    if (command != null) {
-                        commands.add(String.valueOf(command));
-                    }
-                }
-            }
-            List<RewardEntry.Item> items = loadRewardItems(entry.get("items"), where);
-
-            if (commands.isEmpty() && items.isEmpty()) {
-                log().warning(where + " has no commands and no items - skipped, since drawing it"
-                    + " would pay the player nothing.");
-                continue;
-            }
-
-            Object display = entry.get("display");
-            pool.add(new RewardEntry(Math.min(weight, 1_000_000),
-                display == null ? "" : String.valueOf(display), List.copyOf(commands), List.copyOf(items)));
         }
         return List.copyOf(pool);
+    }
+
+    // One pool-style entry (weight, display, items, commands); null, with a warning, when it pays nothing.
+    RewardEntry rewardEntry(Map<?, ?> entry, String where) {
+        int weight = entry.get("weight") instanceof Number number ? number.intValue() : 1;
+        if (weight <= 0) {
+            log().warning(where + " has weight " + weight + " - a weight must be above 0,"
+                + " so this reward is skipped and can never be drawn.");
+            return null;
+        }
+
+        List<String> commands = new ArrayList<>();
+        if (entry.get("commands") instanceof List<?> raw) {
+            for (Object command : raw) {
+                if (command != null) {
+                    commands.add(String.valueOf(command));
+                }
+            }
+        }
+        List<RewardEntry.Item> items = loadRewardItems(entry.get("items"), where);
+
+        if (commands.isEmpty() && items.isEmpty()) {
+            log().warning(where + " has no commands and no items - skipped, since drawing it"
+                + " would pay the player nothing.");
+            return null;
+        }
+
+        Object display = entry.get("display");
+        return new RewardEntry(Math.min(weight, 1_000_000),
+            display == null ? "" : String.valueOf(display), List.copyOf(commands), List.copyOf(items));
     }
 
     private List<RewardEntry.Item> loadRewardItems(Object raw, String where) {
@@ -874,16 +880,31 @@ public class ActivityConfiguration {
             if (!validItemPath(value, at)) {
                 continue;
             }
-            items.add(new RewardEntry.Item(value, rewardAmount(map.get("amount"), at)));
+            Object name = map.get("name");
+            String label = name == null || String.valueOf(name).isBlank() ? null : String.valueOf(name).strip();
+            items.add(new RewardEntry.Item(value, rewardAmount(map.get("amount"), at), label));
         }
         return items;
     }
 
     private boolean validItemPath(String value, String at) {
+        if (ItemPath.isCookingPath(value)) {
+            if (ItemPath.cookingPath(value) == null) {
+                log().warning("Malformed item path '" + Utils.safeForLog(value) + "' at " + at
+                    + " - expected c.<category>(type=<food>;...) - ignored.");
+                return false;
+            }
+            pluginPathConfigured = true;
+            if (!pluginEnabled("Cooking")) {
+                log().warning("Cooking item path '" + Utils.safeForLog(value) + "' at " + at
+                    + " but Cooking is not enabled - it hands over nothing.");
+            }
+            return true;
+        }
         if (ItemPath.isUnsupportedPath(value)) {
             log().warning("Unsupported item path '" + Utils.safeForLog(value) + "' at " + at
-                + " - only bare Material names, v.<material>, m.<type>.<id> and ia.<namespace:id>"
-                + " are supported - ignored.");
+                + " - only bare Material names, v.<material>, m.<type>.<id>, ia.<namespace:id> and"
+                + " c.<category>(...) are supported - ignored.");
             return false;
         }
         if (ItemPath.isItemsAdderPath(value)) {
@@ -1132,8 +1153,15 @@ public class ActivityConfiguration {
         return pool.isEmpty() && ActivityManager.neededPools(milestones, drops).contains(DEFAULT_POOL);
     }
 
-    static String itemName(String path) {
-        String last = path.substring(Math.max(path.lastIndexOf('.'), path.lastIndexOf(':')) + 1);
+    /** The item's configured name, or one built from its path. */
+    public static String itemName(RewardEntry.Item item) {
+        return item.name() != null ? item.name() : itemName(item.path());
+    }
+
+    public static String itemName(String path) {
+        String type = ItemPath.cookingType(path);
+        String last = type != null ? type
+            : path.substring(Math.max(path.lastIndexOf('.'), path.lastIndexOf(':')) + 1);
         StringBuilder name = new StringBuilder();
         for (String word : last.toLowerCase(Locale.ROOT).split("_")) {
             if (!word.isEmpty()) {
@@ -1499,6 +1527,15 @@ public class ActivityConfiguration {
 
     public boolean itemsAdderUsable() {
         return itemsAdderUsable;
+    }
+
+    // Whether a plugin is on; without a running server (unit tests) it counts as on, so nothing warns.
+    static boolean pluginEnabled(String name) {
+        try {
+            return Bukkit.getPluginManager().isPluginEnabled(name);
+        } catch (RuntimeException e) {
+            return true;
+        }
     }
 
     static String itemPathWarning(boolean configured, boolean usable, String missing) {

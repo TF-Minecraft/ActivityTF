@@ -260,6 +260,19 @@ class ActivityConfigurationRewardsTest {
     }
 
     @Test
+    void aCookingPathIsKeptAsARewardItemAndAMalformedOneIsNamed() {
+        List<RewardEntry> pool = loadRewardPool("rewards:\n  pool:\n    - weight: 1\n      items:\n"
+            + "        - item: 'c.dry_ration(type=dry_ration;quality=1)'\n"
+            + "          amount: 64\n"
+            + "        - item: 'c.dry_ration'\n");
+
+        assertEquals(List.of(new RewardEntry.Item("c.dry_ration(type=dry_ration;quality=1)", 64)), pool.get(0).items());
+        assertTrue(loggedContains("Malformed item path 'c.dry_ration' at rewards.pool[0].items[1]"));
+        assertFalse(loggedContains("Unsupported item path"));
+        assertEquals("Dry Ration", ActivityConfiguration.itemName("c.dry_ration(type=dry_ration;quality=1)"));
+    }
+
+    @Test
     void anItemsAdderPathIsKeptAsARewardItem() {
         List<RewardEntry> pool = loadRewardPool("rewards:\n  pool:\n    - weight: 1\n      items:\n"
             + "        - item: 'ia.tfmc:saucepan'\n"

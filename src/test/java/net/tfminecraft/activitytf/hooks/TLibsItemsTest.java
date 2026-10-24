@@ -190,7 +190,9 @@ class TLibsItemsTest {
             org.mockbukkit.mockbukkit.MockBukkit.mock();
             try (var api=org.mockito.Mockito.mockStatic(net.tfminecraft.tlibs.TLibs.class,org.mockito.Mockito.RETURNS_DEEP_STUBS);
              var configs=org.mockito.Mockito.mockConstruction(net.tfminecraft.activitytf.config.ActivityConfiguration.class);
-             var stores=org.mockito.Mockito.mockConstruction(net.tfminecraft.activitytf.store.PlayerStore.class)) {
+             var stores=org.mockito.Mockito.mockConstruction(net.tfminecraft.activitytf.store.PlayerStore.class);
+             var referralConfigs=org.mockito.Mockito.mockConstruction(net.tfminecraft.activitytf.config.ReferralConfiguration.class);
+             var referralStores=org.mockito.Mockito.mockConstruction(net.tfminecraft.activitytf.store.ReferralStore.class)) {
             org.mockito.Mockito.when(net.tfminecraft.tlibs.TLibs.getItemAPI().getCreator().getItemFromPath(path)).thenAnswer(call->{
                 if(ready.get()) return new org.bukkit.inventory.ItemStack(Material.DIAMOND);
                 if(failure.equals("exception")) throw new IllegalStateException("provider not ready");

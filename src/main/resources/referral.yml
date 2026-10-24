@@ -1,0 +1,236 @@
+# Referrals: /referral (also a button in /activity).
+#
+# A new player opens /referral, clicks "Who invited you?" and picks an online
+# player or types a name (/referral invitedby <name>), then confirms. That is
+# one link per account, and it can never be changed by the player (staff can
+# undo it with /referral unlink <player>). Both players then claim rewards from
+# the same menu as the NEW player's counted playtime passes each milestone.
+#
+# /activity reload reloads this file too.
+
+# Off = nobody can link or claim, and no playtime is counted. The kill switch.
+enabled: true
+
+season:
+  # When the season started, in server time: 2026-10-01 or 2026-10-01T06:10.
+  # Playtime only counts from here on. Changing it from one date to another
+  # starts a new season: referrals.yml is moved aside
+  # (referrals-<old start>-<time>.yml) and every link and counted minute
+  # starts again from nothing. Setting it for the first time, or clearing it,
+  # keeps what was counted, and a date that does not parse keeps the old one.
+  # Empty = no season window, so only accounts in their first
+  # link.new-account-days can link.
+  start: ""
+  # For this many days after season.start, any account can link - and its
+  # playtime since the season started already counts towards the rewards.
+  open-days: 14
+
+link:
+  # After the opening days, only accounts whose first join on this server was
+  # less than this many days ago can link.
+  new-account-days: 7
+  # Refuse a link when the two accounts have joined from the same connection
+  # this season (last 16 connections per account, stored as salted hashes).
+  # Claims are held for the same reason if they share one later on. Staff
+  # can allow one pair that really shares a house with
+  # /referral allowip <player> <player> (that pair only, not their alts).
+  same-ip-check: true
+  # Most players one account can have linked to it this season; 0 = no limit.
+  # The rare track still ends at its last step however many are linked.
+  max-invitees: 0
+  # Most new links one inviter can receive in 24 hours; 0 = no limit. Stops
+  # one account collecting a burst of throwaway accounts in an afternoon.
+  max-links-per-day: 3
+
+playtime:
+  # A minute counts only when the player has done something in the last
+  # afk-minutes: moved at least move-blocks (1 or more), chatted, used a real
+  # command, or broken or placed a block. Joining, turning the camera,
+  # swinging or clicking alone does not count, so a mouse jiggler, an
+  # autoclicker or a reconnect loop earns nothing. Being carried by water or
+  # pistons does look like walking.
+  afk-minutes: 5
+  move-blocks: 3
+  # Worlds where nothing counts and nothing can be claimed (rewards go to
+  # the character being played, not to the character-selection room).
+  ignored-worlds: [character_selection]
+
+# The timed milestones, the same in every act: the new player's counted
+# playtime each one needs. Add, remove or change as many as you like (the
+# menu shows seven at a time and scrolls past that). Each is claimed once
+# ever (per season) by the new player, and once per invited player by their
+# inviter; claiming it in one act means it is not paid again in the next.
+# Claims are remembered by hours, so don't change a milestone's hours during
+# a season: a changed one is new, and everyone who claimed the old one could
+# claim it again. The last milestone (the most hours) is also the goal of the
+# inviter's rare track below, so adding a later milestone mid-season moves
+# that goal too - but only for invited players who haven't reached the old
+# goal yet: one that already reached it keeps counting.
+#   hours       the new player's counted playtime it needs (1 to 10000)
+#   new-player  what the invited player gets; inviter: what the inviter gets.
+#               Either one is optional. Each is a pool name (one draw), or a
+#               block with display (the name in the menu), icon (optional,
+#               the menu item) and either 'pool: <name>' or a fixed reward:
+#               items and/or commands as in a pool entry (%player% / %uuid%
+#               work in commands). A pool is looked up in the act in use first
+#               (acts.<act>.pools), then in the shared pools below, then in
+#               the activity rewards pools (the ones locked for this activity
+#               week) - so what a pool hands over follows the act.
+#               Reward items can be bare Material names, v.<material>,
+#               m.<type>.<id> (MMOItems), ia.<namespace:id> (ItemsAdder) or
+#               c.<category>(type=<food>;quality=<n>) (Cooking food). An
+#               item can set 'name:' for what the menu calls it, when the
+#               name built from its path is wrong (steel_axe is a Hatchet).
+milestones:
+  - hours: 1
+    new-player: {display: "Steel tools, rations and denars", icon: m.tools.steel_pickaxe, pool: pool_ref_tools}
+    inviter: {display: "Gold Denars", icon: m.currency.gold_coin, pool: pool_ref_coin}
+  - hours: 4
+    new-player: {display: "Act materials and denars (small)", icon: m.materials.ignitium, pool: pool_ref_new_small}
+    inviter: {display: "Act materials (small)", icon: m.materials.ignitium, pool: pool_ref_small}
+  - hours: 12
+    new-player: {display: "Act materials and denars (medium)", icon: m.materials.ignitium, pool: pool_ref_new_medium}
+    inviter: {display: "Act materials (medium)", icon: m.materials.ignitium, pool: pool_ref_medium}
+  - hours: 24
+    new-player: {display: "Act materials and denars (large)", icon: m.materials.raw_tin, pool: pool_ref_new_large}
+    inviter: {display: "Act materials and denars (large)", icon: m.materials.ignitium, pool: pool_ref_large}
+
+# The inviter's rare track. Every player you invited who reaches the last
+# milestone above (24h of counted playtime) moves you one step along it.
+# Players who share a connection with you don't count, and once you claim a
+# step with a player they count for your track only (staff re-linking them
+# doesn't count them again for someone else). Each step is claimed once
+# per season, by the inviter only, and is remembered by its player count -
+# don't change 'players' during a season. The track ends at its last step:
+# inviting more players after that pays their milestones, not more steps.
+# Up to 28 steps; a step above link.max-invitees can never be reached.
+#   players  how many of your invited players must have reached it (1 to 1000)
+#   reward   the same as a milestone reward: a pool name, or a block with
+#            display / icon and either 'pool: <name>' or fixed items/commands.
+#            A pool with one entry hands over exactly those items (and the
+#            menu lists them), and like every pool it can differ per act;
+#            fixed items are the same in every act.
+rare-track:
+  - players: 2
+    reward: {display: "Rare act materials I", icon: m.materials.abyssalite_fragment, pool: pool_ref_rare_2}
+  - players: 4
+    reward: {display: "Rare act materials II", icon: m.materials.abyssalite_fragment, pool: pool_ref_rare_4}
+  - players: 6
+    reward: {display: "Rare act materials III", icon: m.materials.abyssalite_fragment, pool: pool_ref_rare_6}
+  - players: 8
+    reward: {display: "Rare act materials IV", icon: m.materials.abyssalite_fragment, pool: pool_ref_rare_8}
+  - players: 10
+    reward: {display: "Rare act materials V", icon: m.materials.abyssalite_fragment, pool: pool_ref_rare_10}
+
+# Pools every act can use, in the same format as the activity rewards.pools.
+# An act's own pool of the same name wins.
+pools:
+  pool_ref_coin:
+    - display: "#50d990x5 #e6ca40Gold Denar"
+      items:
+        - item: m.currency.gold_coin
+          amount: 5
+
+# The acts. The act in use is the one with the latest 'starts' that is not in
+# the future, so the loot changes by itself on the day an act starts.
+#   display     the act's name in the menu
+#   pools       this act's loot, by the pool names the milestones and the
+#               rare track use
+# Act I: the new player's milestones add up to 48 Ignitium (plus four steel
+# tools), and the inviter's to half that, 24 per invited player. Tin and
+# fragments stay 1:1: 2 + 2 for the new player at 24h, and 8 + 8 over the
+# whole rare track against 240 Ignitium for 10 invitees (about 30:1).
+acts:
+  act_1:
+    display: "Act I"
+    starts: "2026-10-10T06:00"
+    pools:
+      pool_ref_tools:
+        - display: "#7f7d80Steel Pickaxe, Hatchet, Shovel and Hoe #7f7d80+ #50d990x64 #b8906eDry Ration #7f7d80+ #50d990x10 #e6ca40Gold Denar"
+          items:
+            - item: m.tools.steel_pickaxe
+            - item: m.tools.steel_axe
+              name: Steel Hatchet
+            - item: m.tools.steel_shovel
+            - item: m.tools.steel_hoe
+            - item: c.dry_ration(type=dry_ration;quality=1)
+              amount: 64
+            - item: m.currency.gold_coin
+              amount: 10
+      pool_ref_new_small:
+        - display: "#50d990x8 #7f7d80Ignitium #7f7d80+ #50d990x20 #e6ca40Gold Denar"
+          items:
+            - item: m.materials.ignitium
+              amount: 8
+            - item: m.currency.gold_coin
+              amount: 20
+      pool_ref_new_medium:
+        - display: "#50d990x16 #7f7d80Ignitium #7f7d80+ #50d990x30 #e6ca40Gold Denar"
+          items:
+            - item: m.materials.ignitium
+              amount: 16
+            - item: m.currency.gold_coin
+              amount: 30
+      pool_ref_new_large:
+        - display: "#50d990x24 #7f7d80Ignitium #7f7d80+ #50d990x2 #3b4e60Tin #7f7d80+ #50d990x2 #3b4e60Abyssalite Fragment #7f7d80+ #50d990x40 #e6ca40Gold Denar"
+          items:
+            - item: m.materials.ignitium
+              amount: 24
+            - item: m.materials.raw_tin
+              amount: 2
+            - item: m.materials.abyssalite_fragment
+              amount: 2
+            - item: m.currency.gold_coin
+              amount: 40
+      pool_ref_small:
+        - display: "#50d990x4 #7f7d80Ignitium"
+          items:
+            - item: m.materials.ignitium
+              amount: 4
+      pool_ref_medium:
+        - display: "#50d990x8 #7f7d80Ignitium"
+          items:
+            - item: m.materials.ignitium
+              amount: 8
+      pool_ref_large:
+        - display: "#50d990x12 #7f7d80Ignitium #7f7d80+ #50d990x20 #e6ca40Gold Denar"
+          items:
+            - item: m.materials.ignitium
+              amount: 12
+            - item: m.currency.gold_coin
+              amount: 20
+      pool_ref_rare_2:
+        - display: "#50d990x1 #3b4e60Tin #7f7d80+ #50d990x1 #3b4e60Abyssalite Fragment"
+          items:
+            - item: m.materials.raw_tin
+              amount: 1
+            - item: m.materials.abyssalite_fragment
+              amount: 1
+      pool_ref_rare_4:
+        - display: "#50d990x1 #3b4e60Tin #7f7d80+ #50d990x1 #3b4e60Abyssalite Fragment"
+          items:
+            - item: m.materials.raw_tin
+              amount: 1
+            - item: m.materials.abyssalite_fragment
+              amount: 1
+      pool_ref_rare_6:
+        - display: "#50d990x2 #3b4e60Tin #7f7d80+ #50d990x2 #3b4e60Abyssalite Fragment"
+          items:
+            - item: m.materials.raw_tin
+              amount: 2
+            - item: m.materials.abyssalite_fragment
+              amount: 2
+      pool_ref_rare_8:
+        - display: "#50d990x2 #3b4e60Tin #7f7d80+ #50d990x2 #3b4e60Abyssalite Fragment"
+          items:
+            - item: m.materials.raw_tin
+              amount: 2
+            - item: m.materials.abyssalite_fragment
+              amount: 2
+      pool_ref_rare_10:
+        - display: "#50d990x2 #3b4e60Tin #7f7d80+ #50d990x2 #3b4e60Abyssalite Fragment"
+          items:
+            - item: m.materials.raw_tin
+              amount: 2
+            - item: m.materials.abyssalite_fragment
+              amount: 2

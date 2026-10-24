@@ -10,6 +10,8 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 
 public class Messages {
 
@@ -58,6 +60,20 @@ public class Messages {
         }
 
         return message;
+    }
+
+    /** A list message, one coloured line per entry, with the same placeholders as {@link #get}. */
+    public List<String> lines(String path, Object... placeholderPairs) {
+        List<String> lines = new ArrayList<>();
+        for (String line : messages.getStringList(path)) {
+            String message = Utils.colorize(line);
+            for (int index = 0; index + 1 < placeholderPairs.length; index += 2) {
+                message = message.replace(String.valueOf(placeholderPairs[index]),
+                    String.valueOf(placeholderPairs[index + 1]));
+            }
+            lines.add(message);
+        }
+        return lines;
     }
 
     public String raw(String path) {

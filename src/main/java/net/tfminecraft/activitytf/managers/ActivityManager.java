@@ -53,6 +53,7 @@ public class ActivityManager {
     private final JavaPlugin plugin;
     private final ActivityConfiguration config;
     private final PlayerStore store;
+    private final ReferralManager referrals;
 
     private final Set<String> warnedStoreNotLoaded = new HashSet<>();
 
@@ -80,6 +81,7 @@ public class ActivityManager {
         this.plugin = plugin;
         this.config = new ActivityConfiguration(plugin);
         this.store = new PlayerStore(plugin, config);
+        this.referrals = new ReferralManager(plugin, this);
     }
 
     public static ActivityManager getInstance(JavaPlugin plugin) {
@@ -106,6 +108,7 @@ public class ActivityManager {
         store.load();
         store.startAutoSave();
         startPlaytime();
+        referrals.initialize();
     }
 
     private void startPlaytime() {
@@ -134,6 +137,7 @@ public class ActivityManager {
             playtime = null;
         }
         store.shutdown();
+        referrals.shutdown();
         instance = null;
     }
 
@@ -143,6 +147,10 @@ public class ActivityManager {
 
     public PlayerStore getStore() {
         return store;
+    }
+
+    public ReferralManager referrals() {
+        return referrals;
     }
 
     public Logger logger() {
@@ -575,7 +583,7 @@ public class ActivityManager {
         return null;
     }
 
-    private static RewardEntry draw(List<RewardEntry> pool) {
+    static RewardEntry draw(List<RewardEntry> pool) {
         int total = RewardEntry.totalWeight(pool);
         if (total <= 0) {
             return null;
@@ -605,7 +613,7 @@ public class ActivityManager {
         return runnable;
     }
 
-    private boolean dispatchRewards(Player player, RewardEntry entry, String at, int multiplier) {
+    boolean dispatchRewards(Player player, RewardEntry entry, String at, int multiplier) {
         return dispatchRewards(
             () -> giveItems(player, entry, multiplier, at,
                 this::resolveRewardItem, plugin.getLogger()),
@@ -623,10 +631,10 @@ public class ActivityManager {
             p -> TLibsItems.item(p), id -> ItemsAdderItems.item(id));
     }
 
-    static ItemStack resolveRewardItem(String path, boolean tlibs, boolean ia,
+    public static ItemStack resolveRewardItem(String path, boolean tlibs, boolean ia,
                                        Function<String, ItemStack> tlibsItems,
                                        Function<String, ItemStack> iaItems) {
-        if (ItemPath.isPluginPath(path)) {
+        if (ItemPath.isPluginPath(path) || ItemPath.isCookingPath(path)) {
             return tlibs ? tlibsItems.apply(path) : null;
         }
         if (ItemPath.isItemsAdderPath(path)) {
@@ -637,7 +645,7 @@ public class ActivityManager {
         return material == null ? null : new ItemStack(material);
     }
 
-    static boolean usable(ItemStack stack) {
+    public static boolean usable(ItemStack stack) {
         return stack != null && stack.getType() != Material.AIR && isItem(stack);
     }
 
@@ -883,6 +891,7 @@ public class ActivityManager {
         ItemsAdderItems.reset();
         TLibsItems.reset();
         reportedBrokenCommands.clear();
+        referrals.reload();
     }
 
     private void playSound(Player player, String soundKey) {

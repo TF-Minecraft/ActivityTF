@@ -10,6 +10,10 @@ commands:
   activity:
     description: Open the weekly activity bar, or run admin subcommands
     usage: /activity [reload|rewards [apply]|check <player>|reset <player>|givereroll <player>|add <player> <activity> <count> [--force]|addpoints <player> <points>]
+  referral:
+    description: Open the referral menu, pick who invited you, or run referral staff subcommands
+    usage: /referral [invitedby <name>|help|info|link|unlink|addtime|settime|unclaim|markclaimed|rare|hold|release|allowip]
+    aliases: [referrals]
 permissions:
   activity.use:
     description: Open the weekly activity GUI
@@ -20,8 +24,15 @@ permissions:
   activity.check:
     description: Inspect another player's activity state
     default: op
+  activity.referral:
+    description: Open the referral menu and claim referral rewards
+    default: true
+  activity.referral.admin:
+    description: Referral staff commands - inspect, link and unlink, adjust playtime and claims, hold accounts, rare-track exclusions, same-connection exceptions
+    default: op
   activity.admin:
     description: Access to activity admin subcommands
     default: op
     children:
       activity.check: true
+      activity.referral.admin: true

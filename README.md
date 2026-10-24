@@ -15,6 +15,7 @@ Tasks only start earning activity credit once revealed, giving players a reason 
 - **Activities across the server** — supported integrations track actions such as voting, cooking, archaeology, instrument playing, market sales, and vehicle building.
 - **Varied progression limits** — daily caps and a voting share of the daily allowance shape how points are earned.
 - **Task rerolls** — eligible players can redraw their daily selection within the server's limits.
+- **Referrals** — a new player names who invited them (`/referral`); both claim rewards as the new player's AFK-free playtime passes each milestone, and the inviter earns a rare track for invitees who reach the last one. Staff can link, adjust, hold or exclude accounts.
 
 Available activities depend on the gameplay plugins and activity definitions in use.
 
