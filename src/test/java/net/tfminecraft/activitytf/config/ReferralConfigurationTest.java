@@ -378,7 +378,14 @@ class ReferralConfigurationTest {
             ignitium += pool.get(0).items().stream().filter(item -> item.path().equals("m.materials.ignitium"))
                 .mapToInt(RewardEntry.Item::amount).sum();
         }
-        assertEquals(32, ignitium, "the inviter's milestones add up to half a stack");
+        assertEquals(24, ignitium, "the inviter's milestones add up to 24");
+        int newIgnitium = 0;
+        for (Milestone milestone : config.milestones()) {
+            List<RewardEntry> pool = config.pool(act, milestone.newPlayer().pool());
+            newIgnitium += pool.get(0).items().stream().filter(item -> item.path().equals("m.materials.ignitium"))
+                .mapToInt(RewardEntry.Item::amount).sum();
+        }
+        assertEquals(48, newIgnitium, "the new player's milestones add up to 48");
         assertEquals("Steel Hatchet", ActivityConfiguration.itemName(config.pool(act, "pool_ref_tools").get(0).items().get(1)));
         assertEquals("Steel Pickaxe", ActivityConfiguration.itemName(config.pool(act, "pool_ref_tools").get(0).items().get(0)));
         assertEquals("c.dry_ration(type=dry_ration;quality=1)",

@@ -136,11 +136,10 @@ pools:
 #   display     the act's name in the menu
 #   pools       this act's loot, by the pool names the milestones and the
 #               rare track use
-# Act I: the new player's milestones add up to 64 Ignitium (plus four steel
-# tools), and the inviter's to half that, 32 per invited player. Tin and
-# fragments stay 1:1 and about 40 times rarer than Ignitium, as in the Act
-# System's Activity trickle: 2 + 2 for the new player at 24h, and 8 + 8 over
-# the whole rare track against 320 Ignitium for 10 invitees.
+# Act I: the new player's milestones add up to 48 Ignitium (plus four steel
+# tools), and the inviter's to half that, 24 per invited player. Tin and
+# fragments stay 1:1: 2 + 2 for the new player at 24h, and 8 + 8 over the
+# whole rare track against 240 Ignitium for 10 invitees (about 30:1).
 acts:
   act_1:
     display: "Act I"
@@ -157,24 +156,24 @@ acts:
             - item: c.dry_ration(type=dry_ration;quality=1)
               amount: 64
       pool_ref_new_small:
-        - display: "#50d990x12 #7f7d80Ignitium #7f7d80+ #50d990x10 #e6ca40Gold Denar"
+        - display: "#50d990x8 #7f7d80Ignitium #7f7d80+ #50d990x10 #e6ca40Gold Denar"
           items:
             - item: m.materials.ignitium
-              amount: 12
+              amount: 8
             - item: m.currency.gold_coin
               amount: 10
       pool_ref_new_medium:
-        - display: "#50d990x20 #7f7d80Ignitium #7f7d80+ #50d990x15 #e6ca40Gold Denar"
+        - display: "#50d990x16 #7f7d80Ignitium #7f7d80+ #50d990x15 #e6ca40Gold Denar"
           items:
             - item: m.materials.ignitium
-              amount: 20
+              amount: 16
             - item: m.currency.gold_coin
               amount: 15
       pool_ref_new_large:
-        - display: "#50d990x32 #7f7d80Ignitium #7f7d80+ #50d990x2 #3b4e60Tin #7f7d80+ #50d990x2 #3b4e60Abyssalite Fragment #7f7d80+ #50d990x25 #e6ca40Gold Denar"
+        - display: "#50d990x24 #7f7d80Ignitium #7f7d80+ #50d990x2 #3b4e60Tin #7f7d80+ #50d990x2 #3b4e60Abyssalite Fragment #7f7d80+ #50d990x25 #e6ca40Gold Denar"
           items:
             - item: m.materials.ignitium
-              amount: 32
+              amount: 24
             - item: m.materials.raw_tin
               amount: 2
             - item: m.materials.abyssalite_fragment
@@ -182,20 +181,20 @@ acts:
             - item: m.currency.gold_coin
               amount: 25
       pool_ref_small:
-        - display: "#50d990x6 #7f7d80Ignitium"
+        - display: "#50d990x4 #7f7d80Ignitium"
           items:
             - item: m.materials.ignitium
-              amount: 6
+              amount: 4
       pool_ref_medium:
-        - display: "#50d990x10 #7f7d80Ignitium"
+        - display: "#50d990x8 #7f7d80Ignitium"
           items:
             - item: m.materials.ignitium
-              amount: 10
+              amount: 8
       pool_ref_large:
-        - display: "#50d990x16 #7f7d80Ignitium"
+        - display: "#50d990x12 #7f7d80Ignitium"
           items:
             - item: m.materials.ignitium
-              amount: 16
+              amount: 12
       pool_ref_rare_2:
         - display: "#50d990x1 #3b4e60Tin #7f7d80+ #50d990x1 #3b4e60Abyssalite Fragment"
           items:
