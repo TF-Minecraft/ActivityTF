@@ -83,7 +83,7 @@ playtime:
 #               name built from its path is wrong (steel_axe is a Hatchet).
 milestones:
   - hours: 1
-    new-player: {display: "Steel tools and rations", icon: m.tools.steel_pickaxe, pool: pool_ref_tools}
+    new-player: {display: "Steel tools, rations and denars", icon: m.tools.steel_pickaxe, pool: pool_ref_tools}
     inviter: {display: "Gold Denars", icon: m.currency.gold_coin, pool: pool_ref_coin}
   - hours: 4
     new-player: {display: "Act materials and denars (small)", icon: m.materials.ignitium, pool: pool_ref_new_small}
@@ -93,7 +93,7 @@ milestones:
     inviter: {display: "Act materials (medium)", icon: m.materials.ignitium, pool: pool_ref_medium}
   - hours: 24
     new-player: {display: "Act materials and denars (large)", icon: m.materials.raw_tin, pool: pool_ref_new_large}
-    inviter: {display: "Act materials (large)", icon: m.materials.ignitium, pool: pool_ref_large}
+    inviter: {display: "Act materials and denars (large)", icon: m.materials.ignitium, pool: pool_ref_large}
 
 # The inviter's rare track. Every player you invited who reaches the last
 # milestone above (24h of counted playtime) moves you one step along it.
@@ -126,10 +126,10 @@ rare-track:
 # An act's own pool of the same name wins.
 pools:
   pool_ref_coin:
-    - display: "#50d990x10 #e6ca40Gold Denar"
+    - display: "#50d990x5 #e6ca40Gold Denar"
       items:
         - item: m.currency.gold_coin
-          amount: 10
+          amount: 5
 
 # The acts. The act in use is the one with the latest 'starts' that is not in
 # the future, so the loot changes by itself on the day an act starts.
@@ -146,7 +146,7 @@ acts:
     starts: "2026-10-10T06:00"
     pools:
       pool_ref_tools:
-        - display: "#7f7d80Steel Pickaxe, Hatchet, Shovel and Hoe #7f7d80+ #50d990x64 #b8906eDry Ration"
+        - display: "#7f7d80Steel Pickaxe, Hatchet, Shovel and Hoe #7f7d80+ #50d990x64 #b8906eDry Ration #7f7d80+ #50d990x10 #e6ca40Gold Denar"
           items:
             - item: m.tools.steel_pickaxe
             - item: m.tools.steel_axe
@@ -155,22 +155,24 @@ acts:
             - item: m.tools.steel_hoe
             - item: c.dry_ration(type=dry_ration;quality=1)
               amount: 64
+            - item: m.currency.gold_coin
+              amount: 10
       pool_ref_new_small:
-        - display: "#50d990x8 #7f7d80Ignitium #7f7d80+ #50d990x10 #e6ca40Gold Denar"
+        - display: "#50d990x8 #7f7d80Ignitium #7f7d80+ #50d990x20 #e6ca40Gold Denar"
           items:
             - item: m.materials.ignitium
               amount: 8
             - item: m.currency.gold_coin
-              amount: 10
+              amount: 20
       pool_ref_new_medium:
-        - display: "#50d990x16 #7f7d80Ignitium #7f7d80+ #50d990x15 #e6ca40Gold Denar"
+        - display: "#50d990x16 #7f7d80Ignitium #7f7d80+ #50d990x30 #e6ca40Gold Denar"
           items:
             - item: m.materials.ignitium
               amount: 16
             - item: m.currency.gold_coin
-              amount: 15
+              amount: 30
       pool_ref_new_large:
-        - display: "#50d990x24 #7f7d80Ignitium #7f7d80+ #50d990x2 #3b4e60Tin #7f7d80+ #50d990x2 #3b4e60Abyssalite Fragment #7f7d80+ #50d990x25 #e6ca40Gold Denar"
+        - display: "#50d990x24 #7f7d80Ignitium #7f7d80+ #50d990x2 #3b4e60Tin #7f7d80+ #50d990x2 #3b4e60Abyssalite Fragment #7f7d80+ #50d990x40 #e6ca40Gold Denar"
           items:
             - item: m.materials.ignitium
               amount: 24
@@ -179,7 +181,7 @@ acts:
             - item: m.materials.abyssalite_fragment
               amount: 2
             - item: m.currency.gold_coin
-              amount: 25
+              amount: 40
       pool_ref_small:
         - display: "#50d990x4 #7f7d80Ignitium"
           items:
@@ -191,10 +193,12 @@ acts:
             - item: m.materials.ignitium
               amount: 8
       pool_ref_large:
-        - display: "#50d990x12 #7f7d80Ignitium"
+        - display: "#50d990x12 #7f7d80Ignitium #7f7d80+ #50d990x20 #e6ca40Gold Denar"
           items:
             - item: m.materials.ignitium
               amount: 12
+            - item: m.currency.gold_coin
+              amount: 20
       pool_ref_rare_2:
         - display: "#50d990x1 #3b4e60Tin #7f7d80+ #50d990x1 #3b4e60Abyssalite Fragment"
           items:

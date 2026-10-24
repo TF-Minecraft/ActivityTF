@@ -386,11 +386,24 @@ class ReferralConfigurationTest {
                 .mapToInt(RewardEntry.Item::amount).sum();
         }
         assertEquals(48, newIgnitium, "the new player's milestones add up to 48");
+        int newDenars = 0;
+        int inviterDenars = 0;
+        for (Milestone milestone : config.milestones()) {
+            newDenars += denars(config.pool(act, milestone.newPlayer().pool()));
+            inviterDenars += denars(config.pool(act, milestone.inviter().pool()));
+        }
+        assertEquals(100, newDenars, "the new player gets 100 denars in all");
+        assertEquals(25, inviterDenars, "the inviter gets 25 denars per invited player");
         assertEquals("Steel Hatchet", ActivityConfiguration.itemName(config.pool(act, "pool_ref_tools").get(0).items().get(1)));
         assertEquals("Steel Pickaxe", ActivityConfiguration.itemName(config.pool(act, "pool_ref_tools").get(0).items().get(0)));
         assertEquals("c.dry_ration(type=dry_ration;quality=1)",
             config.pool(act, "pool_ref_tools").get(0).items().get(4).path());
         assertTrue(config.ignoredWorld("character_selection"));
         assertTrue(logged.isEmpty(), "shipped referral.yml warns: " + logged);
+    }
+
+    private static int denars(List<RewardEntry> pool) {
+        return pool.get(0).items().stream().filter(item -> item.path().equals("m.currency.gold_coin"))
+            .mapToInt(RewardEntry.Item::amount).sum();
     }
 }
