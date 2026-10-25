@@ -114,6 +114,26 @@ class BreweryListenerTest {
         assertEquals(2, manager.tasks(uuid).count("brew_bottle"));
     }
 
+    @Test
+    void aDrinkWithoutAPlayerIsIgnored() {
+        BreweryListener listener = new BreweryListener(null);
+        assertDoesNotThrow(() -> listener.recordDrink(null, 10));
+    }
+
+    @Test
+    void onlyDrinksOfARealBrewAreCredited() {
+        ActivityManager manager = managerWith("brew_drink");
+        UUID uuid = revealed(manager);
+        BreweryListener listener = new BreweryListener(manager);
+
+        listener.recordDrink(stubPlayer(uuid), 0);
+        assertEquals(0, manager.tasks(uuid).count("brew_drink"));
+
+        listener.recordDrink(stubPlayer(uuid), 1);
+        listener.recordDrink(stubPlayer(uuid), 10);
+        assertEquals(2, manager.tasks(uuid).count("brew_drink"));
+    }
+
     private static PersistentDataContainer stubData() {
         Map<Object, Object> values = new HashMap<>();
         InvocationHandler handler = (proxy, method, args) -> switch (method.getName()) {
