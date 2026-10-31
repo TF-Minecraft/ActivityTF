@@ -788,7 +788,7 @@ public class ActivityManager {
 
     void runClickCommandsNow(Player player, List<String> commands, String id, Predicate<String> console) {
         InventoryView open = player.getOpenInventory();
-        if (open != null && open.getTopInventory().getHolder() instanceof ActivityGui.Marker) {
+        if (open != null && open.getTopInventory().getHolder(false) instanceof ActivityGui.Marker) {
             player.closeInventory();
         }
 

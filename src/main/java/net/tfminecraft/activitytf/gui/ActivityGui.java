@@ -328,7 +328,7 @@ public class ActivityGui implements Listener {
 
     @EventHandler
     public void onClick(InventoryClickEvent event) {
-        if (!(event.getView().getTopInventory().getHolder() instanceof Marker)) {
+        if (!(event.getView().getTopInventory().getHolder(false) instanceof Marker)) {
             return;
         }
         event.setCancelled(true);
@@ -475,7 +475,7 @@ public class ActivityGui implements Listener {
 
     @EventHandler
     public void onDrag(InventoryDragEvent event) {
-        if (!(event.getView().getTopInventory().getHolder() instanceof Marker)) {
+        if (!(event.getView().getTopInventory().getHolder(false) instanceof Marker)) {
             return;
         }
         for (int rawSlot : event.getRawSlots()) {
