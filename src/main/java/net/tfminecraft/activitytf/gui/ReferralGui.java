@@ -602,7 +602,7 @@ public class ReferralGui implements Listener {
 
     @EventHandler
     public void onClick(InventoryClickEvent event) {
-        if (!(event.getView().getTopInventory().getHolder() instanceof Marker marker)) {
+        if (!(event.getView().getTopInventory().getHolder(false) instanceof Marker marker)) {
             return;
         }
         event.setCancelled(true);
@@ -764,7 +764,7 @@ public class ReferralGui implements Listener {
 
     @EventHandler
     public void onDrag(InventoryDragEvent event) {
-        if (!(event.getView().getTopInventory().getHolder() instanceof Marker)) {
+        if (!(event.getView().getTopInventory().getHolder(false) instanceof Marker)) {
             return;
         }
         int size = event.getView().getTopInventory().getSize();
