@@ -320,7 +320,7 @@ public class PlayerData {
 
         boolean changed = tasks.removeIf(id -> !known.contains(id));
         if (dropIneligible) {
-            changed |= tasks.removeIf(id -> !eligible.test(id) && count(id) == 0);
+            changed |= tasks.removeIf(id -> !eligible.test(id) && !started(id));
         }
         changed |= revealed.removeIf(id -> !tasks.contains(id));
 
@@ -357,7 +357,7 @@ public class PlayerData {
         boolean changed = false;
         for (int slot = 0; slot < tasks.size() && missing > 0 && !waiting.isEmpty(); slot++) {
             String id = tasks.get(slot);
-            if (profession.contains(id) || forced.contains(id) || count(id) > 0) {
+            if (profession.contains(id) || forced.contains(id) || started(id)) {
                 continue;
             }
             revealed.remove(id);
@@ -381,7 +381,9 @@ public class PlayerData {
         List<String> pool = new ArrayList<>(new LinkedHashSet<>(ids));
         pool.removeAll(forced);
         List<String> drawn = new ArrayList<>(forced);
-        for (String id : ordered(pool, new HashSet<>(profession), professionSlots, random)) {
+        Set<String> professionSet = new HashSet<>(profession);
+        int forcedProfession = (int) forced.stream().filter(professionSet::contains).count();
+        for (String id : ordered(pool, professionSet, Math.max(0, professionSlots - forcedProfession), random)) {
             if (drawn.size() >= TASKS_PER_DAY) {
                 break;
             }
@@ -417,7 +419,7 @@ public class PlayerData {
         boolean changed = false;
         for (int slot = 0; slot < tasks.size() && !fresh.isEmpty(); slot++) {
             String id = tasks.get(slot);
-            if (kept.test(id) || count(id) > 0) {
+            if (kept.test(id) || started(id)) {
                 continue;
             }
             revealed.remove(id);
@@ -428,6 +430,11 @@ public class PlayerData {
             rerolls++;
         }
         return changed;
+    }
+
+    /** A task with progress or held credit today; rerolls and swaps never take it away. */
+    private boolean started(String id) {
+        return count(id) > 0 || pending.containsKey(id);
     }
 
     /** Marks a dealt task revealed without a click. */

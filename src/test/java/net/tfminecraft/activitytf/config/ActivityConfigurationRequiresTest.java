@@ -41,7 +41,7 @@ class ActivityConfigurationRequiresTest {
                 requires: " professions.physician "
               many:
                 points: 1
-                requires: [professions.fisher, "", professions.breeder_1]
+                requires: [professions.fisher, "", " professions.breeder_1 "]
               blank:
                 points: 1
                 requires: "  "

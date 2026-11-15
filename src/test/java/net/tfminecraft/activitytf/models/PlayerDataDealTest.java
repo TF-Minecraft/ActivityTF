@@ -87,6 +87,26 @@ class PlayerDataDealTest {
     }
 
     @Test
+    void tasksWithHeldCreditCountAsStarted() {
+        PlayerData data = new PlayerData(0, 0, "w", "d", 0, new HashMap<>(), List.of("a", "b"), List.of());
+        data.addPending("a", 1);
+
+        assertTrue(data.redraw(id -> false, List.of("x", "y")));
+        assertEquals(List.of("a", "x"), data.tasks());
+
+        data.ensureTasks(List.of("a", "x"), List.of(), List.of(), 0, id -> false, true, new Random(6));
+        assertEquals(List.of("a"), data.tasks());
+    }
+
+    @Test
+    void guaranteedProfessionTasksUseUpTheProfessionSlots() {
+        List<String> drawn = PlayerData.draw(List.of("p0", "p1", "a", "b", "c", "d", "e", "f"), List.of("p0"),
+            List.of("p0", "p1"), 1, new Random(7));
+
+        assertFalse(drawn.contains("p1"), "a second profession task was dealt for one slot");
+    }
+
+    @Test
     void markRevealedNeedsADealtTask() {
         PlayerData data = new PlayerData(0, 0, "w", "d", 0, Map.of(), List.of("a"), List.of());
 

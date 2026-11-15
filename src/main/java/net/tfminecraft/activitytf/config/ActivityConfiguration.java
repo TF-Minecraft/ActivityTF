@@ -750,7 +750,7 @@ public class ActivityConfiguration {
             return List.of();
         }
         if (raw instanceof List<?> list) {
-            return nonBlank(list);
+            return nonBlank(list).stream().map(String::trim).toList();
         }
         if (raw instanceof String text) {
             return text.isBlank() ? List.of() : List.of(text.trim());
