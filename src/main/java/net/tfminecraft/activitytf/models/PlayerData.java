@@ -327,20 +327,42 @@ public class PlayerData {
         Set<String> usableSet = new HashSet<>(usable);
         changed |= restoreGuaranteed(usableSet, guaranteed, random);
 
-        if (tasks.size() >= TASKS_PER_DAY) {
-            return changed;
-        }
-
         Set<String> professionSet = new HashSet<>(profession);
         int dealt = (int) tasks.stream().filter(professionSet::contains).count();
         List<String> pool = new ArrayList<>(usable);
         pool.removeAll(tasks);
         pool.removeAll(guaranteed);
-        for (String id : ordered(pool, professionSet, Math.max(0, professionSlots - dealt), random)) {
-            if (tasks.size() >= TASKS_PER_DAY) {
-                break;
-            }
+        List<String> next = ordered(pool, professionSet, Math.max(0, professionSlots - dealt), random);
+        while (tasks.size() < TASKS_PER_DAY && !next.isEmpty()) {
+            String id = next.remove(0);
             tasks.add(id);
+            dealt += professionSet.contains(id) ? 1 : 0;
+            changed = true;
+        }
+        if (dropIneligible) {
+            changed |= swapInProfession(next, professionSet, professionSlots - dealt, guaranteed);
+        }
+        return changed;
+    }
+
+    /**
+     * Profession permissions can arrive after the day was dealt (a character is chosen after joining): swaps
+     * unstarted general tasks for the profession tasks still waiting in {@code candidates}, up to {@code missing}.
+     */
+    private boolean swapInProfession(List<String> candidates, Set<String> profession, int missing,
+                                     Collection<String> guaranteed) {
+        List<String> waiting = new ArrayList<>(candidates);
+        waiting.retainAll(profession);
+        Set<String> forced = new HashSet<>(guaranteed);
+        boolean changed = false;
+        for (int slot = 0; slot < tasks.size() && missing > 0 && !waiting.isEmpty(); slot++) {
+            String id = tasks.get(slot);
+            if (profession.contains(id) || forced.contains(id) || count(id) > 0) {
+                continue;
+            }
+            revealed.remove(id);
+            tasks.set(slot, waiting.remove(0));
+            missing--;
             changed = true;
         }
         return changed;
@@ -370,7 +392,7 @@ public class PlayerData {
     }
 
     /** {@code pool} shuffled: {@code slots} profession tasks first, then the others, then spare profession tasks. */
-    static List<String> ordered(List<String> pool, Set<String> profession, int slots, Random random) {
+    public static List<String> ordered(List<String> pool, Set<String> profession, int slots, Random random) {
         List<String> professional = new ArrayList<>();
         List<String> general = new ArrayList<>();
         for (String id : pool) {

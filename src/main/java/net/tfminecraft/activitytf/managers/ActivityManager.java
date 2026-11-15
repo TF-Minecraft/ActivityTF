@@ -172,6 +172,9 @@ public class ActivityManager {
         }
 
         PlayerData data = gated ? dealt(uuid) : store.get(uuid);
+        if (gated && data == null && config.autoReveal() && def.requiresReveal()) {
+            data = store.get(uuid);
+        }
         if (gated && data == null) {
             return new RecordResult(0, 0, Recorded.NOT_A_TASK);
         }
@@ -345,9 +348,13 @@ public class ActivityManager {
 
         Player player = Bukkit.getPlayer(uuid);
         Set<String> guaranteed = new HashSet<>(config.guaranteed());
-        List<String> candidates = activityIds().stream()
+        Set<String> profession = new HashSet<>(professionIds());
+        List<String> pool = activityIds().stream()
             .filter(id -> !guaranteed.contains(id) && eligible(player, id)).collect(Collectors.toList());
-        Collections.shuffle(candidates, ThreadLocalRandom.current());
+        long keptProfession = data.tasks().stream()
+            .filter(id -> profession.contains(id) && data.count(id) > 0).count();
+        List<String> candidates = PlayerData.ordered(pool, profession,
+            (int) Math.max(0, config.professionSlots() - keptProfession), ThreadLocalRandom.current());
         if (!data.redraw(guaranteed::contains, candidates)) {
             return Rerolled.TOO_LATE;
         }

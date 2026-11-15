@@ -157,8 +157,10 @@ class DailyTasksTest {
         ActivityManager manager = manager(def("vote", List.of(), true), general("cook"),
             def("secret", List.of(), true));
         UUID stranger = UUID.randomUUID();
-        assertEquals(Recorded.NOT_A_TASK, manager.recordAction(stranger, "vote", 1));
+        assertEquals(Recorded.NOT_A_TASK, manager.recordAction(stranger, "cook", 1));
         assertNull(manager.getStore().peek(stranger));
+        assertEquals(Recorded.HELD, manager.recordAction(stranger, "vote", 1), "a first-ever vote was lost");
+        assertEquals(1, manager.getStore().peek(stranger).pending().get("vote"));
 
         UUID away = UUID.randomUUID();
         PlayerData data = manager.getStore().get(away);
@@ -201,6 +203,56 @@ class DailyTasksTest {
         PlayerData data = manager.tasks(player.getUniqueId());
 
         assertEquals(PlayerData.TASKS_PER_DAY, data.tasks().size());
+        assertEquals(2, data.tasks().stream().filter(id -> id.startsWith("p")).count());
+    }
+
+    @Test
+    void professionTasksAreSwappedInWhenThePermissionArrivesAfterTheDeal() {
+        List<ActivityDef> defs = new ArrayList<>(List.of(def("vote", List.of(), true)));
+        for (int i = 0; i < 8; i++) {
+            defs.add(general("g" + i));
+        }
+        defs.add(def("p1", List.of("professions.x"), false));
+        defs.add(def("p2", List.of("professions.x"), false));
+        defs.add(def("p3", List.of("professions.x"), false));
+        ActivityManager manager = manager(defs.toArray(ActivityDef[]::new));
+        config(manager, "professionSlots", 2);
+        Set<String> permissions = new HashSet<>();
+        Player player = join(permissions, new ArrayList<>());
+        UUID uuid = player.getUniqueId();
+        PlayerData data = manager.tasks(uuid);
+        assertEquals(0, data.tasks().stream().filter(id -> id.startsWith("p")).count());
+        String started = data.tasks().stream().filter(id -> id.startsWith("g")).findFirst().orElseThrow();
+        manager.recordAction(uuid, started, 1);
+
+        permissions.add("professions.x");
+        manager.tasks(uuid);
+
+        assertEquals(PlayerData.TASKS_PER_DAY, data.tasks().size());
+        assertEquals(2, data.tasks().stream().filter(id -> id.startsWith("p")).count());
+        assertTrue(data.tasks().contains(started), "a started task was swapped out");
+        assertTrue(data.tasks().contains("vote"));
+        assertTrue(data.tasks().stream().filter(id -> !id.equals("vote")).allMatch(data::isRevealed));
+    }
+
+    @Test
+    void aRerollKeepsTheProfessionSlotsFilled() {
+        List<ActivityDef> defs = new ArrayList<>(List.of(def("vote", List.of(), true)));
+        for (int i = 0; i < 12; i++) {
+            defs.add(general("g" + i));
+        }
+        for (int i = 0; i < 6; i++) {
+            defs.add(def("p" + i, List.of("professions.x"), false));
+        }
+        ActivityManager manager = manager(defs.toArray(ActivityDef[]::new));
+        config(manager, "professionSlots", 2);
+        TestManagers.rerollsPerDay(manager, 1);
+        Player player = join(new HashSet<>(Set.of("professions.x")), new ArrayList<>());
+        UUID uuid = player.getUniqueId();
+        PlayerData data = manager.tasks(uuid);
+
+        assertEquals(ActivityManager.Rerolled.DONE, manager.reroll(uuid));
+
         assertEquals(2, data.tasks().stream().filter(id -> id.startsWith("p")).count());
     }
 

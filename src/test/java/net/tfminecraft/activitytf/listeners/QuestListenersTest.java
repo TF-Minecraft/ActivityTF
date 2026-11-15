@@ -97,6 +97,9 @@ class QuestListenersTest {
         ProvinceTravelListener listener = new ProvinceTravelListener(manager);
         UUID uuid = UUID.randomUUID();
         Player traveller = player(uuid);
+        listener.onProvinceEnter(new PlayerProvinceEnterEvent(traveller, 2, 1));
+        verify(manager, never()).recordAction(uuid, "travel_provinces", 1);
+        when(manager.isTracked(uuid, "travel_provinces")).thenReturn(true);
 
         listener.onProvinceEnter(new PlayerProvinceEnterEvent(traveller, 1, null));
         listener.onProvinceEnter(new PlayerProvinceEnterEvent(null, 2, 1));

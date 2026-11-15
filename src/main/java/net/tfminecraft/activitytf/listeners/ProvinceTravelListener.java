@@ -13,8 +13,9 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * Credits {@code travel_provinces} once for each different province a player walks into each day. Entering the
- * first province after joining (no previous province) does not count, and the list is kept in memory only.
+ * Credits {@code travel_provinces} once for each different province a player walks into each day while the task
+ * counts for them. Entering the first province after joining (no previous province) does not count, and the list
+ * is kept in memory only.
  */
 public class ProvinceTravelListener implements Listener {
 
@@ -39,6 +40,9 @@ public class ProvinceTravelListener implements Listener {
             day = today;
         }
         UUID uuid = event.getPlayer().getUniqueId();
+        if (!manager.isTracked(uuid, "travel_provinces")) {
+            return;
+        }
         if (visited.computeIfAbsent(uuid, key -> new HashSet<>()).add(event.getProvinceId())) {
             manager.recordAction(uuid, "travel_provinces", 1);
         }
