@@ -353,7 +353,8 @@ public class ActivityManager {
             .filter(id -> !guaranteed.contains(id) && eligible(player, id)).collect(Collectors.toList());
         pool.removeAll(data.tasks());
         long keptProfession = data.tasks().stream()
-            .filter(id -> profession.contains(id) && data.count(id) > 0).count();
+            .filter(id -> profession.contains(id) && (data.count(id) > 0 || data.pending().containsKey(id)))
+            .count();
         List<String> candidates = PlayerData.ordered(pool, profession,
             (int) Math.max(0, config.professionSlots() - keptProfession), ThreadLocalRandom.current());
         if (!data.redraw(guaranteed::contains, candidates)) {
