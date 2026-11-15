@@ -351,6 +351,7 @@ public class ActivityManager {
         Set<String> profession = new HashSet<>(professionIds());
         List<String> pool = activityIds().stream()
             .filter(id -> !guaranteed.contains(id) && eligible(player, id)).collect(Collectors.toList());
+        pool.removeAll(data.tasks());
         long keptProfession = data.tasks().stream()
             .filter(id -> profession.contains(id) && data.count(id) > 0).count();
         List<String> candidates = PlayerData.ordered(pool, profession,
