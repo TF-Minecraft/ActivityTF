@@ -22,7 +22,8 @@ public final class ItemsAdderItems {
 
     ItemsAdderItems(Function<String, ItemStack> creator, Logger logger) {
         this.creator = creator;
-        this.logger = logger;
+        // Bukkit.getLogger() can be null in a test harness; never keep a null logger.
+        this.logger = logger != null ? logger : Logger.getLogger("activity");
     }
 
     private static final class Default {
