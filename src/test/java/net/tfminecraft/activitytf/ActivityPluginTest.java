@@ -29,7 +29,9 @@ import net.tfminecraft.activitytf.commands.ActivityCommand;
 import net.tfminecraft.activitytf.gui.ActivityGui;
 import net.tfminecraft.activitytf.gui.ReferralGui;
 import net.tfminecraft.activitytf.hooks.PlaceholderHook;
+import net.tfminecraft.activitytf.listeners.BreedListener;
 import net.tfminecraft.activitytf.listeners.CraftListener;
+import net.tfminecraft.activitytf.listeners.CreatureKillListener;
 import net.tfminecraft.activitytf.listeners.JoinListener;
 import net.tfminecraft.activitytf.listeners.ReferralListener;
 import net.tfminecraft.activitytf.managers.ActivityManager;
@@ -113,12 +115,14 @@ class ActivityPluginTest {
         assertTrue(Files.isRegularFile(plugin.getDataFolder().toPath().resolve("messages.yml")));
         assertInstanceOf(ActivityCommand.class, plugin.getCommand("activity").getExecutor());
         assertSame(plugin.getCommand("activity").getExecutor(), plugin.getCommand("activity").getTabCompleter());
-        assertEquals(Set.of(JoinListener.class, CraftListener.class, ActivityGui.class, ActivityCommand.class,
+        assertEquals(Set.of(JoinListener.class, CraftListener.class, BreedListener.class,
+            CreatureKillListener.class, ActivityGui.class, ActivityCommand.class,
             ReferralListener.class, ReferralGui.class), listeners());
         assertTrue(server.dispatchCommand(server.getConsoleSender(), "activity"));
         assertNotNull(server.getConsoleSender().nextMessage());
         server.getScheduler().performOneTick();
-        assertEquals(Set.of(JoinListener.class, CraftListener.class, ActivityGui.class, ActivityCommand.class,
+        assertEquals(Set.of(JoinListener.class, CraftListener.class, BreedListener.class,
+            CreatureKillListener.class, ActivityGui.class, ActivityCommand.class,
             ReferralListener.class, ReferralGui.class), listeners());
         UUID uuid = UUID.randomUUID();
         manager.getStore().get(uuid).addPoints(7, manager.getConfiguration().barMax());
@@ -188,28 +192,30 @@ class ActivityPluginTest {
     void optionalPluginsRegisterTheirListenersOnTheNextTickAndTheOwnedExpansionIsRemovedAtShutdown() throws Exception {
         for (String name : List.of("VotingPlugin", "MusicalInstruments", "geiger_counter", "MMOCore", "MMOItems",
             "VFBuilders", "RPCharacters", "InteractibleFurniture", "SimpleFactions", "AdvancedCrafting", "Archaeo",
-            "MarketBlock", "Games", "Cooking", "BreweryX")) {
+            "MarketBlock", "Games", "Cooking", "BreweryX", "Research", "Recycler")) {
             MockBukkit.createMockPlugin(name);
         }
         LocalExpansionManager expansions = installPlaceholderApi();
         enablePlugin();
-        assertEquals(Set.of(JoinListener.class, CraftListener.class, ActivityGui.class, ActivityCommand.class,
+        assertEquals(Set.of(JoinListener.class, CraftListener.class, BreedListener.class,
+            CreatureKillListener.class, ActivityGui.class, ActivityCommand.class,
             ReferralListener.class, ReferralGui.class), listeners());
         assertNull(expansions.getExpansion("activity"));
 
         server.getScheduler().performOneTick();
 
-        assertEquals(Set.of("JoinListener", "CraftListener", "ActivityGui", "ActivityCommand",
+        assertEquals(Set.of("JoinListener", "CraftListener", "BreedListener", "CreatureKillListener",
+            "ProvinceTravelListener", "ActivityGui", "ActivityCommand",
             "ReferralListener", "ReferralGui", "VoteListener", "InstrumentListener",
             "GeigerListener", "ProfessionXpListener", "MmoItemsStationListener", "VehicleBuildListener",
             "CharacterChatListener", "InjuryListener", "ProfessionUpgradeListener", "FurnitureListener", "BattleListener",
             "AdvancedCraftListener", "ArchaeologyListener", "MarketSaleListener", "CasinoWinListener", "DishCookedListener",
-            "BreweryListener"), listeners().stream().map(Class::getSimpleName).collect(Collectors.toSet()));
+            "BreweryListener", "NamedEventHook"), listeners().stream().map(Class::getSimpleName).collect(Collectors.toSet()));
         assertInstanceOf(PlaceholderHook.class, expansions.getExpansion("activity"));
         var player = server.addPlayer("Steve");
         ActivityManager.getInstance().getStore().get(player.getUniqueId()).addPoints(5, 50);
         assertEquals("5", PlaceholderAPI.setPlaceholders(player, "%activity_points%"));
-        assertEquals(16, logs.stream().filter(line -> line.startsWith("Hooked into ")).count());
+        assertEquals(18, logs.stream().filter(line -> line.startsWith("Hooked into ")).count());
 
         server.getPluginManager().disablePlugin(plugin);
 

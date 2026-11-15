@@ -230,7 +230,7 @@ public class ActivityGui implements Listener {
             lore = messages.get("gui.reroll-lore-disabled");
         } else if (!player.hasPermission("activity.reroll")) {
             lore = messages.get("gui.reroll-lore-locked");
-        } else if (data.dailyPoints() > config.rerollMaxPoints()) {
+        } else if (manager.rerollPaidPoints(data) > config.rerollMaxPoints()) {
             lore = messages.get("gui.reroll-lore-too-late", "%points%", config.rerollMaxPoints());
         } else {
             lore = messages.get("gui.reroll-lore-left",
@@ -385,12 +385,8 @@ public class ActivityGui implements Listener {
 
         ActivityConfiguration config = manager.getConfiguration();
         PlayerData data = manager.tasks(player.getUniqueId());
-        Inventory top = event.getView().getTopInventory();
-        if (reveal.drawChanged()) {
-            repaintAll(top, config, data, player);
-        } else {
-            top.setItem(event.getRawSlot(), taskOrFiller(config, data, task));
-        }
+        // A reveal can pay held credit, so the bars are repainted with the tasks.
+        repaintAll(event.getView().getTopInventory(), config, data, player);
     }
 
     ActivityManager.Reveal revealTask(Player player, int task) {

@@ -808,7 +808,10 @@ class ActivityGuiTest {
         }
 
         @Test
-        void successfulRerollHidesTasksAndRefreshesTheRemainingAllowance() {
+        void successfulRerollHidesTasksAndRefreshesTheRemainingAllowance() throws ReflectiveOperationException {
+            configure(activity("a", 1, 1, 0), activity("b", 1, 1, 0), activity("c", 1, 1, 0),
+                activity("d", 1, 1, 0), activity("e", 1, 1, 0), activity("f", 1, 1, 0), activity("g", 1, 1, 0),
+                activity("h", 1, 1, 0), activity("i", 1, 1, 0), activity("j", 1, 1, 0));
             Inventory inventory = open();
             click(10);
             click(4);

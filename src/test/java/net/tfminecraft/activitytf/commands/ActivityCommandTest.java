@@ -480,7 +480,7 @@ class ActivityCommandTest {
             f.run(admin, "add", "Steve", "quest", "1");
             assertEquals(List.of(f.manager.getConfiguration().messages().get("admin.add-not-a-task",
                 "%activity%", "quest", "%player%", "Steve")), admin.sent);
-            assertNull(f.manager.getStore().peek(uuid));
+            assertEquals(0, f.manager.getStore().peek(uuid).points());
             f.manager.reveal(uuid, f.manager.tasks(uuid).tasks().indexOf("quest"));
             f.run(admin, "add", "Steve", "quest", "5");
             admin.sent.clear();
@@ -492,6 +492,25 @@ class ActivityCommandTest {
             assertEquals(List.of(f.manager.getConfiguration().messages().get("admin.add-capped-vote-share",
                 "%count%", 1, "%activity%", "quest", "%player%", "Steve", "%points%", 0, "%max%", 50)), admin.sent);
             assertTrue(f.audit().getFirst().endsWith("result=CAPPED_VOTE_SHARE"));
+        }
+    }
+
+    @Test
+    void addToAnUnrevealedVoteWithAutoRevealIsHeldForTheClick() throws Exception {
+        try (CommandFixture f = new CommandFixture(directory)) {
+            f.settings.set("draw.auto-reveal", true);
+            f.saveSettings();
+            f.manager.getConfiguration().load();
+            Player target = f.online("Steve");
+            Sender admin = f.admin();
+            f.logs.clear();
+
+            f.run(admin, "add", "Steve", "vote", "2");
+
+            assertEquals(List.of(f.manager.getConfiguration().messages().get("admin.add-held",
+                "%count%", 2, "%activity%", "vote", "%player%", "Steve")), admin.sent);
+            assertEquals(2, f.manager.getStore().peek(target.getUniqueId()).pending().get("vote"));
+            assertTrue(f.audit().getFirst().endsWith("result=HELD"));
         }
     }
 

@@ -19,6 +19,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -149,6 +150,16 @@ public class PlayerStore {
         PlayerData data = new PlayerData(points, dailyPoints, entry.getString("week", ""),
             entry.getString("day", ""), claimedPoints, daily, tasks, entry.getStringList("revealed"), rerolls);
         data.setDailyRewardClaimed(entry.getBoolean("daily-reward-claimed", false));
+        Map<String, Integer> pending = new HashMap<>();
+        ConfigurationSection pendingSection = entry.getConfigurationSection("pending");
+        if (pendingSection != null) {
+            for (String id : pendingSection.getKeys(false)) {
+                if (known.test(id)) {
+                    pending.put(id, Math.max(0, pendingSection.getInt(id)));
+                }
+            }
+        }
+        data.setPending(pending);
         data.setVotePoints(entry.contains("vote-points") ? entry.getInt("vote-points")
             : vote == null ? 0 : vote.worth(daily.getOrDefault(vote.id(), 0)));
         return data;
@@ -269,7 +280,7 @@ public class PlayerStore {
             PlayerData data = entry.getValue();
             if (data.points() == 0 && data.claimedPoints() == 0 && data.dailyPoints() == 0
                 && data.daily().isEmpty() && data.tasks().isEmpty() && data.rerolls() == 0
-                && !data.dailyRewardClaimed()) {
+                && !data.dailyRewardClaimed() && data.pending().isEmpty()) {
                 continue;
             }
 
@@ -286,6 +297,9 @@ public class PlayerStore {
             yaml.set(path + ".daily", new LinkedHashMap<>(data.daily()));
             yaml.set(path + ".tasks", new ArrayList<>(data.tasks()));
             yaml.set(path + ".revealed", new ArrayList<>(new TreeSet<>(data.revealed())));
+            if (!data.pending().isEmpty()) {
+                yaml.set(path + ".pending", new TreeMap<>(data.pending()));
+            }
         }
         return yaml;
     }

@@ -11,6 +11,7 @@ import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Predicate;
 
 public class PlayerData {
 
@@ -20,6 +21,9 @@ public class PlayerData {
 
     private final List<String> tasks = new CopyOnWriteArrayList<>();
     private final Set<String> revealed = ConcurrentHashMap.newKeySet();
+
+    /** Credit held today for tasks that only count once revealed (votes cast before Voting is clicked). */
+    private final Map<String, Integer> pending = new ConcurrentHashMap<>();
 
     private volatile int points;
     private volatile int dailyPoints;
@@ -78,6 +82,7 @@ public class PlayerData {
             votePoints = 0;
             daily.clear();
             clearTasks();
+            pending.clear();
             rerolls = 0;
             dailyRewardClaimed = false;
             this.weekKey = weekKey;
@@ -89,6 +94,7 @@ public class PlayerData {
             votePoints = 0;
             daily.clear();
             clearTasks();
+            pending.clear();
             rerolls = 0;
             dailyRewardClaimed = false;
             this.dayKey = dayKey;
@@ -193,6 +199,7 @@ public class PlayerData {
         votePoints = 0;
         daily.clear();
         clearTasks();
+        pending.clear();
         rerolls = 0;
         if (!dayKey.equals(this.dayKey) || !weekKey.equals(this.weekKey)) {
             dailyRewardClaimed = false;
@@ -294,6 +301,167 @@ public class PlayerData {
             changed = true;
         }
         return changed;
+    }
+
+    /**
+     * Deals today's tasks, or tops them up, from the activities {@code eligible} accepts. Up to
+     * {@code professionSlots} of them come from {@code profession}. When {@code dropIneligible} is set, a task the
+     * player no longer qualifies for is swapped out if it has no progress yet.
+     */
+    public boolean ensureTasks(Collection<String> ids, Collection<String> guaranteed, Collection<String> profession,
+                               int professionSlots, Predicate<String> eligible, boolean dropIneligible,
+                               Random random) {
+        Set<String> known = new HashSet<>(ids);
+        List<String> usable = ids.stream().filter(eligible).toList();
+        if (tasks.isEmpty()) {
+            tasks.addAll(draw(usable, guaranteed, profession, professionSlots, random));
+            return !tasks.isEmpty();
+        }
+
+        boolean changed = tasks.removeIf(id -> !known.contains(id));
+        if (dropIneligible) {
+            changed |= tasks.removeIf(id -> !eligible.test(id) && !started(id));
+        }
+        changed |= revealed.removeIf(id -> !tasks.contains(id));
+
+        Set<String> usableSet = new HashSet<>(usable);
+        changed |= restoreGuaranteed(usableSet, guaranteed, random);
+
+        Set<String> professionSet = new HashSet<>(profession);
+        int dealt = (int) tasks.stream().filter(professionSet::contains).count();
+        List<String> pool = new ArrayList<>(usable);
+        pool.removeAll(tasks);
+        pool.removeAll(guaranteed);
+        List<String> next = ordered(pool, professionSet, Math.max(0, professionSlots - dealt), random);
+        while (tasks.size() < TASKS_PER_DAY && !next.isEmpty()) {
+            String id = next.remove(0);
+            tasks.add(id);
+            dealt += professionSet.contains(id) ? 1 : 0;
+            changed = true;
+        }
+        if (dropIneligible) {
+            changed |= swapInProfession(next, professionSet, professionSlots - dealt, guaranteed);
+        }
+        return changed;
+    }
+
+    /**
+     * Profession permissions can arrive after the day was dealt (a character is chosen after joining): swaps
+     * unstarted general tasks for the profession tasks still waiting in {@code candidates}, up to {@code missing}.
+     */
+    private boolean swapInProfession(List<String> candidates, Set<String> profession, int missing,
+                                     Collection<String> guaranteed) {
+        List<String> waiting = new ArrayList<>(candidates);
+        waiting.retainAll(profession);
+        Set<String> forced = new HashSet<>(guaranteed);
+        boolean changed = false;
+        for (int slot = 0; slot < tasks.size() && missing > 0 && !waiting.isEmpty(); slot++) {
+            String id = tasks.get(slot);
+            if (profession.contains(id) || forced.contains(id) || started(id)) {
+                continue;
+            }
+            revealed.remove(id);
+            tasks.set(slot, waiting.remove(0));
+            missing--;
+            changed = true;
+        }
+        return changed;
+    }
+
+    /** Draws a day: the guaranteed tasks, up to {@code professionSlots} profession tasks, then the rest. */
+    public static List<String> draw(Collection<String> ids, Collection<String> guaranteed,
+                                    Collection<String> profession, int professionSlots, Random random) {
+        List<String> forced = new ArrayList<>(new LinkedHashSet<>(guaranteed));
+        forced.retainAll(new HashSet<>(ids));
+        Collections.shuffle(forced, random);
+        if (forced.size() >= TASKS_PER_DAY) {
+            return List.copyOf(forced.subList(0, TASKS_PER_DAY));
+        }
+
+        List<String> pool = new ArrayList<>(new LinkedHashSet<>(ids));
+        pool.removeAll(forced);
+        List<String> drawn = new ArrayList<>(forced);
+        Set<String> professionSet = new HashSet<>(profession);
+        int forcedProfession = (int) forced.stream().filter(professionSet::contains).count();
+        for (String id : ordered(pool, professionSet, Math.max(0, professionSlots - forcedProfession), random)) {
+            if (drawn.size() >= TASKS_PER_DAY) {
+                break;
+            }
+            drawn.add(id);
+        }
+        Collections.shuffle(drawn, random);
+        return List.copyOf(drawn);
+    }
+
+    /** {@code pool} shuffled: {@code slots} profession tasks first, then the others, then spare profession tasks. */
+    public static List<String> ordered(List<String> pool, Set<String> profession, int slots, Random random) {
+        List<String> professional = new ArrayList<>();
+        List<String> general = new ArrayList<>();
+        for (String id : pool) {
+            (profession.contains(id) ? professional : general).add(id);
+        }
+        Collections.shuffle(professional, random);
+        Collections.shuffle(general, random);
+        int first = Math.min(slots, professional.size());
+        List<String> ordered = new ArrayList<>(professional.subList(0, first));
+        ordered.addAll(general);
+        ordered.addAll(professional.subList(first, professional.size()));
+        return ordered;
+    }
+
+    /**
+     * Rerolls only the tasks that are neither {@code kept} nor started, keeping every point, count and the
+     * remaining tasks in their slots. Returns false when no task could be swapped.
+     */
+    public boolean redraw(Predicate<String> kept, List<String> candidates) {
+        List<String> fresh = new ArrayList<>(candidates);
+        fresh.removeAll(tasks);
+        boolean changed = false;
+        for (int slot = 0; slot < tasks.size() && !fresh.isEmpty(); slot++) {
+            String id = tasks.get(slot);
+            if (kept.test(id) || started(id)) {
+                continue;
+            }
+            revealed.remove(id);
+            tasks.set(slot, fresh.remove(0));
+            changed = true;
+        }
+        if (changed) {
+            rerolls++;
+        }
+        return changed;
+    }
+
+    /** A task with progress or held credit today; rerolls and swaps never take it away. */
+    private boolean started(String id) {
+        return count(id) > 0 || pending.containsKey(id);
+    }
+
+    /** Marks a dealt task revealed without a click. */
+    public boolean markRevealed(String id) {
+        return tasks.contains(id) && revealed.add(id);
+    }
+
+    public void addPending(String id, int amount) {
+        pending.merge(id, amount, (a, b) -> (int) Math.min(Integer.MAX_VALUE, (long) a + b));
+    }
+
+    public int takePending(String id) {
+        Integer held = pending.remove(id);
+        return held == null ? 0 : held;
+    }
+
+    public Map<String, Integer> pending() {
+        return Collections.unmodifiableMap(pending);
+    }
+
+    public void setPending(Map<String, Integer> held) {
+        pending.clear();
+        held.forEach((id, amount) -> {
+            if (amount != null && amount > 0) {
+                pending.put(id, amount);
+            }
+        });
     }
 
     public boolean reveal(int slot) {
