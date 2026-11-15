@@ -133,6 +133,8 @@ public class ActivityConfiguration {
 
     private volatile int rerollsPerDay;
     private volatile int rerollMaxPoints;
+    private volatile int professionSlots;
+    private volatile boolean autoReveal;
 
     private String goalCompleteSound;
     private String barCompleteSound;
@@ -196,6 +198,8 @@ public class ActivityConfiguration {
 
         rerollsPerDay = parseRerollsPerDay(config);
         rerollMaxPoints = parseRerollMaxPoints(config);
+        professionSlots = parseProfessionSlots(config);
+        autoReveal = config.getBoolean(AUTO_REVEAL_PATH, false);
 
         goalCompleteSound = soundKey(config.getString("sounds.goal-complete", ""));
         barCompleteSound = soundKey(config.getString("sounds.bar-complete", ""));
@@ -402,6 +406,10 @@ public class ActivityConfiguration {
 
     static final String REROLLS_PER_DAY_PATH = "reroll.per-day";
     static final String REROLL_MAX_POINTS_PATH = "reroll.max-points";
+    static final String PROFESSION_SLOTS_PATH = "draw.profession-slots";
+    static final String AUTO_REVEAL_PATH = "draw.auto-reveal";
+    static final String REQUIRES_KEY = "requires";
+    static final String REQUIRES_REVEAL_KEY = "requires-reveal";
 
     public static final String REWARDS_PATH = "rewards";
     static final String REWARDS_MULTIPLIER_PATH = "rewards.multiplier";
@@ -442,6 +450,10 @@ public class ActivityConfiguration {
 
     static int parseRerollsPerDay(ConfigurationSection config) {
         return Math.max(0, config.getInt(REROLLS_PER_DAY_PATH, 1));
+    }
+
+    static int parseProfessionSlots(ConfigurationSection config) {
+        return Math.max(0, Math.min(PlayerData.TASKS_PER_DAY, config.getInt(PROFESSION_SLOTS_PATH, 0)));
     }
 
     static int parseRerollMaxPoints(ConfigurationSection config) {
@@ -499,7 +511,9 @@ public class ActivityConfiguration {
                 points,
                 dailyCap,
                 clickCommands(entry, id),
-                description(entry, id)
+                description(entry, id),
+                requires(entry, id),
+                flag(entry, id, REQUIRES_REVEAL_KEY, ActivityDef.defaultRequiresReveal(id))
             ));
 
             loadCraft(crafts, paths, entry.getString("craft"), id);
@@ -728,6 +742,22 @@ public class ActivityConfiguration {
             return List.of();
         }
         return nonBlank(list);
+    }
+
+    private List<String> requires(ConfigurationSection entry, String id) {
+        Object raw = entry.get(REQUIRES_KEY);
+        if (raw == null) {
+            return List.of();
+        }
+        if (raw instanceof List<?> list) {
+            return nonBlank(list);
+        }
+        if (raw instanceof String text) {
+            return text.isBlank() ? List.of() : List.of(text.trim());
+        }
+        log().warning("activities." + id + "." + REQUIRES_KEY + " is neither a permission nor a list of"
+            + " permissions ('" + Utils.safeForLog(String.valueOf(raw)) + "') - anyone can be dealt this task.");
+        return List.of();
     }
 
     private List<String> description(ConfigurationSection entry, String id) {
@@ -1472,6 +1502,16 @@ public class ActivityConfiguration {
 
     public int rerollsPerDay() {
         return rerollsPerDay;
+    }
+
+    /** How many of a player's daily tasks are dealt from the tasks their professions qualify them for. */
+    public int professionSlots() {
+        return professionSlots;
+    }
+
+    /** Whether dealt tasks start revealed (and count) unless they have {@code requires-reveal: true}. */
+    public boolean autoReveal() {
+        return autoReveal;
     }
 
     public int rerollMaxPoints() {

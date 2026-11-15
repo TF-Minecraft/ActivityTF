@@ -171,8 +171,17 @@ public class ActivityManager {
             return new RecordResult(0, 0, Recorded.UNKNOWN);
         }
 
-        PlayerData data = gated ? store.rolled(uuid) : store.get(uuid);
-        if (gated && (data == null || !data.isRevealed(activityId))) {
+        PlayerData data = gated ? dealt(uuid) : store.get(uuid);
+        if (gated && data == null) {
+            return new RecordResult(0, 0, Recorded.NOT_A_TASK);
+        }
+        if (gated && !data.isRevealed(activityId)) {
+            if (config.autoReveal() && def.requiresReveal()
+                    && (data.tasks().isEmpty() || data.tasks().contains(activityId))) {
+                data.addPending(activityId, amount);
+                store.markDirty();
+                return new RecordResult(0, 0, Recorded.HELD);
+            }
             return new RecordResult(0, 0, Recorded.NOT_A_TASK);
         }
 
@@ -211,6 +220,9 @@ public class ActivityManager {
             "%points%", result.pointsAwarded(),
             "%total%", data.points(),
             "%max%", config.barMax()));
+        if (data.dailyPoints() == result.pointsAwarded()) {
+            player.sendMessage(messages.get("first-points-today"));
+        }
         playSound(player, config.goalCompleteSound());
 
         if (result.milestonesReached() > 0) {
@@ -221,20 +233,83 @@ public class ActivityManager {
     }
 
     public boolean isTracked(UUID uuid, String activityId) {
-        PlayerData data = store.rolled(uuid);
-        return config.activity(activityId) != null && data != null && data.isRevealed(activityId);
+        if (config.activity(activityId) == null) {
+            return false;
+        }
+        PlayerData data = dealt(uuid);
+        return data != null && data.isRevealed(activityId);
+    }
+
+    /**
+     * Today's data with the tasks dealt: an online player always has a day dealt (and their tasks follow their
+     * professions), an offline player keeps whatever was dealt while they were on.
+     */
+    private PlayerData dealt(UUID uuid) {
+        if (Bukkit.getPlayer(uuid) == null) {
+            return store.rolled(uuid);
+        }
+        return tasks(uuid);
     }
 
     public PlayerData tasks(UUID uuid) {
         PlayerData data = store.get(uuid);
-        if (ensureTasks(data)) {
+        if (ensureTasks(data, uuid)) {
             store.markDirty();
         }
         return data;
     }
 
-    private boolean ensureTasks(PlayerData data) {
-        return data.ensureTasks(activityIds(), config.guaranteed(), ThreadLocalRandom.current());
+    private boolean ensureTasks(PlayerData data, UUID uuid) {
+        Player player = Bukkit.getPlayer(uuid);
+        boolean changed = data.ensureTasks(activityIds(), config.guaranteed(), professionIds(),
+            config.professionSlots(), id -> eligible(player, id), player != null, ThreadLocalRandom.current());
+        if (!config.autoReveal()) {
+            return changed;
+        }
+        for (String id : data.tasks()) {
+            ActivityDef def = config.activity(id);
+            if (def != null && !def.requiresReveal()) {
+                changed |= data.markRevealed(id);
+            }
+        }
+        return changed;
+    }
+
+    /** Whether {@code player} may be dealt the activity: anyone for a task without {@code requires}. */
+    boolean eligible(Player player, String id) {
+        ActivityDef def = config.activity(id);
+        if (def == null) {
+            return false;
+        }
+        if (def.requires().isEmpty()) {
+            return true;
+        }
+        if (player == null) {
+            return false;
+        }
+        for (String permission : def.requires()) {
+            if (player.hasPermission(permission)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private List<String> professionIds() {
+        return config.activities().stream().filter(def -> !def.requires().isEmpty()).map(ActivityDef::id).toList();
+    }
+
+    /** Points today's non-guaranteed tasks have paid; a reroll is refused once this passes reroll.max-points. */
+    public int rerollPaidPoints(PlayerData data) {
+        Set<String> guaranteed = new HashSet<>(config.guaranteed());
+        int paid = 0;
+        for (String id : data.tasks()) {
+            ActivityDef def = config.activity(id);
+            if (def != null && !guaranteed.contains(id)) {
+                paid += def.worth(data.count(id));
+            }
+        }
+        return paid;
     }
 
     private List<String> activityIds() {
@@ -259,8 +334,8 @@ public class ActivityManager {
             return Rerolled.FAILED;
         }
 
-        PlayerData data = store.get(uuid);
-        if (data.dailyPoints() > config.rerollMaxPoints()) {
+        PlayerData data = tasks(uuid);
+        if (rerollPaidPoints(data) > config.rerollMaxPoints()) {
             return Rerolled.TOO_LATE;
         }
 
@@ -268,8 +343,15 @@ public class ActivityManager {
             return Rerolled.NONE_LEFT;
         }
 
-        data.reroll(PlayerData.draw(activityIds(), config.guaranteed(), ThreadLocalRandom.current()),
-            config.barMax());
+        Player player = Bukkit.getPlayer(uuid);
+        Set<String> guaranteed = new HashSet<>(config.guaranteed());
+        List<String> candidates = activityIds().stream()
+            .filter(id -> !guaranteed.contains(id) && eligible(player, id)).collect(Collectors.toList());
+        Collections.shuffle(candidates, ThreadLocalRandom.current());
+        if (!data.redraw(guaranteed::contains, candidates)) {
+            return Rerolled.TOO_LATE;
+        }
+        ensureTasks(data, uuid);
         store.markDirty();
         return Rerolled.DONE;
     }
@@ -293,7 +375,7 @@ public class ActivityManager {
         List<String> before = data.tasks();
         String clicked = slot >= 0 && slot < before.size() ? before.get(slot) : null;
 
-        boolean drawChanged = ensureTasks(data);
+        boolean drawChanged = ensureTasks(data, uuid);
         int index = clicked == null ? slot : data.tasks().indexOf(clicked);
 
         boolean revealed = index >= 0 && index < data.tasks().size()
@@ -303,7 +385,14 @@ public class ActivityManager {
         if (drawChanged || revealed) {
             store.markDirty();
         }
-        return new Reveal(revealed ? data.tasks().get(index) : null, drawChanged);
+        String revealedId = revealed ? data.tasks().get(index) : null;
+        if (revealedId != null) {
+            int held = data.takePending(revealedId);
+            if (held > 0) {
+                record(uuid, revealedId, held, true);
+            }
+        }
+        return new Reveal(revealedId, drawChanged);
     }
 
     public int claim(Player player) {
@@ -878,8 +967,8 @@ public class ActivityManager {
     }
 
     public void onJoin(Player player) {
-        PlayerData data = store.rolled(player.getUniqueId());
-        if (data != null && data.claimable(config.milestones()) > 0) {
+        PlayerData data = tasks(player.getUniqueId());
+        if (data.claimable(config.milestones()) > 0) {
             player.sendMessage(config.messages().get("reward-ready"));
         }
     }

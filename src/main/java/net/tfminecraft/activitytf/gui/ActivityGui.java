@@ -230,7 +230,7 @@ public class ActivityGui implements Listener {
             lore = messages.get("gui.reroll-lore-disabled");
         } else if (!player.hasPermission("activity.reroll")) {
             lore = messages.get("gui.reroll-lore-locked");
-        } else if (data.dailyPoints() > config.rerollMaxPoints()) {
+        } else if (manager.rerollPaidPoints(data) > config.rerollMaxPoints()) {
             lore = messages.get("gui.reroll-lore-too-late", "%points%", config.rerollMaxPoints());
         } else {
             lore = messages.get("gui.reroll-lore-left",

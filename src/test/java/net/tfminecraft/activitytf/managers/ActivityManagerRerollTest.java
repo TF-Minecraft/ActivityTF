@@ -256,7 +256,7 @@ class ActivityManagerRerollTest {
         UUID uuid = UUID.randomUUID();
         PlayerData data = manager.tasks(uuid);
         manager.reveal(uuid, 0);
-        data.record(2, def("a0"), 50, 10, List.of());
+        data.record(2, def(data.tasks().get(0)), 50, 10, List.of());
         assertEquals(2, data.dailyPoints());
         List<String> tasksBefore = List.copyOf(data.tasks());
         Set<String> revealedBefore = Set.copyOf(data.revealed());
@@ -279,7 +279,7 @@ class ActivityManagerRerollTest {
         TestManagers.rerollMaxPoints(manager, 1);
         UUID uuid = UUID.randomUUID();
         PlayerData data = manager.tasks(uuid);
-        data.record(5, def("a0"), 50, 10, List.of());
+        data.record(5, def(data.tasks().get(0)), 50, 10, List.of());
 
         assertEquals(ActivityManager.Rerolled.TOO_LATE, manager.reroll(uuid));
 
@@ -301,7 +301,7 @@ class ActivityManagerRerollTest {
 
         assertEquals(ActivityManager.Rerolled.DONE, manager.reroll(uuid));
 
-        data.record(1, def("a0"), 50, 10, List.of());
+        data.record(1, def(data.tasks().get(0)), 50, 10, List.of());
 
         assertEquals(ActivityManager.Rerolled.TOO_LATE, manager.reroll(uuid));
     }
@@ -317,7 +317,7 @@ class ActivityManagerRerollTest {
 
         assertEquals(ActivityManager.Rerolled.DONE, manager.reroll(uuid));
 
-        data.record(2, def("a0"), 50, 10, List.of());
+        data.record(2, def(data.tasks().get(0)), 50, 10, List.of());
 
         assertEquals(ActivityManager.Rerolled.TOO_LATE, manager.reroll(uuid));
     }

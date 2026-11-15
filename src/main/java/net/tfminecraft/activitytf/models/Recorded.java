@@ -6,6 +6,9 @@ public enum Recorded {
 
     NOT_A_TASK,
 
+    /** Held for a task that counts once revealed (a vote cast before Voting was clicked today). */
+    HELD,
+
     RECORDED,
 
     ACTIVITY_CAP,

@@ -323,8 +323,8 @@ public class ActivityCommand implements CommandExecutor, TabCompleter, Listener 
                     outcome == Outcome.ADDED && added.points() > 0 ? ADD_DONE_POINTS : outcome.messageKey(),
                     "%count%", count, "%activity%", args[2], "%player%", name(target, args[1]),
                     "%points%", added.points(), "%max%", manager.getConfiguration().barMax());
-            case NOT_A_TASK -> messages().get(outcome.messageKey(),
-                "%activity%", args[2], "%player%", name(target, args[1]));
+            case NOT_A_TASK, HELD -> messages().get(outcome.messageKey(),
+                "%count%", count, "%activity%", args[2], "%player%", name(target, args[1]));
             case UNKNOWN_ACTIVITY -> messages().get(outcome.messageKey(), "%activity%", args[2]);
         });
         audit(sender, "action=add " + who(target, args[1]) + " activity=" + quoted(args[2])
@@ -373,6 +373,7 @@ public class ActivityCommand implements CommandExecutor, TabCompleter, Listener 
     enum Outcome {
         ADDED("admin.add-done"),
         NOT_A_TASK("admin.add-not-a-task"),
+        HELD("admin.add-held"),
         CAPPED_ACTIVITY("admin.add-capped-activity"),
         CAPPED_DAILY("admin.add-capped-daily"),
         CAPPED_VOTE_SHARE("admin.add-capped-vote-share"),
@@ -397,6 +398,7 @@ public class ActivityCommand implements CommandExecutor, TabCompleter, Listener 
         Outcome outcome = switch (result.outcome()) {
             case RECORDED -> Outcome.ADDED;
             case NOT_A_TASK -> Outcome.NOT_A_TASK;
+            case HELD -> Outcome.HELD;
             case ACTIVITY_CAP -> Outcome.CAPPED_ACTIVITY;
             case DAILY_MAX -> Outcome.CAPPED_DAILY;
             case VOTE_SHARE -> Outcome.CAPPED_VOTE_SHARE;

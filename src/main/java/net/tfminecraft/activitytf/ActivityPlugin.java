@@ -1,6 +1,7 @@
 package net.tfminecraft.activitytf;
 
 import org.bukkit.Bukkit;
+import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 import net.tfminecraft.activitytf.commands.ActivityCommand;
 import net.tfminecraft.activitytf.commands.ReferralCommand;
@@ -10,10 +11,12 @@ import net.tfminecraft.activitytf.hooks.PlaceholderHook;
 import net.tfminecraft.activitytf.listeners.AdvancedCraftListener;
 import net.tfminecraft.activitytf.listeners.ArchaeologyListener;
 import net.tfminecraft.activitytf.listeners.BattleListener;
+import net.tfminecraft.activitytf.listeners.BreedListener;
 import net.tfminecraft.activitytf.listeners.BreweryListener;
 import net.tfminecraft.activitytf.listeners.CasinoWinListener;
 import net.tfminecraft.activitytf.listeners.CharacterChatListener;
 import net.tfminecraft.activitytf.listeners.CraftListener;
+import net.tfminecraft.activitytf.listeners.CreatureKillListener;
 import net.tfminecraft.activitytf.listeners.DishCookedListener;
 import net.tfminecraft.activitytf.listeners.FurnitureListener;
 import net.tfminecraft.activitytf.listeners.GeigerListener;
@@ -24,7 +27,9 @@ import net.tfminecraft.activitytf.listeners.MarketSaleListener;
 import net.tfminecraft.activitytf.listeners.MmoItemsStationListener;
 import net.tfminecraft.activitytf.listeners.ProfessionUpgradeListener;
 import net.tfminecraft.activitytf.listeners.ProfessionXpListener;
+import net.tfminecraft.activitytf.listeners.ProvinceTravelListener;
 import net.tfminecraft.activitytf.listeners.ReferralListener;
+import net.tfminecraft.activitytf.listeners.NamedEventHook;
 import net.tfminecraft.activitytf.listeners.VehicleBuildListener;
 import net.tfminecraft.activitytf.listeners.VoteListener;
 import net.tfminecraft.activitytf.managers.ActivityManager;
@@ -52,6 +57,8 @@ public class ActivityPlugin extends JavaPlugin {
 
         getServer().getPluginManager().registerEvents(new JoinListener(manager), this);
         getServer().getPluginManager().registerEvents(new CraftListener(manager), this);
+        getServer().getPluginManager().registerEvents(new BreedListener(manager), this);
+        getServer().getPluginManager().registerEvents(new CreatureKillListener(manager), this);
         getServer().getPluginManager().registerEvents(gui, this);
 
         ReferralCommand referralCommand = new ReferralCommand(manager, referralGui);
@@ -92,6 +99,14 @@ public class ActivityPlugin extends JavaPlugin {
             placeholderHook = null;
         }
         getLogger().info("activity has been disabled!");
+    }
+
+    private void hookByName(String pluginName, String eventClass, String activityId) {
+        Plugin source = Bukkit.getPluginManager().getPlugin(pluginName);
+        if (source != null && source.isEnabled() && NamedEventHook.register(this, source.getClass().getClassLoader(),
+                eventClass, activityId, ActivityManager.getInstance())) {
+            getLogger().info("Hooked into " + pluginName + ".");
+        }
     }
 
     private void registerHooks() {
@@ -147,8 +162,13 @@ public class ActivityPlugin extends JavaPlugin {
         if (Bukkit.getPluginManager().isPluginEnabled("SimpleFactions")) {
             getServer().getPluginManager().registerEvents(
                 new BattleListener(ActivityManager.getInstance()), this);
+            getServer().getPluginManager().registerEvents(
+                new ProvinceTravelListener(ActivityManager.getInstance()), this);
             getLogger().info("Hooked into SimpleFactions.");
         }
+
+        hookByName("Research", "net.tfminecraft.research.event.ResearchCompleteEvent", "research_complete");
+        hookByName("Recycler", "net.tfminecraft.recycler.event.RecycleCompleteEvent", "recycle_item");
 
         if (Bukkit.getPluginManager().isPluginEnabled("AdvancedCrafting")) {
             getServer().getPluginManager().registerEvents(
