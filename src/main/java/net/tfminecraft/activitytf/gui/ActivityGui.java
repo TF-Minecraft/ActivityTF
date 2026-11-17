@@ -193,7 +193,7 @@ public class ActivityGui implements Listener {
                 if (shown < rewards.size()) {
                     lore.add(messages.get("gui.reward-preview-more", "%count%", rewards.size() - shown));
                 }
-                if (preview.ranged()) {
+                if (preview.ranged(shown)) {
                     lore.addAll(messages.lines("gui.reward-preview-ranges"));
                 }
             }
@@ -212,22 +212,27 @@ public class ActivityGui implements Listener {
                                          Function<String, String> poolNames) {
         List<String> points = new ArrayList<>();
         List<String> names = new ArrayList<>();
+        String lastSource = null;
         for (Integer milestone : milestones) {
             if (milestone <= next) {
                 continue;
             }
-            String name = laterRewardName(messages, drops.get(milestone), multiplier, multiplierPools, pools,
-                poolNames);
+            RewardEntry drop = drops.get(milestone);
+            String name = laterRewardName(messages, drop, multiplier, multiplierPools, pools, poolNames);
             if (name == null) {
                 continue;
             }
-            int last = names.size() - 1;
-            if (last >= 0 && names.get(last).equals(name)) {
+            // Neighbours join only when they pay from the same pool, or the same fixed reward.
+            String pool = poolOf(drop);
+            String source = pool != null ? "pool:" + pool : "fixed:" + name;
+            if (source.equals(lastSource)) {
+                int last = names.size() - 1;
                 points.set(last, points.get(last) + "/" + milestone);
             } else {
                 points.add(Integer.toString(milestone));
                 names.add(name);
             }
+            lastSource = source;
         }
         List<String> lore = new ArrayList<>();
         if (names.isEmpty()) {

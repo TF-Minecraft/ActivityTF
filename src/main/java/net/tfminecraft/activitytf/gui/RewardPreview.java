@@ -21,8 +21,17 @@ final class RewardPreview {
     private RewardPreview() {
     }
 
-    /** {@code lines} are the options to show; {@code ranged} is true when a line joins rewards of different sizes. */
-    record Preview(List<String> lines, boolean ranged) {
+    /** {@code lines} are the options to show; {@code rangedLines} marks each line that joins rewards of different sizes. */
+    record Preview(List<String> lines, List<Boolean> rangedLines) {
+        /** True when any line joins rewards of different sizes. */
+        boolean ranged() {
+            return ranged(lines.size());
+        }
+
+        /** True when one of the first {@code shown} lines joins rewards of different sizes. */
+        boolean ranged(int shown) {
+            return rangedLines.subList(0, Math.min(shown, rangedLines.size())).contains(true);
+        }
     }
 
     private record Key(List<String> paths, List<String> labels) {
@@ -68,7 +77,7 @@ final class RewardPreview {
                 continue;
             }
             Map<String, Integer> totals = totals(entry);
-            List<String> labels = totals == null ? null : labels(entry.display(), totals);
+            List<String> labels = totals == null ? null : labels(entry.display(), totals, entry.items().size());
             if (labels != null) {
                 int[] amounts = totals.values().stream().mapToInt(Integer::intValue).toArray();
                 Key key = new Key(List.copyOf(totals.keySet()), labels);
@@ -83,13 +92,13 @@ final class RewardPreview {
             }
         }
         List<String> displays = new ArrayList<>();
-        boolean ranged = false;
+        List<Boolean> ranged = new ArrayList<>();
         for (Map.Entry<Object, Range> option : options.entrySet()) {
             Range range = option.getValue();
             displays.add(option.getKey() instanceof Key ? range.display() : range.labels().get(0));
-            ranged |= range.ranged();
+            ranged.add(range.ranged());
         }
-        return new Preview(displays, ranged);
+        return new Preview(List.copyOf(displays), List.copyOf(ranged));
     }
 
     // Item amounts by path, in first-seen order; null for commands or an entry without items.
@@ -105,13 +114,14 @@ final class RewardPreview {
     }
 
     /**
-     * The name of each item, in {@code totals} order. A single item is named by its display without
-     * the quantity. A bundle's display must have one "xN name" part per item, in item order, whose N
-     * matches that item's total; otherwise null, and the bundle stays a whole outcome.
+     * The name of each item, in {@code totals} order. A single stack is named by its display without
+     * the quantity. Otherwise the display must have one "xN name" part per item, in item order, whose N
+     * matches that item's total (stacks of one item added up); if not, null, and the entry stays a
+     * whole outcome.
      */
-    private static List<String> labels(String display, Map<String, Integer> totals) {
+    private static List<String> labels(String display, Map<String, Integer> totals, int stacks) {
         String text = display == null ? "" : display.strip();
-        if (totals.size() == 1) {
+        if (stacks == 1) {
             String label = QUANTITY.matcher(text).replaceFirst("").strip();
             return List.of(label.isBlank() ? "&7" + totals.keySet().iterator().next() : label);
         }

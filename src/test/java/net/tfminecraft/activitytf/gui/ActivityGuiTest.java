@@ -496,11 +496,34 @@ class ActivityGuiTest {
             "m.materials.ignitium", 20, "v.iron_ingot", 20);
         RewardEntry noQuantity = bundle(1, "&7Steel tools + &7rations", "m.tools.steel_pickaxe", 1, "BREAD", 64);
         RewardEntry blankName = bundle(1, "#50d990x1 + #50d990x2 &7Bread", "DIAMOND", 1, "BREAD", 2);
+        RewardEntry splitStacks = bundle(1, "x64 &7Iron + x16 &7Iron", "IRON_INGOT", 64, "IRON_INGOT", 16);
+        RewardEntry splitPile = bundle(1, "&7A pile of iron", "IRON_INGOT", 64, "IRON_INGOT", 16);
+        RewardEntry splitWhole = bundle(1, "x80 &7Iron", "IRON_INGOT", 64, "IRON_INGOT", 16);
 
-        RewardPreview.Preview preview = RewardPreview.preview(List.of(wrongAmount, noQuantity, blankName));
+        RewardPreview.Preview preview = RewardPreview.preview(List.of(wrongAmount, noQuantity, blankName,
+            splitStacks, splitPile, splitWhole));
 
-        assertEquals(List.of(wrongAmount.display(), noQuantity.display(), blankName.display()), preview.lines());
+        assertEquals(List.of(wrongAmount.display(), noQuantity.display(), blankName.display(),
+            splitStacks.display(), splitPile.display(), "#50d990x80 &r&7Iron"), preview.lines());
         assertFalse(preview.ranged());
+    }
+
+    @Test
+    void theRangeNoteFollowsOnlyTheShownLines() {
+        Messages messages = shippedMessages();
+        PlayerData data = new PlayerData(0, 0, "2026-W38", "2026-09-17", 0, Map.of());
+        List<RewardEntry> pool = new ArrayList<>();
+        for (int i = 0; i < ActivityGui.MAX_PREVIEW_LINES; i++) {
+            pool.add(material(1, 1, "item_" + i, "&7Item " + i));
+        }
+        pool.add(material(1, 1, "hidden", "&7Hidden"));
+        pool.add(material(1, 5, "hidden", "&7Hidden"));
+
+        List<String> lore = ActivityGui.weeklyRewardLore(messages, data, List.of(10), Map.of(), 1, Set.of(),
+            name -> pool, null);
+
+        assertEquals(messages.get("gui.reward-preview-more", "%count%", 1), lore.get(lore.size() - 1));
+        assertTrue(RewardPreview.preview(pool).ranged());
     }
 
     @Test
@@ -512,16 +535,17 @@ class ActivityGuiTest {
             material(1, 1, "rare_scroll", "&7Rare"));
         List<RewardEntry> single = List.of(material(1, 3, "gem", "&7Gem"));
         Map<String, List<RewardEntry>> pools = Map.of("pool_act1", act, "pool_skin", skins,
-            "pool_single", single, "pool_unnamed", skins);
+            "pool_single", single, "pool_unnamed", skins, "pool_other", skins);
         RewardEntry steel = new RewardEntry(1, "Steel", List.of(), List.of(new RewardEntry.Item("m.material.steel", 3)));
         Map<Integer, RewardEntry> drops = Map.of(
             10, ActivityConfiguration.poolRef("pool_act1"), 20, ActivityConfiguration.poolRef("pool_act1"),
             30, ActivityConfiguration.poolRef("pool_skin"), 40, ActivityConfiguration.poolRef("pool_skin"),
             50, ActivityConfiguration.poolRef("pool_empty"), 60, ActivityConfiguration.poolRef("pool_skin"),
             70, ActivityConfiguration.poolRef("pool_single"), 80, ActivityConfiguration.poolRef("pool_unnamed"),
-            90, steel);
+            90, steel, 85, ActivityConfiguration.poolRef("pool_other"));
 
-        List<String> later = ActivityGui.laterRewardLore(messages, 10, List.of(10, 20, 30, 40, 50, 60, 70, 80, 90),
+        List<String> later = ActivityGui.laterRewardLore(messages, 10,
+            List.of(10, 20, 30, 40, 50, 60, 70, 80, 85, 90),
             drops, 2, Set.of("pool_act1"), pools::get,
             pool -> Map.of("pool_act1", "&7Act materials", "pool_skin", "&7Skin Scroll").get(pool));
 
@@ -531,6 +555,7 @@ class ActivityGuiTest {
             messages.get("gui.bar-lore-later-line", "%points%", "30/40/60", "%reward%", Utils.colorize("&7Skin Scroll")),
             messages.get("gui.bar-lore-later-line", "%points%", "70", "%reward%", Utils.colorize("#50d990x3 &r&7Gem")),
             messages.get("gui.bar-lore-later-line", "%points%", "80", "%reward%", messages.get("gui.bar-lore-later-random")),
+            messages.get("gui.bar-lore-later-line", "%points%", "85", "%reward%", messages.get("gui.bar-lore-later-random")),
             messages.get("gui.bar-lore-later-line", "%points%", "90", "%reward%", Utils.colorize("#50d990x6 #b8906eSteel"))),
             later);
         assertTrue(ActivityGui.laterRewardLore(messages, 90, List.of(10, 90), drops, 1, Set.of(), pools::get,
