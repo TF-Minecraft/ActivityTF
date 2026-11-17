@@ -925,6 +925,11 @@ daily-reward:
 
 gui:
   title: "&8Weekly Activity"
+  # Short names for reward pools in the weekly icon's "Later this week" list, e.g.
+  #   pool_act1: "#7f7d80Act materials"
+  #   pool_skin: "#b8906eItem Skin Scroll"
+  # A pool with no name shows its only option, or "a random reward" when it has several.
+  pool-names: {}
 
 bar:
   max: 50            # points to fill the weekly bar

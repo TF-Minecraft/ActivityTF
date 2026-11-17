@@ -414,6 +414,9 @@ class ActivityConfigurationTest {
             settings.set("reset.day", " wednesday ");
             settings.set("reset.hour", 17);
             settings.set("gui.title", "&6Activity board");
+            settings.set("gui.pool-names.Pool_Act1", "&7Act materials");
+            settings.set("gui.pool-names.pool_blank", " ");
+            settings.set("gui.pool-names.pool_list", List.of("not", "a name"));
             settings.set("bar.max", 60);
             settings.set("bar.daily-max", 12);
             settings.set("bar.length", 30);
@@ -434,6 +437,10 @@ class ActivityConfigurationTest {
             assertEquals(DayOfWeek.WEDNESDAY, config.resetDay());
             assertEquals(17, config.resetHour());
             assertEquals("&6Activity board", config.guiTitle());
+            assertEquals("&7Act materials", config.poolDisplayName("pool_act1"));
+            assertNull(config.poolDisplayName("pool_blank"));
+            assertNull(config.poolDisplayName("pool_list"));
+            assertNull(config.poolDisplayName(null));
             assertEquals(60, config.barMax());
             assertEquals(12, config.dailyMax());
             assertEquals(12, config.nonVoteDailyMax());

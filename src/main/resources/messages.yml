@@ -22,6 +22,14 @@ gui:
   reward-preview-many: "&7%count% random rewards, each from:"
   reward-preview-more: "&7+%count% other possible rewards"
   reward-preview-unavailable: "&8Reward preview unavailable"
+  # Shown under a reward list when a line joins the same reward in several sizes ("x20-80").
+  reward-preview-ranges:
+    - "&8&oA range is the same reward in several"
+    - "&8&osizes - each draw pays one of them."
+  bar-lore-later: "#d97b66Later this week&e:"
+  bar-lore-later-line: "&6%points% #b8906epts&8: &f%reward%"
+  bar-lore-later-many: "&f%count%x %reward%"
+  bar-lore-later-random: "&7a random reward"
   reward-click: "#6b9c68[#fafa16Click to claim %count% reward(s)#6b9c68]"
   activity-lore-progress: "#af97bdProgress&e: %bar%"
   activity-lore-today: "#d97b66Today&e: &6%today%"

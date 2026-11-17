@@ -476,8 +476,12 @@ public class ReferralGui implements Listener {
             return lore;
         }
         lore.add(messages.get("gui.reward-preview-one"));
-        for (String option : RewardPreview.summarize(pool)) {
+        RewardPreview.Preview preview = RewardPreview.preview(pool);
+        for (String option : preview.lines()) {
             lore.add(Utils.colorize(option));
+        }
+        if (preview.ranged()) {
+            lore.addAll(messages.lines("gui.reward-preview-ranges"));
         }
         return lore;
     }

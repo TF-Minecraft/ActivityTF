@@ -124,6 +124,7 @@ public class ActivityConfiguration {
     }
 
     private String guiTitle;
+    private volatile Map<String, String> poolDisplayNames = Map.of();
 
     private volatile int barMax;
     private volatile int dailyMax;
@@ -193,6 +194,7 @@ public class ActivityConfiguration {
         }
 
         guiTitle = config.getString("gui.title", "&8Weekly Activity");
+        poolDisplayNames = loadPoolDisplayNames(config);
 
         barLength = barLength(config.getInt("bar.length", 40));
 
@@ -1470,6 +1472,26 @@ public class ActivityConfiguration {
 
     public String guiTitle() {
         return guiTitle;
+    }
+
+    /** The short name gui.pool-names gives a reward pool for the weekly icon, or null. */
+    public String poolDisplayName(String pool) {
+        return pool == null ? null : poolDisplayNames.get(poolName(pool));
+    }
+
+    private Map<String, String> loadPoolDisplayNames(ConfigurationSection config) {
+        ConfigurationSection names = section(config, "gui.pool-names");
+        if (names == null) {
+            return Map.of();
+        }
+        Map<String, String> loaded = new LinkedHashMap<>();
+        for (String key : keys(names)) {
+            String name = names.isString(key) ? names.getString(key) : null;
+            if (name != null && !name.isBlank()) {
+                loaded.put(poolName(key), name);
+            }
+        }
+        return Map.copyOf(loaded);
     }
 
     public int barMax() {
