@@ -509,6 +509,36 @@ class ActivityGuiTest {
     }
 
     @Test
+    void bundlesWithTheSameItemsInAnotherOrderShareALine() {
+        RewardPreview.Preview preview = RewardPreview.preview(List.of(
+            bundle(1, "x2 &7Diamond + x4 &7Iron", "DIAMOND", 2, "IRON_INGOT", 4),
+            bundle(1, "x8 &7Iron + x6 &7Diamond", "IRON_INGOT", 8, "DIAMOND", 6)));
+
+        assertEquals(List.of("#50d990x2–6 &r&7Diamond &7+ #50d990x4–8 &r&7Iron"), preview.lines());
+    }
+
+    @Test
+    void aRangedLaterRewardGetsTheRangeNoteOnce() {
+        Messages messages = shippedMessages();
+        PlayerData data = new PlayerData(0, 0, "2026-W38", "2026-09-17", 0, Map.of());
+        RewardEntry steel = new RewardEntry(1, "Steel", List.of(), List.of(new RewardEntry.Item("m.material.steel", 3)));
+        List<RewardEntry> gems = List.of(material(1, 2, "gem", "&7Gem"), material(1, 8, "gem", "&7Gem"));
+        Map<Integer, RewardEntry> drops = Map.of(10, steel, 20, ActivityConfiguration.poolRef("pool_gems"),
+            30, ActivityConfiguration.poolRef("pool_gems2"));
+        Map<String, List<RewardEntry>> pools = Map.of("pool_gems", gems, "pool_gems2", gems);
+        List<String> note = messages.lines("gui.reward-preview-ranges");
+
+        List<String> lore = ActivityGui.weeklyRewardLore(messages, data, List.of(10, 20, 30), drops, 1, Set.of(),
+            pools::get, null);
+
+        int at = java.util.Collections.indexOfSubList(lore, note);
+        assertEquals(lore.size() - note.size(), at, "the note follows the later lines, once");
+        assertEquals(at, java.util.Collections.lastIndexOfSubList(lore, note));
+        assertFalse(ActivityGui.laterRewardLore(messages, 10, List.of(10, 20), drops, 1, Set.of(), pools::get,
+            null, true).containsAll(note));
+    }
+
+    @Test
     void theRangeNoteFollowsOnlyTheShownLines() {
         Messages messages = shippedMessages();
         PlayerData data = new PlayerData(0, 0, "2026-W38", "2026-09-17", 0, Map.of());
@@ -547,7 +577,7 @@ class ActivityGuiTest {
         List<String> later = ActivityGui.laterRewardLore(messages, 10,
             List.of(10, 20, 30, 40, 50, 60, 70, 80, 85, 90),
             drops, 2, Set.of("pool_act1"), pools::get,
-            pool -> Map.of("pool_act1", "&7Act materials", "pool_skin", "&7Skin Scroll").get(pool));
+            pool -> Map.of("pool_act1", "&7Act materials", "pool_skin", "&7Skin Scroll").get(pool), false);
 
         assertEquals(List.of(messages.get("gui.bar-lore-later"),
             messages.get("gui.bar-lore-later-line", "%points%", "20", "%reward%",
@@ -559,7 +589,7 @@ class ActivityGuiTest {
             messages.get("gui.bar-lore-later-line", "%points%", "90", "%reward%", Utils.colorize("#50d990x6 #b8906eSteel"))),
             later);
         assertTrue(ActivityGui.laterRewardLore(messages, 90, List.of(10, 90), drops, 1, Set.of(), pools::get,
-            null).isEmpty());
+            null, false).isEmpty());
 
         List<String> weekly = ActivityGui.weeklyRewardLore(messages, data, List.of(10, 20, 30), drops, 2,
             Set.of("pool_act1"), pools::get, null);

@@ -34,18 +34,21 @@ final class RewardPreview {
         }
     }
 
-    private record Key(List<String> paths, List<String> labels) {
+    // The name of each item path; a map, so the same items listed in another order are the same key.
+    private record Key(Map<String, String> labels) {
     }
 
-    private record Range(List<String> labels, int[] min, int[] max) {
-        Range include(int[] amounts) {
+    // Shown in the order of the first entry; later entries are matched to it by path.
+    private record Range(List<String> paths, List<String> labels, int[] min, int[] max) {
+        Range include(Map<String, Integer> totals) {
             int[] low = min.clone();
             int[] high = max.clone();
-            for (int i = 0; i < amounts.length; i++) {
-                low[i] = Math.min(low[i], amounts[i]);
-                high[i] = Math.max(high[i], amounts[i]);
+            for (int i = 0; i < paths.size(); i++) {
+                int amount = totals.get(paths.get(i));
+                low[i] = Math.min(low[i], amount);
+                high[i] = Math.max(high[i], amount);
             }
-            return new Range(labels, low, high);
+            return new Range(paths, labels, low, high);
         }
 
         boolean ranged() {
@@ -79,16 +82,22 @@ final class RewardPreview {
             Map<String, Integer> totals = totals(entry);
             List<String> labels = totals == null ? null : labels(entry.display(), totals, entry.items().size());
             if (labels != null) {
+                List<String> paths = List.copyOf(totals.keySet());
+                Map<String, String> named = new LinkedHashMap<>();
+                for (int i = 0; i < paths.size(); i++) {
+                    named.put(paths.get(i), labels.get(i));
+                }
+                Key key = new Key(Map.copyOf(named));
                 int[] amounts = totals.values().stream().mapToInt(Integer::intValue).toArray();
-                Key key = new Key(List.copyOf(totals.keySet()), labels);
                 Range range = options.get(key);
-                options.put(key, range == null ? new Range(labels, amounts, amounts.clone()) : range.include(amounts));
+                options.put(key, range == null ? new Range(paths, labels, amounts, amounts.clone())
+                    : range.include(totals));
             } else {
                 String label = entry.display();
                 if (label == null || label.isBlank()) {
                     label = "&7Other reward";
                 }
-                options.putIfAbsent(label, new Range(List.of(label), new int[0], new int[0]));
+                options.putIfAbsent(label, new Range(List.of(), List.of(label), new int[0], new int[0]));
             }
         }
         List<String> displays = new ArrayList<>();

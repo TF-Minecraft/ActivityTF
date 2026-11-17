@@ -172,6 +172,7 @@ public class ActivityGui implements Listener {
             return lore;
         }
 
+        boolean noteShown = false;
         String pool = poolOf(drops.get(next));
         if (pool == null) {
             lore.add(messages.get("gui.bar-lore-reward", "%points%", next, "%reward%",
@@ -195,33 +196,41 @@ public class ActivityGui implements Listener {
                 }
                 if (preview.ranged(shown)) {
                     lore.addAll(messages.lines("gui.reward-preview-ranges"));
+                    noteShown = true;
                 }
             }
         }
-        lore.addAll(laterRewardLore(messages, next, milestones, drops, multiplier, multiplierPools, pools, poolNames));
+        lore.addAll(laterRewardLore(messages, next, milestones, drops, multiplier, multiplierPools, pools, poolNames,
+            noteShown));
         if (due > 0) {
             lore.add(messages.get("gui.reward-click", "%count%", due));
         }
         return lore;
     }
 
-    /** One line per later milestone this week naming its reward; neighbours with the same reward share a line. */
+    /**
+     * One line per later milestone this week naming its reward; neighbours with the same reward share a line.
+     * Adds the range note when a line shows a range and {@code noteShown} says it is not above already.
+     */
     static List<String> laterRewardLore(Messages messages, int next, List<Integer> milestones,
                                          Map<Integer, RewardEntry> drops, int multiplier, Set<String> multiplierPools,
                                          Function<String, List<RewardEntry>> pools,
-                                         Function<String, String> poolNames) {
+                                         Function<String, String> poolNames, boolean noteShown) {
         List<String> points = new ArrayList<>();
         List<String> names = new ArrayList<>();
+        boolean ranged = false;
         String lastSource = null;
         for (Integer milestone : milestones) {
             if (milestone <= next) {
                 continue;
             }
             RewardEntry drop = drops.get(milestone);
-            String name = laterRewardName(messages, drop, multiplier, multiplierPools, pools, poolNames);
-            if (name == null) {
+            Later later = laterReward(messages, drop, multiplier, multiplierPools, pools, poolNames);
+            if (later == null) {
                 continue;
             }
+            String name = later.name();
+            ranged |= later.ranged();
             // Neighbours join only when they pay from the same pool, or the same fixed reward.
             String pool = poolOf(drop);
             String source = pool != null ? "pool:" + pool : "fixed:" + name;
@@ -242,28 +251,38 @@ public class ActivityGui implements Listener {
         for (int i = 0; i < names.size(); i++) {
             lore.add(messages.get("gui.bar-lore-later-line", "%points%", points.get(i), "%reward%", names.get(i)));
         }
+        if (ranged && !noteShown) {
+            lore.addAll(messages.lines("gui.reward-preview-ranges"));
+        }
         return lore;
+    }
+
+    // A later milestone's shown name, and whether that name is a generated range.
+    private record Later(String name, boolean ranged) {
     }
 
     // What a later milestone pays: a fixed drop, the pool's configured name, the pool's only option, or
     // "a random reward". Null when there is nothing to pay (an empty pool).
-    private static String laterRewardName(Messages messages, RewardEntry drop, int multiplier,
-                                          Set<String> multiplierPools, Function<String, List<RewardEntry>> pools,
-                                          Function<String, String> poolNames) {
+    private static Later laterReward(Messages messages, RewardEntry drop, int multiplier,
+                                     Set<String> multiplierPools, Function<String, List<RewardEntry>> pools,
+                                     Function<String, String> poolNames) {
         String pool = poolOf(drop);
         if (pool == null) {
-            return Utils.colorize(fixedDisplay(drop, multiplier));
+            return new Later(Utils.colorize(fixedDisplay(drop, multiplier)), false);
         }
-        List<String> options = RewardPreview.summarize(entries(pools, pool));
+        RewardPreview.Preview preview = RewardPreview.preview(entries(pools, pool));
+        List<String> options = preview.lines();
         if (options.isEmpty()) {
             return null;
         }
         String configured = poolNames == null ? null : poolNames.apply(pool);
+        boolean onlyOption = (configured == null || configured.isBlank()) && options.size() == 1;
         String name = configured != null && !configured.isBlank() ? Utils.colorize(configured)
-            : options.size() == 1 ? Utils.colorize(options.get(0))
+            : onlyOption ? Utils.colorize(options.get(0))
             : messages.get("gui.bar-lore-later-random");
         int draws = draws(pool, multiplier, multiplierPools);
-        return draws == 1 ? name : messages.get("gui.bar-lore-later-many", "%count%", draws, "%reward%", name);
+        return new Later(draws == 1 ? name : messages.get("gui.bar-lore-later-many", "%count%", draws, "%reward%", name),
+            onlyOption && preview.ranged());
     }
 
     private static List<RewardEntry> entries(Function<String, List<RewardEntry>> pools, String pool) {
