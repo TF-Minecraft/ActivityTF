@@ -547,6 +547,12 @@ class ReferralGuiTest {
         List<String> options = gui.rewardLore(new Reward("Two", null, "pool_two", null));
         assertTrue(options.get(0).contains("One random reward"), String.valueOf(options));
         assertEquals(3, options.size());
+        net.tfminecraft.activitytf.managers.TestManagers.pool(fixture.manager, "pool_sizes", List.of(
+            new RewardEntry(1, "x1 &aTin", List.of(), List.of(new RewardEntry.Item("DIAMOND", 1))),
+            new RewardEntry(1, "x4 &aTin", List.of(), List.of(new RewardEntry.Item("DIAMOND", 4)))));
+        List<String> sizes = gui.rewardLore(new Reward("Sizes", null, "pool_sizes", null));
+        assertEquals(fixture.manager.getConfiguration().messages().lines("gui.reward-preview-ranges"),
+            sizes.subList(2, sizes.size()));
         Reward empty = new Reward("Pool", null, "pool_nothing", null);
         assertTrue(gui.rewardLore(empty).get(0).contains("unavailable"));
 

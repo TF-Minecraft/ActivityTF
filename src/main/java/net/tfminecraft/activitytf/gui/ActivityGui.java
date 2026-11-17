@@ -46,6 +46,9 @@ public class ActivityGui implements Listener {
 
     private static final int PROGRESS_BAR_LENGTH = 20;
 
+    /** Most reward options the weekly icon lists before it sums up the rest. */
+    static final int MAX_PREVIEW_LINES = 10;
+
     private final ActivityManager manager;
 
     private Consumer<Player> referralOpener;
@@ -150,7 +153,7 @@ public class ActivityGui implements Listener {
         lore.add(Utils.colorize(bar));
         lore.add(" ");
         lore.addAll(weeklyRewardLore(messages, data, milestones, config.milestoneDrops(),
-            config.rewardMultiplier(), config.multiplierPools(), config::rewardPool));
+            config.rewardMultiplier(), config.multiplierPools(), config::rewardPool, config::poolDisplayName));
 
         return item(Material.EXPERIENCE_BOTTLE,
             messages.get("gui.bar-name", "%points%", data.points(), "%max%", config.barMax()),
@@ -159,7 +162,8 @@ public class ActivityGui implements Listener {
 
     static List<String> weeklyRewardLore(Messages messages, PlayerData data, List<Integer> milestones,
                                           Map<Integer, RewardEntry> drops, int multiplier, Set<String> multiplierPools,
-                                          Function<String, List<RewardEntry>> pools) {
+                                          Function<String, List<RewardEntry>> pools,
+                                          Function<String, String> poolNames) {
         List<String> lore = new ArrayList<>();
         int due = data.claimable(milestones);
         Integer next = nextMilestone(data, milestones);
@@ -168,50 +172,111 @@ public class ActivityGui implements Listener {
             return lore;
         }
 
-        RewardEntry drop = drops.get(next);
-        String pool = drop == null ? ActivityConfiguration.DEFAULT_POOL
-            : ActivityConfiguration.referencedPool(drop);
-        List<String> rewards = nextRewardDisplays(next, drops, multiplier, pools);
-        if (pool == null && rewards.size() == 1) {
+        String pool = poolOf(drops.get(next));
+        if (pool == null) {
             lore.add(messages.get("gui.bar-lore-reward", "%points%", next, "%reward%",
-                Utils.colorize(rewards.get(0))));
+                Utils.colorize(fixedDisplay(drops.get(next), multiplier))));
         } else {
             lore.add(messages.get("gui.bar-lore-next-options", "%points%", next));
+            RewardPreview.Preview preview = RewardPreview.preview(entries(pools, pool));
+            List<String> rewards = preview.lines();
             if (rewards.isEmpty()) {
                 lore.add(messages.get("gui.reward-preview-unavailable"));
             } else {
-                int draws = multiplierPools.contains(pool) ? multiplier : 1;
+                int draws = draws(pool, multiplier, multiplierPools);
                 lore.add(messages.get(draws == 1 ? "gui.reward-preview-one" : "gui.reward-preview-many",
                     "%count%", draws));
-                int shown = Math.min(4, rewards.size());
+                int shown = Math.min(MAX_PREVIEW_LINES, rewards.size());
                 for (String reward : rewards.subList(0, shown)) {
                     lore.add(Utils.colorize(reward));
                 }
                 if (shown < rewards.size()) {
                     lore.add(messages.get("gui.reward-preview-more", "%count%", rewards.size() - shown));
                 }
+                if (preview.ranged()) {
+                    lore.addAll(messages.lines("gui.reward-preview-ranges"));
+                }
             }
         }
+        lore.addAll(laterRewardLore(messages, next, milestones, drops, multiplier, multiplierPools, pools, poolNames));
         if (due > 0) {
             lore.add(messages.get("gui.reward-click", "%count%", due));
         }
         return lore;
     }
 
-    static List<String> nextRewardDisplays(int milestone, Map<Integer, RewardEntry> drops, int multiplier,
-                                            Function<String, List<RewardEntry>> pools) {
-        RewardEntry drop = drops.get(milestone);
-        String pool = drop == null ? ActivityConfiguration.DEFAULT_POOL
-            : ActivityConfiguration.referencedPool(drop);
+    /** One line per later milestone this week naming its reward; neighbours with the same reward share a line. */
+    static List<String> laterRewardLore(Messages messages, int next, List<Integer> milestones,
+                                         Map<Integer, RewardEntry> drops, int multiplier, Set<String> multiplierPools,
+                                         Function<String, List<RewardEntry>> pools,
+                                         Function<String, String> poolNames) {
+        List<String> points = new ArrayList<>();
+        List<String> names = new ArrayList<>();
+        for (Integer milestone : milestones) {
+            if (milestone <= next) {
+                continue;
+            }
+            String name = laterRewardName(messages, drops.get(milestone), multiplier, multiplierPools, pools,
+                poolNames);
+            if (name == null) {
+                continue;
+            }
+            int last = names.size() - 1;
+            if (last >= 0 && names.get(last).equals(name)) {
+                points.set(last, points.get(last) + "/" + milestone);
+            } else {
+                points.add(Integer.toString(milestone));
+                names.add(name);
+            }
+        }
+        List<String> lore = new ArrayList<>();
+        if (names.isEmpty()) {
+            return lore;
+        }
+        lore.add(messages.get("gui.bar-lore-later"));
+        for (int i = 0; i < names.size(); i++) {
+            lore.add(messages.get("gui.bar-lore-later-line", "%points%", points.get(i), "%reward%", names.get(i)));
+        }
+        return lore;
+    }
+
+    // What a later milestone pays: a fixed drop, the pool's configured name, the pool's only option, or
+    // "a random reward". Null when there is nothing to pay (an empty pool).
+    private static String laterRewardName(Messages messages, RewardEntry drop, int multiplier,
+                                          Set<String> multiplierPools, Function<String, List<RewardEntry>> pools,
+                                          Function<String, String> poolNames) {
+        String pool = poolOf(drop);
         if (pool == null) {
-            RewardEntry.Item item = drop.items().get(0);
-            return List.of("#50d990x" + item.amount() * multiplier + " #b8906e" + drop.display());
+            return Utils.colorize(fixedDisplay(drop, multiplier));
         }
+        List<String> options = RewardPreview.summarize(entries(pools, pool));
+        if (options.isEmpty()) {
+            return null;
+        }
+        String configured = poolNames == null ? null : poolNames.apply(pool);
+        String name = configured != null && !configured.isBlank() ? Utils.colorize(configured)
+            : options.size() == 1 ? Utils.colorize(options.get(0))
+            : messages.get("gui.bar-lore-later-random");
+        int draws = draws(pool, multiplier, multiplierPools);
+        return draws == 1 ? name : messages.get("gui.bar-lore-later-many", "%count%", draws, "%reward%", name);
+    }
+
+    private static List<RewardEntry> entries(Function<String, List<RewardEntry>> pools, String pool) {
         List<RewardEntry> entries = pools.apply(pool);
-        if (entries == null || entries.isEmpty()) {
-            return List.of();
-        }
-        return RewardPreview.summarize(entries);
+        return entries == null ? List.of() : entries;
+    }
+
+    private static String poolOf(RewardEntry drop) {
+        return drop == null ? ActivityConfiguration.DEFAULT_POOL : ActivityConfiguration.referencedPool(drop);
+    }
+
+    private static int draws(String pool, int multiplier, Set<String> multiplierPools) {
+        return multiplierPools.contains(pool) ? multiplier : 1;
+    }
+
+    private static String fixedDisplay(RewardEntry drop, int multiplier) {
+        RewardEntry.Item item = drop.items().get(0);
+        return "#50d990x" + item.amount() * multiplier + " #b8906e" + drop.display();
     }
 
     private static Integer nextMilestone(PlayerData data, List<Integer> milestones) {
