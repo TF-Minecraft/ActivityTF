@@ -38,9 +38,12 @@ class ActivityManagerRerollTest {
         TestManagers.rerollsPerDay(manager, 1);
         TestManagers.limits(manager, 100, 10);
         UUID uuid = UUID.randomUUID();
-        manager.tasks(uuid);
+        // A forced award on one of today's tasks counts as that task's progress, so award one not dealt.
+        List<String> dealt = manager.tasks(uuid).tasks();
+        String undealt = java.util.stream.IntStream.range(0, 20).mapToObj(i -> "a" + i)
+            .filter(id -> !dealt.contains(id)).findFirst().orElseThrow();
 
-        assertEquals(50, manager.recordAdmin(uuid, "a0", 50, true).pointsAwarded());
+        assertEquals(50, manager.recordAdmin(uuid, undealt, 50, true).pointsAwarded());
         PlayerData data = manager.getStore().get(uuid);
         assertEquals(50, data.points());
         assertEquals(0, data.dailyPoints());
