@@ -128,7 +128,7 @@ public class PlayerData {
             }
             return new RecordResult(0, 0, dailyBudget <= 0 ? Recorded.DAILY_MAX : Recorded.VOTE_SHARE);
         }
-        if (earned > dailyBudget) {
+        if (earned > dailyBudget && budget == dailyBudget) {
             unpaid.add(def.id());
         }
         earned = Math.min(earned, budget);

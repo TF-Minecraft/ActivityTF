@@ -315,6 +315,12 @@ class PlayerDataTest {
         data.record(3, QUEST, MAX, 4, 2, MILESTONES);
         assertEquals(2, data.dailyPoints());
         assertTrue(data.unpaid().isEmpty());
+
+        PlayerData share = data();
+        share.record(4, UNCAPPED, MAX, 10, 5, MILESTONES);
+        share.record(7, UNCAPPED, MAX, 10, 5, MILESTONES);
+        assertEquals(5, share.dailyPoints());
+        assertTrue(share.unpaid().isEmpty(), "an award cut only by the non-vote share was marked");
     }
 
     @Test
