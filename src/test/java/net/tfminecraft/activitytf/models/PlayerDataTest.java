@@ -289,6 +289,35 @@ class PlayerDataTest {
     }
 
     @Test
+    void onlyCompletionsTheDailyMaximumCutAreMarkedUnpaidAndANewDayClearsThem() {
+        PlayerData data = data();
+        data.record(2, QUEST, MAX, 3, MILESTONES);
+        assertTrue(data.unpaid().isEmpty(), "a fully paid completion was marked");
+
+        data.record(2, VOTE, MAX, 3, MILESTONES);
+        assertEquals(3, data.dailyPoints());
+        assertTrue(data.isUnpaid("vote"), "a completion only partly paid was not marked");
+
+        data.record(1, INSTRUMENT, MAX, 3, MILESTONES);
+        assertFalse(data.isUnpaid("instrument"), "a step that earned nothing was marked");
+        assertEquals(Recorded.DAILY_MAX, data.record(20, INSTRUMENT, MAX, 3, MILESTONES).outcome());
+        assertTrue(data.isUnpaid("instrument"));
+        assertFalse(data.isUnpaid("quest"));
+
+        data.roll(WEEK, "2026-09-10");
+        assertTrue(data.unpaid().isEmpty());
+    }
+
+    @Test
+    void theNonVoteShareAloneDoesNotMarkATaskUnpaid() {
+        PlayerData data = data();
+        assertEquals(Recorded.VOTE_SHARE, data.record(2, QUEST, MAX, 4, 0, MILESTONES).outcome());
+        data.record(3, QUEST, MAX, 4, 2, MILESTONES);
+        assertEquals(2, data.dailyPoints());
+        assertTrue(data.unpaid().isEmpty());
+    }
+
+    @Test
     void sameWeekAndDayChangeNothing() {
         PlayerData data = data();
         record(data, VOTE, 1);

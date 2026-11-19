@@ -314,6 +314,32 @@ class ActivityGuiTest {
     }
 
     @Test
+    void aTaskFinishedAfterTodaysMaximumSaysItPaidNothing() {
+        Messages messages = shippedMessages();
+        ActivityDef def = activity("injured", 1, 5, 1);
+
+        assertEquals(List.of(
+            messages.get("gui.activity-lore-done-unpaid"),
+            messages.get("gui.activity-lore-today-capped", "%today%", 1, "%cap%", 1)),
+            ActivityGui.activityLore(messages, def, 1, true, true));
+        assertEquals(List.of(
+            messages.get("gui.activity-lore-today-capped", "%today%", 0, "%cap%", 1),
+            messages.get("gui.activity-lore-day-full")),
+            ActivityGui.activityLore(messages, def, 0, false, true));
+        assertEquals(ActivityGui.activityLore(messages, def, 1), ActivityGui.activityLore(messages, def, 1, false, true),
+            "a task finished before the maximum changed");
+    }
+
+    @Test
+    void theDailyBarSaysHowManyPointsADayCountAndWhenTheyAreFull() {
+        Messages messages = shippedMessages();
+
+        assertEquals(messages.get("gui.daily-bar-lore", "%max%", 10), ActivityGui.dailyBarLore(messages, 9, 10));
+        assertTrue(ActivityGui.dailyBarLore(messages, 9, 10).contains("10"));
+        assertEquals(messages.get("gui.daily-bar-lore-full", "%max%", 10), ActivityGui.dailyBarLore(messages, 10, 10));
+    }
+
+    @Test
     void anActivityWithoutADescriptionRendersTheSameTwoLines() {
         Messages messages = shippedMessages();
         ActivityDef def = described(List.of());

@@ -33,6 +33,23 @@ class PlayerStorePendingTest {
     }
 
     @Test
+    void unpaidTasksSurviveASaveAndUnknownActivitiesAreDropped() throws Exception {
+        UUID uuid = UUID.randomUUID();
+        PlayerData data = new PlayerData("2026-11-16", "2026-11-16");
+        data.addPoints(1, 50);
+        data.setUnpaid(Set.of("cook", "gone"));
+
+        YamlConfiguration reloaded = new YamlConfiguration();
+        reloaded.loadFromString(PlayerStore.snapshot(Map.of(uuid, data)).saveToString());
+        PlayerData read = PlayerStore.readEntry(reloaded.getConfigurationSection("players"), uuid.toString(), 50, 10,
+            Set.of("cook")::contains);
+
+        assertEquals(Set.of("cook"), read.unpaid());
+        data.setUnpaid(Set.of());
+        assertFalse(PlayerStore.snapshot(Map.of(uuid, data)).contains("players." + uuid + ".unpaid"));
+    }
+
+    @Test
     void nothingHeldWritesNoPendingSection() {
         UUID uuid = UUID.randomUUID();
         PlayerData data = new PlayerData("w", "d");

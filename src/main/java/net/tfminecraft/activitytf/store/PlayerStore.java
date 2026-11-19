@@ -160,6 +160,9 @@ public class PlayerStore {
             }
         }
         data.setPending(pending);
+        List<String> unpaid = new ArrayList<>(entry.getStringList("unpaid"));
+        unpaid.removeIf(known.negate());
+        data.setUnpaid(unpaid);
         data.setVotePoints(entry.contains("vote-points") ? entry.getInt("vote-points")
             : vote == null ? 0 : vote.worth(daily.getOrDefault(vote.id(), 0)));
         return data;
@@ -299,6 +302,9 @@ public class PlayerStore {
             yaml.set(path + ".revealed", new ArrayList<>(new TreeSet<>(data.revealed())));
             if (!data.pending().isEmpty()) {
                 yaml.set(path + ".pending", new TreeMap<>(data.pending()));
+            }
+            if (!data.unpaid().isEmpty()) {
+                yaml.set(path + ".unpaid", new ArrayList<>(new TreeSet<>(data.unpaid())));
             }
         }
         return yaml;

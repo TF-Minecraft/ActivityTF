@@ -25,6 +25,9 @@ public class PlayerData {
     /** Credit held today for tasks that only count once revealed (votes cast before Voting is clicked). */
     private final Map<String, Integer> pending = new ConcurrentHashMap<>();
 
+    /** Tasks with a completion today that paid nothing (or only part) because today's points were full. */
+    private final Set<String> unpaid = ConcurrentHashMap.newKeySet();
+
     private volatile int points;
     private volatile int dailyPoints;
     private volatile int votePoints;
@@ -120,7 +123,13 @@ public class PlayerData {
         int budget = isVote ? dailyBudget
             : Math.min(dailyBudget, Math.max(0, nonVoteMax - (dailyPoints - votePoints)));
         if (earned > 0 && budget <= 0) {
+            if (dailyBudget <= 0) {
+                unpaid.add(def.id());
+            }
             return new RecordResult(0, 0, dailyBudget <= 0 ? Recorded.DAILY_MAX : Recorded.VOTE_SHARE);
+        }
+        if (earned > dailyBudget) {
+            unpaid.add(def.id());
         }
         earned = Math.min(earned, budget);
         if (earned <= 0) {
@@ -224,6 +233,7 @@ public class PlayerData {
     private void clearTasks() {
         tasks.clear();
         revealed.clear();
+        unpaid.clear();
     }
 
     public static List<String> draw(Collection<String> ids, Collection<String> guaranteed, Random random) {
@@ -462,6 +472,20 @@ public class PlayerData {
                 pending.put(id, amount);
             }
         });
+    }
+
+    /** Whether a completion of this task today went unpaid because today's points were full. */
+    public boolean isUnpaid(String id) {
+        return unpaid.contains(id);
+    }
+
+    public Set<String> unpaid() {
+        return Collections.unmodifiableSet(unpaid);
+    }
+
+    public void setUnpaid(Collection<String> ids) {
+        unpaid.clear();
+        unpaid.addAll(ids);
     }
 
     public boolean reveal(int slot) {

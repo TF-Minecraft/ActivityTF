@@ -133,12 +133,43 @@ class DailyTasksTest {
 
         assertEquals(2, data.points());
         assertTrue(data.pending().isEmpty());
-        String hint = manager.getConfiguration().messages().get("first-points-today");
+        String hint = manager.getConfiguration().messages().get("first-points-today",
+            "%max%", manager.getConfiguration().dailyMax());
         assertEquals(1, chat.stream().filter(hint::equals).count());
 
         manager.recordAction(uuid, "cook", 1);
         assertEquals(1, chat.stream().filter(hint::equals).count(), "the hint came again the same day");
         assertEquals(Recorded.ACTIVITY_CAP, manager.recordAction(uuid, "vote", 1));
+    }
+
+    @Test
+    void reachingTodaysMaximumSaysSoOnceAndMarksLaterCompletionsUnpaid() {
+        ActivityManager manager = manager(def("vote", List.of(), true), general("cook"), general("chat"),
+            general("mine"));
+        config(manager, "dailyMax", 3);
+        List<String> chat = new ArrayList<>();
+        Player player = join(new HashSet<>(), chat);
+        UUID uuid = player.getUniqueId();
+        manager.tasks(uuid);
+        String full = manager.getConfiguration().messages().get("daily-max-reached", "%max%", 3);
+        assertTrue(full.contains("3"), full);
+
+        manager.recordAction(uuid, "cook", 2);
+        assertEquals(0, chat.stream().filter(full::equals).count(), "said full before the maximum");
+        assertTrue(manager.getConfiguration().messages().get("first-points-today", "%max%", 3).contains("3"));
+
+        manager.recordAction(uuid, "chat", 2);
+        PlayerData data = manager.getStore().get(uuid);
+        assertEquals(3, data.dailyPoints());
+        assertEquals(1, chat.stream().filter(full::equals).count());
+        assertTrue(data.isUnpaid("chat"), "the completion cut short by the maximum was not marked");
+        assertFalse(data.isUnpaid("cook"));
+
+        assertEquals(Recorded.DAILY_MAX, manager.recordAction(uuid, "mine", 1));
+        assertTrue(data.isUnpaid("mine"));
+        assertEquals(1, chat.stream().filter(full::equals).count(), "said full again the same day");
+        manager.recordAdmin(uuid, "mine", 1, true);
+        assertEquals(1, chat.stream().filter(full::equals).count(), "a forced award said full");
     }
 
     @Test
