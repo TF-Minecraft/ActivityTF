@@ -340,7 +340,7 @@ public class ActivityGui implements Listener {
 
     static String dailyBarLore(Messages messages, int dailyPoints, int dailyMax) {
         return messages.get(dailyPoints >= dailyMax ? "gui.daily-bar-lore-full" : "gui.daily-bar-lore",
-            "%max%", dailyMax);
+            "%max%", dailyMax, "%zone%", Utils.serverZone());
     }
 
     private ItemStack activityItem(ActivityConfiguration config, Messages messages, ActivityDef def, PlayerData data) {

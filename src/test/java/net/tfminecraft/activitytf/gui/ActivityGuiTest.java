@@ -336,7 +336,9 @@ class ActivityGuiTest {
 
         assertEquals(messages.get("gui.daily-bar-lore", "%max%", 10), ActivityGui.dailyBarLore(messages, 9, 10));
         assertTrue(ActivityGui.dailyBarLore(messages, 9, 10).contains("10"));
-        assertEquals(messages.get("gui.daily-bar-lore-full", "%max%", 10), ActivityGui.dailyBarLore(messages, 10, 10));
+        String full = ActivityGui.dailyBarLore(messages, 10, 10);
+        assertEquals(messages.get("gui.daily-bar-lore-full", "%zone%", Utils.serverZone()), full);
+        assertFalse(full.contains("%zone%"), full);
     }
 
     @Test

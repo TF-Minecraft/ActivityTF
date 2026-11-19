@@ -151,7 +151,8 @@ class DailyTasksTest {
         Player player = join(new HashSet<>(), chat);
         UUID uuid = player.getUniqueId();
         manager.tasks(uuid);
-        String full = manager.getConfiguration().messages().get("daily-max-reached", "%max%", 3);
+        String full = manager.getConfiguration().messages().get("daily-max-reached", "%max%", 3,
+            "%zone%", net.tfminecraft.activitytf.utils.Utils.serverZone());
         assertTrue(full.contains("3"), full);
 
         manager.recordAction(uuid, "cook", 2);

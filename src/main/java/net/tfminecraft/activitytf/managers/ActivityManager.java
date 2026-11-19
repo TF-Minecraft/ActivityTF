@@ -230,7 +230,8 @@ public class ActivityManager {
             player.sendMessage(messages.get("first-points-today", "%max%", config.dailyMax()));
         }
         if (filledToday) {
-            player.sendMessage(messages.get("daily-max-reached", "%max%", config.dailyMax()));
+            player.sendMessage(messages.get("daily-max-reached", "%max%", config.dailyMax(),
+                "%zone%", Utils.serverZone()));
         }
         playSound(player, config.goalCompleteSound());
 
