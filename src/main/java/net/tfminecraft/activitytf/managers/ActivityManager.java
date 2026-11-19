@@ -188,12 +188,14 @@ public class ActivityManager {
             return new RecordResult(0, 0, Recorded.NOT_A_TASK);
         }
 
+        int dailyBefore = data.dailyPoints();
         RecordResult result = gated
             ? data.record(amount, def, config.barMax(), config.dailyMax(),
                 config.activity("vote") == null ? config.dailyMax() : config.nonVoteDailyMax(),
                 config.milestones())
             : data.recordForced(amount, def, config.barMax(), config.milestones());
-        return credited(uuid, data, result, Utils.colorize(def.display()));
+        boolean filledToday = gated && dailyBefore < config.dailyMax() && data.dailyPoints() >= config.dailyMax();
+        return credited(uuid, data, result, Utils.colorize(def.display()), filledToday);
     }
 
     public RecordResult recordPoints(UUID uuid, int points) {
@@ -202,10 +204,11 @@ public class ActivityManager {
         }
         PlayerData data = store.get(uuid);
         return credited(uuid, data, data.creditForced(points, config.barMax(), config.milestones()),
-            config.messages().get("points-granted-source"));
+            config.messages().get("points-granted-source"), false);
     }
 
-    private RecordResult credited(UUID uuid, PlayerData data, RecordResult result, String source) {
+    private RecordResult credited(UUID uuid, PlayerData data, RecordResult result, String source,
+                                  boolean filledToday) {
         store.markDirty();
 
         if (result.pointsAwarded() <= 0) {
@@ -224,7 +227,11 @@ public class ActivityManager {
             "%total%", data.points(),
             "%max%", config.barMax()));
         if (data.dailyPoints() == result.pointsAwarded()) {
-            player.sendMessage(messages.get("first-points-today"));
+            player.sendMessage(messages.get("first-points-today", "%max%", config.dailyMax()));
+        }
+        if (filledToday) {
+            player.sendMessage(messages.get("daily-max-reached", "%max%", config.dailyMax(),
+                "%zone%", Utils.serverZone()));
         }
         playSound(player, config.goalCompleteSound());
 

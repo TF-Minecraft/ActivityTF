@@ -335,15 +335,29 @@ public class ActivityGui implements Listener {
 
         return item(Material.EXPERIENCE_BOTTLE,
             messages.get("gui.daily-bar-name", "%points%", dailyPoints, "%max%", config.dailyMax()),
-            List.of(Utils.colorize(bar)));
+            List.of(Utils.colorize(bar), dailyBarLore(messages, dailyPoints, config.dailyMax())));
+    }
+
+    static String dailyBarLore(Messages messages, int dailyPoints, int dailyMax) {
+        return messages.get(dailyPoints >= dailyMax ? "gui.daily-bar-lore-full" : "gui.daily-bar-lore",
+            "%max%", dailyMax, "%zone%", Utils.serverZone());
     }
 
     private ItemStack activityItem(ActivityConfiguration config, Messages messages, ActivityDef def, PlayerData data) {
         return item(iconStack(config, def.icon(), def.iconPath()), Utils.colorize(def.display()),
-            activityLore(messages, def, data.count(def.id())));
+            activityLore(messages, def, data.count(def.id()), data.isUnpaid(def.id()),
+                data.dailyPoints() >= config.dailyMax()));
     }
 
     static List<String> activityLore(Messages messages, ActivityDef def, int count) {
+        return activityLore(messages, def, count, false, false);
+    }
+
+    /**
+     * {@code unpaid}: a completion today paid nothing because today's points were full; a finished task then says so
+     * instead of showing a full bar. {@code dayFull}: today's points are full, so an unfinished task pays nothing more.
+     */
+    static List<String> activityLore(Messages messages, ActivityDef def, int count, boolean unpaid, boolean dayFull) {
         List<String> lore = new ArrayList<>();
         for (String line : def.description()) {
             lore.add(Utils.colorize(line
@@ -351,13 +365,19 @@ public class ActivityGui implements Listener {
                 .replace("%points%", Integer.toString(def.points()))
                 .replace("%daily-cap%", Integer.toString(def.dailyCap()))));
         }
+        boolean finished = def.dailyCap() > 0 && def.worth(count) >= def.capPoints();
         String progress = progressBar(def, count);
-        if (progress != null) {
+        if (finished && unpaid) {
+            lore.add(messages.get("gui.activity-lore-done-unpaid"));
+        } else if (progress != null) {
             lore.add(messages.get("gui.activity-lore-progress", "%bar%", Utils.colorize(progress)));
         }
         lore.add(def.dailyCap() > 0
             ? messages.get("gui.activity-lore-today-capped", "%today%", def.completions(count), "%cap%", def.dailyCap())
             : messages.get("gui.activity-lore-today", "%today%", def.completions(count)));
+        if (dayFull && !finished) {
+            lore.add(messages.get("gui.activity-lore-day-full"));
+        }
         return lore;
     }
 

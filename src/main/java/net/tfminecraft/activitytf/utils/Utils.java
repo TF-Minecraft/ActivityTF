@@ -18,6 +18,13 @@ public class Utils {
         return ChatColor.translateAlternateColorCodes('&', msg);
     }
 
+    /** The server's time zone as players read it ("UTC"); the day resets at midnight in this zone. */
+    public static String serverZone() {
+        java.util.TimeZone zone = java.util.TimeZone.getDefault();
+        return zone.getDisplayName(zone.inDaylightTime(new java.util.Date()), java.util.TimeZone.SHORT,
+            java.util.Locale.ROOT);
+    }
+
     public static String safeForLog(String name) {
         return name == null ? "null" : name.replaceAll("[\\p{Cc}\\p{Cf}\\p{Zl}\\p{Zp}]", "?");
     }
